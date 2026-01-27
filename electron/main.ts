@@ -958,17 +958,6 @@ ipcMain.handle("generarPDF", async (_evt, filename) => {
   }
 });
 
-ipcMain.handle("limpiarBaseDatos", async () => {
-  try {
-    db.exec("DELETE FROM documentos");
-    db.exec("DELETE FROM gestiones");
-    db.exec("DELETE FROM clientes");
-    return { ok: true, message: "Base de datos vaciada correctamente." };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
-  }
-});
-
 ipcMain.handle("actualizarDiasCredito", async (_evt, { id, dias }) => {
   try {
     // SQLite permite sumar días directamente a una fecha: date(fecha, '+X days')
