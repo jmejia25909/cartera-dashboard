@@ -669,12 +669,17 @@ const parseNumber = (val: any): number => {
 };
 
 function parseExcel(filePath: string, ivaPercent: number) {
+  console.log("📄 Leyendo archivo...");
   const fileBuffer = fs.readFileSync(filePath);
+  console.log("📚 Parseando workbook...");
   const workbook = XLSX.read(fileBuffer, { type: "buffer", cellDates: true });
   const sheetName = workbook.SheetNames[0];
+  console.log("📋 Hoja seleccionada:", sheetName);
   const sheet = workbook.Sheets[sheetName];
   
+  console.log("🔄 Convirtiendo a JSON...");
   const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+  console.log("📊 Total filas leídas:", rawRows.length);
   if (!rawRows || rawRows.length === 0) return [];
 
   // AJUSTE: El encabezado comienza en la Fila 5 (índice 4)
@@ -685,6 +690,7 @@ function parseExcel(filePath: string, ivaPercent: number) {
   const headers = rawRows[headerIdx].map(h => String(h).trim().toLowerCase());
   const dataRows = rawRows.slice(headerIdx + 1);
   const normalizedHeaders = headers.map(normalize);
+  console.log("✅ Encabezados detectados:", normalizedHeaders.slice(0, 10), "...");
 
   // Validación de estructura mínima: abortar si faltan columnas clave.
   const hasHeader = (aliases: string[]) => aliases.some(alias => normalizedHeaders.some(h => h.includes(normalize(alias))));
@@ -698,6 +704,7 @@ function parseExcel(filePath: string, ivaPercent: number) {
     const msg = `Estructura de archivo no reconocida. Faltan columnas obligatorias: ${missingHeaders.join(", ")}. Verifica que el encabezado esté en la fila 5 y que los nombres de columna no se hayan removido o renombrado.`;
     throw new Error(msg);
   }
+  console.log("✅ Validación de estructura OK");
 
   // Validar que el orden de columnas coincida con la importación anterior (si existe)
   const storedHeadersJson = db.prepare("SELECT excel_headers_json FROM empresa WHERE id = 1").get() as any;
@@ -1314,6 +1321,8 @@ ipcMain.handle("importarContifico", async () => {
 
   const filePath = result.filePaths[0];
   try {
+    console.log("📥 Iniciando importación:", filePath);
+    
     // Re-open DB in case previous instance closed unexpectedly
     if (!db || !db.open) {
       db = openDb().db;
@@ -1323,7 +1332,10 @@ ipcMain.handle("importarContifico", async () => {
     const ivaPercent = empresa?.iva_percent ?? 15.0;
 
     // 1. Parsear Excel
+    console.log("📋 Parseando Excel con IVA:", ivaPercent);
+    console.log("🚀 A punto de llamar parseExcel...");
     const docs = parseExcel(filePath, ivaPercent);
+    console.log("✅ parseExcel completado, documentos:", docs.length);
     if (docs.length === 0) {
       return { ok: false, message: "El archivo no tiene datos o no se encontraron encabezados en la Fila 5.", insertedDocs: 0, updatedDocs: 0, insertedClientes: 0, omittedRows: 0 };
     }
@@ -1350,6 +1362,7 @@ ipcMain.handle("importarContifico", async () => {
       insertedIds // Devolvemos los IDs para que el frontend pueda revisarlos
     };
   } catch (e: any) {
+    console.error("❌ Error en importación:", e);
     return { ok: false, message: e?.message || String(e), insertedDocs: 0, insertedClientes: 0, omittedRows: 0 };
   }
 });

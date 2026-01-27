@@ -530,11 +530,14 @@ export default function App() {
         await cargarDatos();
         await cargarDocumentos();
       } else {
-        addToast("Error en importación: " + (resultTyped?.message || "Error desconocido"), "error");
+        const errorMsg = resultTyped?.message || "Error desconocido";
+        addToast("Error en importación: " + errorMsg, "error", 6000);
+        console.error("Error importando (backend):", errorMsg);
       }
     } catch (e) {
-      addToast("Error importando Excel", "error");
-      console.error("Error importando:", e);
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      addToast("Error importando Excel: " + errorMsg, "error", 6000);
+      console.error("Error importando (frontend):", e);
     }
   }
 
