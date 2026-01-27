@@ -124,7 +124,8 @@ function ensureSchema(db: Database.Database) {
       email TEXT DEFAULT '',
       ruc TEXT DEFAULT '',
       administrador TEXT DEFAULT '',
-      iva_percent REAL DEFAULT 15.0
+      iva_percent REAL DEFAULT 15.0,
+      meta_mensual REAL DEFAULT 100000
     );
 
     /* Tabla de Gestiones (CRM) */
@@ -143,13 +144,49 @@ function ensureSchema(db: Database.Database) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_gestiones_cliente ON gestiones(cliente);
+
+    /* Tabla de Disputas */
+    CREATE TABLE IF NOT EXISTS disputas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      documento TEXT NOT NULL,
+      cliente TEXT NOT NULL,
+      monto REAL DEFAULT 0,
+      motivo TEXT, -- Error facturación, Producto defectuoso, Servicio no prestado, etc.
+      fecha_creacion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      estado TEXT DEFAULT 'Abierta', -- Abierta, En revisión, Resuelta, Rechazada
+      fecha_resolucion TEXT,
+      observacion TEXT,
+      usuario_creador TEXT DEFAULT 'sistema'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_disputas_cliente ON disputas(cliente);
+    CREATE INDEX IF NOT EXISTS idx_disputas_estado ON disputas(estado);
+
+    /* Tabla de Cuentas por Aplicar */
+    CREATE TABLE IF NOT EXISTS cuentas_aplicar (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      documento TEXT,
+      cliente TEXT NOT NULL,
+      monto REAL DEFAULT 0,
+      tipo TEXT, -- Adelanto, Abono sin factura, Nota crédito, Devolución
+      fecha_recepcion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      estado TEXT DEFAULT 'Pendiente', -- Pendiente, Aplicada, Rechazada
+      fecha_aplicacion TEXT,
+      documento_aplicado TEXT,
+      observacion TEXT,
+      usuario_creador TEXT DEFAULT 'sistema'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cuentas_cliente ON cuentas_aplicar(cliente);
+    CREATE INDEX IF NOT EXISTS idx_cuentas_estado ON cuentas_aplicar(estado);
   `);
 
   // Migración suave: agregar columnas de auditoría si faltan
   const gestionCols = [
     { name: "usuario", type: "TEXT DEFAULT 'sistema'" },
     { name: "creado_en", type: "TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))" },
-    { name: "actualizado_en", type: "TEXT" }
+    { name: "actualizado_en", type: "TEXT" },
+    { name: "motivo", type: "TEXT" }
   ];
   for (const col of gestionCols) {
     if (!tableHasColumn(db, "gestiones", col.name)) {
@@ -209,6 +246,13 @@ function ensureSchema(db: Database.Database) {
   if (!tableHasColumn(db, "empresa", "iva_percent")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN iva_percent REAL DEFAULT 15.0");
+    } catch {}
+  }
+
+  // Migración: Agregar columna meta_mensual si no existe
+  if (!tableHasColumn(db, "empresa", "meta_mensual")) {
+    try {
+      db.exec("ALTER TABLE empresa ADD COLUMN meta_mensual REAL DEFAULT 100000");
     } catch {}
   }
 

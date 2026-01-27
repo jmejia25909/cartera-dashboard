@@ -418,6 +418,41 @@ function computeStats() {
   const percentMora90 = totalSaldo > 0 ? (mora90Saldo / totalSaldo) * 100 : 0;
   const percentTop10 = totalSaldo > 0 ? (top10Sum / totalSaldo) * 100 : 0;
 
+  // --- KPIs CRÍTICOS ADICIONALES ---
+  // 1. NPL (Non-Performing Loans): % de cartera vencida
+  const npl = percentVencida; // Ya lo calculamos arriba
+
+  // 2. DSO (Days Sales Outstanding): días promedio para cobrar
+  const totalVentas = Number(
+    db.prepare(`SELECT COALESCE(SUM(valor_documento), 0) AS v FROM documentos WHERE is_subtotal = 0`).get().v
+  );
+  const diasPromedio = totalVentas > 0 ? Math.round((totalSaldo / totalVentas) * 365) : 0;
+  const dso = Math.max(0, diasPromedio);
+
+  // 3. Recuperación del mes actual (cobros registrados)
+  const inicioMes = `${todayIso.substring(0, 7)}-01`;
+  const recuperacionMesActual = Number(
+    db.prepare(
+      `SELECT COALESCE(SUM(cobros), 0) AS v FROM documentos WHERE is_subtotal = 0 AND date(importado_en) >= date(?)`
+    ).get(inicioMes).v
+  );
+
+  // 4. Meta mensual (de la tabla empresa)
+  const empresa = db.prepare("SELECT * FROM empresa WHERE id = 1").get();
+  const metaMensual = empresa?.meta_mensual || 100000; // Default $100k
+
+  // 5. % de cumplimiento de meta
+  const percentMetaCumplida = metaMensual > 0 ? Math.min((recuperacionMesActual / metaMensual) * 100, 100) : 0;
+
+  // 6. Tasa de cumplimiento de promesas
+  const totalPromesas = Number(
+    db.prepare(`SELECT COUNT(1) AS c FROM gestiones WHERE resultado LIKE '%Promesa%'`).get().c
+  );
+  const promesasCumplidas = Number(
+    db.prepare(`SELECT COUNT(1) AS c FROM gestiones WHERE resultado = 'Promesa Cumplida'`).get().c
+  );
+  const tasaCumplimientoPromesas = totalPromesas > 0 ? Math.round((promesasCumplidas / totalPromesas) * 100) : 0;
+
   return {
     fechaCorte: todayIso,
     totalSaldo,
@@ -438,6 +473,13 @@ function computeStats() {
       d120p: Number(aging.d120p || 0),
     },
     percentTop10,
+    // KPIs Críticos FASE 1
+    npl: Math.round(npl * 100) / 100,
+    dso,
+    recuperacionMesActual,
+    metaMensual,
+    percentMetaCumplida: Math.round(percentMetaCumplida * 100) / 100,
+    tasaCumplimientoPromesas,
   };
 }
 
@@ -941,9 +983,10 @@ ipcMain.handle("clienteGuardarInfo", (_evt, data) => {
 });
 
 ipcMain.handle("gestionGuardar", (_evt, data) => {
-  db.prepare("INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario) VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario)").run({
+  db.prepare("INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario, motivo) VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario, @motivo)").run({
     ...data,
-    usuario: data.usuario || 'sistema'
+    usuario: data.usuario || 'sistema',
+    motivo: data.motivo || null
   });
   return { ok: true };
 });
@@ -971,6 +1014,240 @@ ipcMain.handle("gestionesReporte", (_evt, args) => {
 
 ipcMain.handle("getNetworkInfo", async () => {
   return { ip: getNetworkIp(), port: 3000 };
+});
+
+ipcMain.handle("campanasListar", async () => {
+  const data = db.prepare(`
+    SELECT id, nombre, descripcion, fecha_inicio, fecha_fin, responsable, creado_en
+    FROM campanas
+    ORDER BY creado_en DESC
+  `).all();
+  return { ok: true, rows: data };
+});
+
+ipcMain.handle("campanasGuardar", (_evt, data) => {
+  if (data.id) {
+    db.prepare(`
+      UPDATE campanas
+      SET nombre = @nombre, descripcion = @descripcion, fecha_inicio = @fecha_inicio, fecha_fin = @fecha_fin, responsable = @responsable
+      WHERE id = @id
+    `).run(data);
+  } else {
+    db.prepare(`
+      INSERT INTO campanas (nombre, descripcion, fecha_inicio, fecha_fin, responsable)
+      VALUES (@nombre, @descripcion, @fecha_inicio, @fecha_fin, @responsable)
+    `).run(data);
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("motivosImpago", async () => {
+  const data = db.prepare(`
+    SELECT g.motivo, COUNT(*) as count, SUM(COALESCE(d.total - d.cobros, 0)) as total
+    FROM gestiones g
+    LEFT JOIN documentos d ON g.cliente = d.cliente
+    WHERE g.motivo IS NOT NULL AND g.motivo != ''
+    GROUP BY g.motivo
+    ORDER BY count DESC
+  `).all();
+  
+  return data.map((row: any) => ({
+    label: row.motivo,
+    count: row.count,
+    total: row.total || 0
+  }));
+});
+
+ipcMain.handle("productividadGestor", async () => {
+  const data = db.prepare(`
+    SELECT 
+      g.usuario,
+      COUNT(*) as total_gestiones,
+      SUM(CASE WHEN g.resultado LIKE '%Promesa%' THEN 1 ELSE 0 END) as promesas,
+      SUM(CASE WHEN g.resultado LIKE '%Pagado%' OR g.resultado LIKE '%Abonado%' THEN 1 ELSE 0 END) as pagos,
+      ROUND(100.0 * SUM(CASE WHEN g.resultado LIKE '%Promesa%' THEN 1 ELSE 0 END) / COUNT(*), 1) as tasa_promesa,
+      ROUND(SUM(COALESCE(d.total - d.cobros, 0)), 2) as saldo_recuperable
+    FROM gestiones g
+    LEFT JOIN documentos d ON g.cliente = d.cliente
+    WHERE g.usuario IS NOT NULL AND g.usuario != ''
+    GROUP BY g.usuario
+    ORDER BY total_gestiones DESC
+  `).all();
+  
+  return data;
+});
+
+ipcMain.handle("segmentacionRiesgo", async () => {
+  const data = db.prepare(`
+    SELECT 
+      c.id,
+      c.cliente,
+      ROUND(SUM(COALESCE(d.total - d.cobros, 0)), 2) as saldo_total,
+      COUNT(DISTINCT d.id) as documentos,
+      MAX(d.fecha_vencimiento) as fecha_vencimiento_max,
+      CASE
+        WHEN COUNT(g.id) = 0 THEN 'Bajo'
+        WHEN SUM(COALESCE(d.total - d.cobros, 0)) > 100000 AND d.fecha_vencimiento < date('now', '-90 days') THEN 'Alto'
+        WHEN SUM(COALESCE(d.total - d.cobros, 0)) > 50000 AND d.fecha_vencimiento < date('now', '-30 days') THEN 'Medio'
+        ELSE 'Bajo'
+      END as riesgo
+    FROM clientes c
+    LEFT JOIN documentos d ON c.cliente = d.cliente
+    LEFT JOIN gestiones g ON c.cliente = g.cliente AND g.fecha >= date('now', '-30 days')
+    GROUP BY c.id
+    ORDER BY saldo_total DESC
+  `).all();
+  
+  return data.map((row: any) => ({
+    id: row.id,
+    nombre: row.cliente,
+    saldo: row.saldo_total || 0,
+    documentos: row.documentos || 0,
+    riesgo: row.riesgo
+  }));
+});
+
+ipcMain.handle("alertasIncumplimiento", async () => {
+  const data = db.prepare(`
+    SELECT 
+      d.cliente,
+      d.documento,
+      d.total as monto,
+      d.fecha_vencimiento,
+      CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) as dias_vencidos,
+      CASE 
+        WHEN CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) > 120 THEN 'Crítico'
+        WHEN CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) > 90 THEN 'Alto'
+        WHEN CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) > 30 THEN 'Medio'
+        ELSE 'Bajo'
+      END as severidad
+    FROM documentos d
+    WHERE d.fecha_vencimiento < date('now') AND (d.total - d.cobros) > 0
+    ORDER BY dias_vencidos DESC
+    LIMIT 50
+  `).all();
+
+  return data.map((row: any) => ({
+    cliente: row.cliente,
+    documento: row.documento,
+    monto: row.monto || 0,
+    diasVencidos: row.dias_vencidos || 0,
+    severidad: row.severidad
+  }));
+});
+
+ipcMain.handle("pronosticoFlujoCaja", async () => {
+  const periodos = [];
+  for (let i = 1; i <= 3; i++) {
+    const dias = i * 15;
+    const fecha_hasta = new Date();
+    fecha_hasta.setDate(fecha_hasta.getDate() + dias);
+    
+    const promesas = db.prepare(`
+      SELECT SUM(COALESCE(monto_promesa, 0)) as total
+      FROM gestiones
+      WHERE resultado LIKE '%Promesa%' 
+        AND fecha_promesa >= date('now')
+        AND fecha_promesa <= date(?)
+        AND monto_promesa > 0
+    `).get(fecha_hasta.toISOString().split('T')[0]);
+
+    periodos.push({
+      periodo: `${dias} días`,
+      fechaHasta: fecha_hasta.toISOString().split('T')[0],
+      flujoEsperado: promesas?.total || 0,
+      confianza: i === 1 ? 95 : i === 2 ? 75 : 50
+    });
+  }
+  return periodos;
+});
+
+ipcMain.handle("tendenciasHistoricas", async () => {
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const fecha = new Date();
+    fecha.setMonth(fecha.getMonth() - i);
+    const yearMes = fecha.getFullYear().toString() + '-' + String(fecha.getMonth() + 1).padStart(2, '0');
+    
+    const stats = db.prepare(`
+      SELECT 
+        COUNT(*) as documentos,
+        SUM(COALESCE(total, 0)) as emision,
+        SUM(CASE WHEN fecha_vencimiento < date('now') AND (total - cobros) > 0 THEN 1 ELSE 0 END) as vencidos,
+        SUM(COALESCE(cobros, 0)) as cobrado
+      FROM documentos
+      WHERE fecha_emision LIKE ?
+    `).get(yearMes + '%');
+
+    meses.push({
+      mes: yearMes,
+      documentos: stats?.documentos || 0,
+      emision: stats?.emision || 0,
+      cobrado: stats?.cobrado || 0,
+      vencidos: stats?.vencidos || 0
+    });
+  }
+  return meses;
+});
+
+ipcMain.handle("disputasListar", async () => {
+  const data = db.prepare(`
+    SELECT id, documento, cliente, monto, motivo, estado, 
+           fecha_creacion, fecha_resolucion, observacion
+    FROM disputas
+    ORDER BY fecha_creacion DESC
+  `).all();
+  return data;
+});
+
+ipcMain.handle("disputaCrear", (_evt, data) => {
+  db.prepare(`
+    INSERT INTO disputas (documento, cliente, monto, motivo, observacion, usuario_creador)
+    VALUES (@documento, @cliente, @monto, @motivo, @observacion, @usuario)
+  `).run({
+    ...data,
+    usuario: data.usuario || 'sistema'
+  });
+  return { ok: true };
+});
+
+ipcMain.handle("disputaActualizar", (_evt, data) => {
+  db.prepare(`
+    UPDATE disputas 
+    SET estado = @estado, fecha_resolucion = @fecha_resolucion, observacion = @observacion
+    WHERE id = @id
+  `).run(data);
+  return { ok: true };
+});
+
+ipcMain.handle("cuentasAplicarListar", async () => {
+  const data = db.prepare(`
+    SELECT id, documento, cliente, monto, tipo, estado, 
+           fecha_recepcion, fecha_aplicacion, documento_aplicado, observacion
+    FROM cuentas_aplicar
+    ORDER BY fecha_recepcion DESC
+  `).all();
+  return data;
+});
+
+ipcMain.handle("cuentaAplicarCrear", (_evt, data) => {
+  db.prepare(`
+    INSERT INTO cuentas_aplicar (documento, cliente, monto, tipo, observacion, usuario_creador)
+    VALUES (@documento, @cliente, @monto, @tipo, @observacion, @usuario)
+  `).run({
+    ...data,
+    usuario: data.usuario || 'sistema'
+  });
+  return { ok: true };
+});
+
+ipcMain.handle("cuentaAplicarActualizar", (_evt, data) => {
+  db.prepare(`
+    UPDATE cuentas_aplicar 
+    SET estado = @estado, fecha_aplicacion = @fecha_aplicacion, documento_aplicado = @documento_aplicado, observacion = @observacion
+    WHERE id = @id
+  `).run(data);
+  return { ok: true };
 });
 
 ipcMain.handle("importarContifico", async () => {
