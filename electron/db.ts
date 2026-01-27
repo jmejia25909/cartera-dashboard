@@ -256,6 +256,13 @@ function ensureSchema(db: Database.Database) {
     } catch {}
   }
 
+  // Migración: Agregar columna excel_headers_json para guardar estructura esperada
+  if (!tableHasColumn(db, "empresa", "excel_headers_json")) {
+    try {
+      db.exec("ALTER TABLE empresa ADD COLUMN excel_headers_json TEXT DEFAULT ''");
+    } catch {}
+  }
+
   // Migración: Agregar columnas a clientes si no existen
   const clientCols = ["telefono", "email", "direccion", "contacto"];
   for (const c of clientCols) {

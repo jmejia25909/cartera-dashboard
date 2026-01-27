@@ -902,6 +902,8 @@
 .btn.secondary:hover { border-color: var(--primary); color: var(--primary); transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .btn.primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.4); }
 .btn.primary:hover { box-shadow: 0 8px 15px -3px rgba(79, 70, 229, 0.5); transform: translateY(-2px); }
+.btn.danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.4); }
+.btn.danger:hover { box-shadow: 0 8px 15px -3px rgba(239, 68, 68, 0.5); transform: translateY(-2px); }
 .btn:active { transform: translateY(0) !important; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; box-shadow: none !important; filter: grayscale(1); }
 .chip { background: #f1f5f9; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; color: var(--text-muted); border: 1px solid var(--border); font-weight: 500; }

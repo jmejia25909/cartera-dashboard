@@ -686,6 +686,36 @@ function parseExcel(filePath: string, ivaPercent: number) {
   const dataRows = rawRows.slice(headerIdx + 1);
   const normalizedHeaders = headers.map(normalize);
 
+  // Validación de estructura mínima: abortar si faltan columnas clave.
+  const hasHeader = (aliases: string[]) => aliases.some(alias => normalizedHeaders.some(h => h.includes(normalize(alias))));
+  const missingHeaders: string[] = [];
+  if (!hasHeader(["razon social", "nombre"])) missingHeaders.push("Razón Social / Nombre");
+  if (!hasHeader(["documento", "# documento", "numero"])) missingHeaders.push("# Documento");
+  if (!hasHeader(["total", "saldo"])) missingHeaders.push("Total / Saldo");
+  if (!hasHeader(["vencimiento", "f. vencimiento", "vence"])) missingHeaders.push("Fecha de Vencimiento");
+
+  if (missingHeaders.length > 0) {
+    const msg = `Estructura de archivo no reconocida. Faltan columnas obligatorias: ${missingHeaders.join(", ")}. Verifica que el encabezado esté en la fila 5 y que los nombres de columna no se hayan removido o renombrado.`;
+    throw new Error(msg);
+  }
+
+  // Validar que el orden de columnas coincida con la importación anterior (si existe)
+  const storedHeadersJson = db.prepare("SELECT excel_headers_json FROM empresa WHERE id = 1").get() as any;
+  const storedHeaders = storedHeadersJson?.excel_headers_json ? JSON.parse(storedHeadersJson.excel_headers_json) : null;
+
+  if (storedHeaders && Array.isArray(storedHeaders)) {
+    // Comparar orden exacto
+    if (JSON.stringify(normalizedHeaders) !== JSON.stringify(storedHeaders)) {
+      const msg = `Orden de columnas no reconocido. Se esperaba: [${storedHeaders.join(", ")}]. Recibido: [${normalizedHeaders.join(", ")}]. Si cambió la estructura intencionalmente, usa 'Reiniciar estructura Excel' en Config.`;
+      throw new Error(msg);
+    }
+  } else if (normalizedHeaders.length > 0) {
+    // Primera importación: guardar la estructura
+    try {
+      db.prepare("UPDATE empresa SET excel_headers_json = @headers WHERE id = 1").run({ headers: JSON.stringify(normalizedHeaders) });
+    } catch {}
+  }
+
   const getVal = (row: any[], keys: string[], exclude: string[] = []) => {
     const idx = normalizedHeaders.findIndex(h => 
       keys.some(k => h.includes(normalize(k))) &&
@@ -962,6 +992,36 @@ ipcMain.handle("empresaGuardar", async (_evt, data) => {
   `);
   stmt.run(data);
   return { ok: true };
+});
+
+ipcMain.handle("reiniciarEstructuraExcel", async () => {
+  try {
+    db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
+    return { ok: true, message: "Estructura de Excel reiniciada. La próxima importación definirá una nueva estructura." };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("limpiarBaseDatos", async () => {
+  try {
+    const tx = db.transaction(() => {
+      // Truncar tablas de datos, preservando config
+      db.exec("DELETE FROM documentos");
+      db.exec("DELETE FROM gestiones");
+      db.exec("DELETE FROM disputas");
+      db.exec("DELETE FROM cuentas_aplicar");
+      db.exec("DELETE FROM abonos");
+      db.exec("DELETE FROM campana_clientes");
+      db.exec("DELETE FROM campanas");
+      // Resetear excel_headers_json para que próxima importación defina nueva estructura
+      db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
+    });
+    tx();
+    return { ok: true, message: "Base de datos limpia. Preservada: config de empresa, IVA, meta, clientes y vendedores." };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
 });
 
 ipcMain.handle("clientesAnalisis", async () => {

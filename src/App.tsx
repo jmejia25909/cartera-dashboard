@@ -254,6 +254,7 @@ export default function App() {
   });
   const [showModalDisputa, setShowModalDisputa] = useState(false);
   const [showModalCuenta, setShowModalCuenta] = useState(false);
+  const [showModalLimpiar, setShowModalLimpiar] = useState(false);
   const [disputaForm, setDisputaForm] = useState({
     documento: "",
     cliente: "",
@@ -1264,6 +1265,15 @@ export default function App() {
           <button className="btn primary" onClick={() => setShowModalEmpresa(true)}>⚙️ Datos de Empresa</button>
           <button className="btn primary" onClick={importarExcel}>📥 Importar desde Excel</button>
           <button className="btn secondary" onClick={cargarDatos}>🔄 Recargar Datos</button>
+          <button className="btn danger" onClick={async () => {
+            const result = await window.api.reiniciarEstructuraExcel?.();
+            if (result?.ok) {
+              addToast(result.message || "Estructura reiniciada", "success");
+            } else {
+              addToast(result?.message || "Error reiniciando estructura", "error");
+            }
+          }}>🔄 Reiniciar Estructura Excel</button>
+          <button className="btn danger" onClick={() => setShowModalLimpiar(true)}>🧹 Limpiar Base de Datos</button>
         </div>
       );
     }
@@ -1520,6 +1530,52 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalCuenta(false)}>Cancelar</button>
               <button className="btn primary" onClick={guardarCuenta}>Guardar Cuenta</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Limpiar Base */}
+      {showModalLimpiar && (
+        <div className="modal-overlay" onClick={() => setShowModalLimpiar(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">⚠️ Limpiar Base de Datos</div>
+            <div className="modal-body">
+              <p>¿Seguro que deseas limpiar la base de datos?</p>
+              <p><strong>Se borrarán:</strong></p>
+              <ul>
+                <li>Documentos importados</li>
+                <li>Gestiones y promesas</li>
+                <li>Disputas</li>
+                <li>Cuentas por aplicar</li>
+                <li>Historial de abonos</li>
+                <li>Campañas</li>
+              </ul>
+              <p><strong>Se preservarán:</strong></p>
+              <ul>
+                <li>Configuración de empresa (nombre, RUC, teléfono, email)</li>
+                <li>Porcentaje IVA</li>
+                <li>Meta mensual</li>
+                <li>Datos de clientes</li>
+              </ul>
+            </div>
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={() => setShowModalLimpiar(false)}>Cancelar</button>
+              <button className="btn danger" onClick={async () => {
+                try {
+                  const result = await window.api.limpiarBaseDatos?.();
+                  if (result?.ok) {
+                    setShowModalLimpiar(false);
+                    addToast(result.message || "Base limpia exitosamente", "success");
+                    await cargarDatos();
+                  } else {
+                    addToast(result?.message || "Error limpiando base", "error");
+                  }
+                } catch (e) {
+                  addToast("Error limpiando base de datos", "error");
+                  console.error(e);
+                }
+              }}>Sí, limpiar ahora</button>
             </div>
           </div>
         </div>
