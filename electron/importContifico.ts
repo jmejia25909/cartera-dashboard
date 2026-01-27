@@ -27,7 +27,7 @@ function normHeader(s: unknown): string {
     .trim();
 }
 
-function toISODate(v: any): string {
+function toISODate(v: unknown): string {
   if (v == null || v === "") return "";
 
   if (v instanceof Date && !isNaN(v.getTime())) {
@@ -46,7 +46,7 @@ function toISODate(v: any): string {
 
   const s = String(v).trim();
   // dd/mm/yy or dd/mm/yyyy
-  const m = s.match(/^([0-3]?\d)[/\-]([0-1]?\d)[/\-](\d{2}|\d{4})$/);
+  const m = s.match(/^([0-3]?\d)[/-]([0-1]?\d)[/-](\d{2}|\d{4})$/);
   if (m) {
     const dd = m[1].padStart(2, "0");
     const mm = m[2].padStart(2, "0");
@@ -60,7 +60,7 @@ function toISODate(v: any): string {
   return "";
 }
 
-function toNumber(v: any): number {
+function toNumber(v: unknown): number {
   if (v == null || v === "") return 0;
   if (typeof v === "number" && Number.isFinite(v)) return v;
 
@@ -91,7 +91,7 @@ function toNumber(v: any): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function findHeaderRow(rows: any[][]): { idx: number; map: Record<string, number> } {
+function findHeaderRow(rows: unknown[][]): { idx: number; map: Record<string, number> } {
   // We look for a row that includes at least these headers
   const required = ["cliente", "tipo documento", "# documento", "f. vencimiento", "total"];
 
@@ -111,7 +111,7 @@ function findHeaderRow(rows: any[][]): { idx: number; map: Record<string, number
   return { idx: -1, map: {} };
 }
 
-function getCell(row: any[], map: Record<string, number>, key: string): any {
+function getCell(row: unknown[], map: Record<string, number>, key: string): unknown {
   const idx = map[key];
   if (idx == null) return "";
   return row[idx];
@@ -123,7 +123,7 @@ function getCell(row: any[], map: Record<string, number>, key: string): any {
 export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Database): ImportResult {
     // 1. Obtener documentos actuales para comparar
     const docsPrevios: Record<string, { total: number }> = {};
-    for (const row of db.prepare("SELECT documento, total FROM documentos WHERE is_subtotal=0").all() as any[]) {
+    for (const row of db.prepare("SELECT documento, total FROM documentos WHERE is_subtotal=0").all() as Array<{ documento: string; total: number }>) {
       docsPrevios[row.documento] = { total: Number(row.total) };
     }
 
@@ -137,15 +137,15 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
   }
 
   // Leer todas las filas y limpiar columnas/filas
-  let rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true }) as any[][];
+  let rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true }) as unknown[][];
   // 1. Eliminar filas 1-4 (índices 0-3)
   rows = rows.slice(4);
   // 2. Eliminar columnas A, H, I (índices 0, 7, 8) de todas las filas
   rows = rows.map(row => row.filter((_, idx) => idx !== 0 && idx !== 7 && idx !== 8));
   // 3. Renombrar encabezados
   if (rows.length > 0) {
-    let headerRow = rows[0].map((h: string) => {
-      let norm = String(h).trim().toLowerCase();
+    const headerRow = rows[0].map((h: unknown) => {
+      const norm = String(h).trim().toLowerCase();
       if (norm === "razón social" || norm === "razon social") return "Cliente";
       if (norm === "tipo documento") return "Tipo";
       if (norm === "# documento" || norm === "n° documento" || norm === "número documento") return "Documento";
@@ -154,8 +154,8 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
     rows[0] = headerRow;
   }
   // 4. Eliminar filas vacías o de subtotales (donde Cliente o Documento estén vacíos)
-  const idxCliente = rows[0].findIndex((h: string) => String(h).toLowerCase() === "cliente");
-  const idxDoc = rows[0].findIndex((h: string) => String(h).toLowerCase() === "documento");
+  const idxCliente = rows[0].findIndex((h: unknown) => String(h).toLowerCase() === "cliente");
+  const idxDoc = rows[0].findIndex((h: unknown) => String(h).toLowerCase() === "documento");
   rows = [rows[0], ...rows.slice(1).filter(row => {
     const cliente = String(row[idxCliente] ?? "").trim();
     const doc = String(row[idxDoc] ?? "").trim();
@@ -279,7 +279,9 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
       const retenciones = toNumber(getCell(r, map, kRet));
       const cobros = toNumber(getCell(r, map, kCobros));
 
-      const is_subtotal = tipo_documento ? 0 : 1;
+      // Un documento es real si: tiene tipo_documento O (tiene documento Y cliente)
+      // Es subtotal solo si no cumple ninguno de los anteriores
+      const is_subtotal = (tipo_documento || (documento && cliente)) ? 0 : 1;
 
       // Upsert client (only if we have a key)
       if (cliente) {

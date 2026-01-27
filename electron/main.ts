@@ -6,12 +6,14 @@ import * as XLSX from "xlsx";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
+import localtunnel from "localtunnel";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 let db: any;
+let tunnelUrl: string | null = null;
 
 // --- FUNCIONES AUXILIARES (Extraídas para usar en API Web y Desktop) ---
 
@@ -281,8 +283,9 @@ function shouldOpenDevTools() {
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
+    fullscreen: true,
+    frame: true,
+    maximizable: false,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -1365,4 +1368,55 @@ ipcMain.handle("importarContifico", async () => {
     console.error("❌ Error en importación:", e);
     return { ok: false, message: e?.message || String(e), insertedDocs: 0, insertedClientes: 0, omittedRows: 0 };
   }
+});
+
+ipcMain.handle("getGitRemoteUrl", async () => {
+  // Retornar URL del servidor web local para compartir
+  const networkIp = getNetworkIp();
+  const port = 3000; // Puerto del servidor web
+  return `http://${networkIp}:${port}`;
+});
+
+ipcMain.handle("startLocalTunnel", async () => {
+  try {
+    if (tunnelUrl) {
+      return { ok: true, url: tunnelUrl, message: "🌐 Túnel ya activo" };
+    }
+
+    console.log("🔌 Iniciando LocalTunnel...");
+    const tunnel = await localtunnel({
+      port: 3000,
+      subdomain: undefined, // O especificar uno: subdomain: "cartera-dashboard"
+    });
+
+    tunnelUrl = tunnel.url;
+    console.log("✅ LocalTunnel activo:", tunnelUrl);
+
+    tunnel.on("close", () => {
+      console.log("❌ Túnel cerrado");
+      tunnelUrl = null;
+    });
+
+    tunnel.on("error", (err: any) => {
+      console.error("❌ Error en túnel:", err);
+      tunnelUrl = null;
+    });
+
+    return { ok: true, url: tunnelUrl, message: "✅ LocalTunnel iniciado" };
+  } catch (e: any) {
+    console.error("❌ Error al iniciar LocalTunnel:", e);
+    return { ok: false, url: null, message: `Error: ${e?.message || String(e)}` };
+  }
+});
+
+ipcMain.handle("closeTunnel", async () => {
+  if (tunnelUrl) {
+    tunnelUrl = null;
+    return { ok: true, message: "Túnel cerrado" };
+  }
+  return { ok: false, message: "No hay túnel activo" };
+});
+
+ipcMain.handle("getTunnelStatus", async () => {
+  return { active: tunnelUrl !== null, url: tunnelUrl };
 });

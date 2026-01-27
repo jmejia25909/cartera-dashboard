@@ -8,7 +8,7 @@ function ensureDir(p: string) {
 }
 
 function tableHasColumn(db: Database.Database, table: string, col: string): boolean {
-  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as any[];
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   return rows.some((r) => String(r.name).toLowerCase() === col.toLowerCase());
 }
 
@@ -190,7 +190,7 @@ function ensureSchema(db: Database.Database) {
   ];
   for (const col of gestionCols) {
     if (!tableHasColumn(db, "gestiones", col.name)) {
-      try { db.exec(`ALTER TABLE gestiones ADD COLUMN ${col.name} ${col.type}`); } catch {}
+      try { db.exec(`ALTER TABLE gestiones ADD COLUMN ${col.name} ${col.type}`); } catch (e) { console.warn(`Error al agregar columna ${col.name} a gestiones:`, e); }
     }
   }
 
@@ -230,8 +230,8 @@ function ensureSchema(db: Database.Database) {
   for (const sql of alters) {
     try {
       db.exec(sql);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn(`Error al ejecutar alter: ${sql}`, e);
     }
   }
 
@@ -239,35 +239,35 @@ function ensureSchema(db: Database.Database) {
   if (!tableHasColumn(db, "empresa", "administrador")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN administrador TEXT DEFAULT ''");
-    } catch {}
+    } catch (e) { console.warn("Error al agregar columna administrador a empresa:", e); }
   }
 
   // Migración: Agregar columna iva_percent si no existe
   if (!tableHasColumn(db, "empresa", "iva_percent")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN iva_percent REAL DEFAULT 15.0");
-    } catch {}
+    } catch (e) { console.warn("Error al agregar columna iva_percent a empresa:", e); }
   }
 
   // Migración: Agregar columna meta_mensual si no existe
   if (!tableHasColumn(db, "empresa", "meta_mensual")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN meta_mensual REAL DEFAULT 100000");
-    } catch {}
+    } catch (e) { console.warn("Error al agregar columna meta_mensual a empresa:", e); }
   }
 
   // Migración: Agregar columna excel_headers_json para guardar estructura esperada
   if (!tableHasColumn(db, "empresa", "excel_headers_json")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN excel_headers_json TEXT DEFAULT ''");
-    } catch {}
+    } catch (e) { console.warn("Error al agregar columna excel_headers_json a empresa:", e); }
   }
 
   // Migración: Agregar columnas a clientes si no existen
   const clientCols = ["telefono", "email", "direccion", "contacto"];
   for (const c of clientCols) {
     if (!tableHasColumn(db, "clientes", c)) {
-      try { db.exec(`ALTER TABLE clientes ADD COLUMN ${c} TEXT DEFAULT ''`); } catch {}
+      try { db.exec(`ALTER TABLE clientes ADD COLUMN ${c} TEXT DEFAULT ''`); } catch (e) { console.warn(`Error al agregar columna ${c} a clientes:`, e); }
     }
   }
 

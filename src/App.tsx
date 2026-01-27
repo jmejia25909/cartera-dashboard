@@ -1,17 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "./App.css";
 import { fmtMoney } from "./utils/formatters";
-import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend, Title } from "chart.js";
-import { Bar } from "react-chartjs-2";
-
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend, Title);
-
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    api: any;
-  }
-}
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const isWeb = !window.api;
 
@@ -206,6 +196,12 @@ export default function App() {
   const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
   const [disputas, setDisputas] = useState<Disputa[]>([]);
   const [cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
+  const [repoUrl, setRepoUrl] = useState<string>("");
+  const [tunnelUrl, setTunnelUrl] = useState<string>("");
+  const [tunnelActive, setTunnelActive] = useState(false);
+  const [localUrlHealthy, setLocalUrlHealthy] = useState(true);
+  const [tunnelUrlHealthy, setTunnelUrlHealthy] = useState(false);
+  const [primaryUrl, setPrimaryUrl] = useState<"local" | "tunnel">("local");
   
   // Estados para búsqueda y filtros
   const [searchDocumentos, setSearchDocumentos] = useState("");
@@ -232,6 +228,131 @@ export default function App() {
       }, duration);
     }
   }, []);
+
+  // Función para copiar URL al clipboard
+  const copyToClipboard = useCallback((text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      addToast("� URL seguro copiado! Acepta el certificado al abrir", "success", 4000);
+    }).catch(() => {
+      addToast("Error al copiar URL", "error", 2000);
+    });
+  }, [addToast]);
+
+  // Función para iniciar/cerrar LocalTunnel
+  const toggleLocalTunnel = useCallback(async () => {
+    try {
+      if (tunnelActive) {
+        // Cerrar túnel
+        const result = await window.api.closeTunnel();
+        if (result.ok) {
+          setTunnelActive(false);
+          setTunnelUrl("");
+          setTunnelUrlHealthy(false);
+          setPrimaryUrl("local");
+          addToast("🌐 LocalTunnel cerrado", "info", 2000);
+        }
+      } else {
+        // Iniciar túnel
+        const result = await window.api.startLocalTunnel();
+        if (result.ok) {
+          setTunnelUrl(result.url);
+          setTunnelActive(true);
+          addToast(`✅ ${result.message}`, "success", 3000);
+        } else {
+          addToast(`❌ ${result.message}`, "error", 3000);
+        }
+      }
+    } catch (e) {
+      console.error("Error en LocalTunnel:", e);
+      addToast("Error al gestionar LocalTunnel", "error", 2000);
+    }
+  }, [tunnelActive, addToast]);
+
+  // Health check para ambas URLs
+  const checkUrlHealth = useCallback(async (url: string): Promise<boolean> => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
+      
+      // Para LocalTunnel, cualquier respuesta HTTP es válida (incluye página de bypass)
+      const response = await fetch(url, {
+        method: "GET",
+        signal: controller.signal,
+        redirect: "manual", // No seguir redirecciones automáticamente
+      });
+      clearTimeout(timeout);
+      
+      // LocalTunnel responde con 200 (bypass page) o 3xx (redirección)
+      // Ambos indican que el túnel está UP
+      return response.status >= 200 && response.status < 500;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // Effect para health check periódico
+  useEffect(() => {
+    const healthCheckInterval = setInterval(async () => {
+      // Verificar salud de URL local
+      if (repoUrl) {
+        const localHealthy = await checkUrlHealth(repoUrl);
+        setLocalUrlHealthy(localHealthy);
+      }
+
+      // Verificar salud de túnel
+      if (tunnelUrl && tunnelActive) {
+        const tunnelHealthy = await checkUrlHealth(tunnelUrl);
+        setTunnelUrlHealthy(tunnelHealthy);
+      }
+    }, 5000); // Cada 5 segundos
+
+    return () => clearInterval(healthCheckInterval);
+  }, [repoUrl, tunnelUrl, tunnelActive, checkUrlHealth]);
+
+  // Effect para determinar URL primaria basado en salud
+  useEffect(() => {
+    // PRIORIDAD INTELIGENTE:
+    // 1. Si túnel está activo Y saludable → usar túnel
+    if (tunnelActive && tunnelUrlHealthy) {
+      setPrimaryUrl("tunnel");
+    }
+    // 2. Si túnel está activo pero NO saludable → FALLBACK a local
+    else if (tunnelActive && !tunnelUrlHealthy && localUrlHealthy) {
+      setPrimaryUrl("local");
+    }
+    // 3. Si túnel está activo pero ambos están caídos → mantener túnel (último recurso)
+    else if (tunnelActive) {
+      setPrimaryUrl("tunnel");
+    }
+    // 4. Si túnel está desactivado → usar local
+    else {
+      setPrimaryUrl("local");
+    }
+  }, [tunnelActive, tunnelUrlHealthy, localUrlHealthy]);
+
+  // Effect para auto-iniciar LocalTunnel al cargar la aplicación
+  useEffect(() => {
+    const autoStartTunnel = async () => {
+      // Esperar 2 segundos para que cargue la app
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Solo iniciar si no está activo ya
+      if (!tunnelActive) {
+        try {
+          const result = await window.api.startLocalTunnel();
+          if (result.ok) {
+            setTunnelUrl(result.url);
+            setTunnelActive(true);
+            addToast("🌍 LocalTunnel iniciado automáticamente", "success", 3000);
+          }
+        } catch (e) {
+          console.log("No se pudo auto-iniciar LocalTunnel:", e);
+        }
+      }
+    };
+
+    autoStartTunnel();
+  }, [addToast, tunnelActive]); // Solo ejecutar una vez al montar
   
   // Estados para formularios
   const [showModalGestion, setShowModalGestion] = useState(false);
@@ -295,29 +416,36 @@ export default function App() {
         window.api.cuentasAplicarListar?.() || []
       ]);
 
+      // Obtener URL del repositorio remoto Git
+      if (window.api.getGitRemoteUrl) {
+        try {
+          const remoteUrl = await window.api.getGitRemoteUrl();
+          if (remoteUrl?.url) setRepoUrl(remoteUrl.url);
+        } catch (e) {
+          console.log("No se pudo obtener URL remoto:", e);
+        }
+      }
+
       if (empData) setEmpresa(empData as Empresa);
-      if (statsData) setStats(statsData as Stats);
+      if (statsData) setStats(statsData as unknown as Stats);
       if (filtros) {
-        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-        const f = filtros as any;
+        const f = filtros as { clientes?: Array<{ cliente: string; razon_social: string }>; vendedores?: string[] };
         setClientes(f.clientes || []);
         setVendedores(f.vendedores || []);
       }
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      const topData = top as any;
-      if (topData?.rows) setTopClientes(topData.rows);
+      const topData = top as { rows?: unknown[] } | unknown[];
+      const topList = Array.isArray(topData) ? topData : (topData?.rows || []);
+      setTopClientes(topList as unknown as TopCliente[]);
       if (promData) setPromesas((promData as Gestion[]).filter((g: Gestion) => g.resultado?.includes("Promesa")));
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      const campDataTyped = campData as any;
-      if (campDataTyped?.ok) setCampanas(campDataTyped.rows || []);
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      const riesgoTyped = riesgo as any;
-      if (riesgoTyped?.ok) setAnalisisRiesgo(riesgoTyped.rows || []);
+      const campDataTyped = campData as { ok?: boolean; rows?: unknown[] };
+      if (campDataTyped?.ok) setCampanas((campDataTyped.rows || []) as unknown as Campana[]);
+      const riesgoTyped = riesgo as { ok?: boolean; rows?: unknown[] };
+      if (riesgoTyped?.ok) setAnalisisRiesgo((riesgoTyped.rows || []) as unknown as AnalisisRiesgo[]);
       if (motivos) setMotivosData(motivos as MotivoImpago[]);
       if (productividad) setProductividadData(productividad as ProductividadGestor[]);
-      if (segmento) setSegmentacionRiesgo(segmento as SegmentacionRiesgo[]);
+      if (segmento) setSegmentacionRiesgo(segmento as unknown as SegmentacionRiesgo[]);
       if (alertasData) setAlertas(alertasData as Alerta[]);
-      if (pronostData) setPronosticos(pronostData as Pronostico[]);
+      if (pronostData) setPronosticos(pronostData as unknown as Pronostico[]);
       if (tendData) setTendencias(tendData as TendenciaMes[]);
       if (disputasData) setDisputas(disputasData as Disputa[]);
       if (cuentasData) setCuentasAplicar(cuentasData as CuentaAplicar[]);
@@ -367,9 +495,8 @@ export default function App() {
         cliente: selectedCliente || undefined,
         vendedor: selectedVendedor || undefined
       });
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      const resultTyped = result as any;
-      if (resultTyped?.rows) setDocs(resultTyped.rows);
+      const resultTyped = result as { ok?: boolean; rows?: unknown[] };
+      if (resultTyped?.rows) setDocs(resultTyped.rows as unknown as Documento[]);
     } catch (e) {
       console.error("Error cargando documentos:", e);
     }
@@ -523,8 +650,7 @@ export default function App() {
     if (isWeb) return;
     try {
       const result = await window.api.importarContifico();
-      /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-      const resultTyped = result as any;
+      const resultTyped = result as { ok?: boolean; insertedDocs?: number; message?: string };
       if (resultTyped?.ok) {
         addToast(`Importación exitosa: ${resultTyped.insertedDocs} documentos`, "success");
         await cargarDatos();
@@ -551,33 +677,48 @@ export default function App() {
 
   const agingData = useMemo(() => {
     if (!stats?.aging) return null;
-    return {
-      labels: ["Por Vencer", "1-30", "31-60", "61-90", "91-120", ">120"],
-      datasets: [{
-        label: "Saldo",
-        data: [
-          stats.aging.porVencer,
-          stats.aging.d30,
-          stats.aging.d60,
-          stats.aging.d90,
-          stats.aging.d120,
-          stats.aging.d120p
-        ],
-        backgroundColor: ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#991b1b", "#7f1d1d"]
-      }]
-    };
+    return [
+      { name: "Por Vencer", saldo: stats.aging.porVencer },
+      { name: "1-30", saldo: stats.aging.d30 },
+      { name: "31-60", saldo: stats.aging.d60 },
+      { name: "61-90", saldo: stats.aging.d90 },
+      { name: "91-120", saldo: stats.aging.d120 },
+      { name: ">120", saldo: stats.aging.d120p }
+    ];
   }, [stats]);
 
   const topClientesData = useMemo(() => {
     if (!topClientes.length) return null;
-    return {
-      labels: topClientes.map(c => c.razon_social?.substring(0, 20) || 'Cliente'),
-      datasets: [{
-        label: "Saldo",
-        data: topClientes.map(c => c.total),
-        backgroundColor: "#4f46e5"
-      }]
+    
+    // Función para interpolar entre verde (bajo saldo) y rojo (alto saldo)
+    const interpolateColor = (percentage: number): string => {
+      // Verde: rgb(34, 197, 94), Rojo: rgb(239, 68, 68)
+      const green = [34, 197, 94];
+      const red = [239, 68, 68];
+      
+      // Clamp percentage entre 0 y 1
+      const p = Math.max(0, Math.min(1, percentage));
+      
+      const r = Math.round(green[0] + (red[0] - green[0]) * p);
+      const g = Math.round(green[1] + (red[1] - green[1]) * p);
+      const b = Math.round(green[2] + (red[2] - green[2]) * p);
+      
+      return `rgb(${r}, ${g}, ${b})`;
     };
+    
+    // Encontrar el máximo saldo para calcular porcentajes
+    const maxTotal = Math.max(...topClientes.map(c => c.total || 0));
+    
+    // Retornar datos en formato Recharts con color
+    return topClientes.map(c => {
+      const percentage = maxTotal > 0 ? (c.total || 0) / maxTotal : 0;
+      const color = interpolateColor(percentage);
+      return {
+        name: c.razon_social?.substring(0, 18) || 'Cliente',
+        saldo: c.total || 0,
+        fill: color
+      };
+    });
   }, [topClientes]);
 
   // Renderizado condicional por tab
@@ -585,7 +726,7 @@ export default function App() {
     if (tab === "dashboard") {
       return (
         <div className="dashboard-grid">
-          {/* SECCIÓN 1: 4 KPIs CRÍTICOS */}
+          {/* SECCIÓN 1: 5 KPIs CRÍTICOS */}
           <div className="card">
             <div className="card-title">📊 KPIs Críticos</div>
             <div className="kpis-grid">
@@ -613,10 +754,15 @@ export default function App() {
                 </div>
                 <div className="kpi-subtitle">Promesas pagadas</div>
               </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Cobrado</div>
+                <div className="kpi-value kpi-positive">{fmtMoney(stats?.totalCobrado || 0)}</div>
+                <div className="kpi-subtitle">Mes actual</div>
+              </div>
             </div>
           </div>
 
-          {/* SECCIÓN 2: KPIs COMPLEMENTARIOS */}
+          {/* SECCIÓN 2: 5 KPIs GENERALES */}
           <div className="card">
             <div className="card-title">💰 KPIs Generales</div>
             <div className="kpis-grid">
@@ -641,21 +787,68 @@ export default function App() {
                 <div className="kpi-title">Clientes</div>
                 <div className="kpi-value">{stats?.clientesConSaldo || 0}</div>
               </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Cobrado</div>
-                <div className="kpi-value">{fmtMoney(stats?.totalCobrado || 0)}</div>
-              </div>
             </div>
           </div>
 
           <div className="card">
             <div className="card-title">Aging de Cartera</div>
-            {agingData && <Bar data={agingData} options={{ responsive: true, maintainAspectRatio: true }} />}
+            {agingData && (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={agingData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorGreen" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#059669" stopOpacity={0.6} />
+                    </linearGradient>
+                    <linearGradient id="colorBlue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.6} />
+                    </linearGradient>
+                    <linearGradient id="colorAmber" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#d97706" stopOpacity={0.6} />
+                    </linearGradient>
+                    <linearGradient id="colorRed" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#dc2626" stopOpacity={0.6} />
+                    </linearGradient>
+                    <linearGradient id="colorDark" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#991b1b" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#7f1d1d" stopOpacity={0.6} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" stroke="#9ca3af" style={{ fontSize: '0.8rem' }} />
+                  <YAxis stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                  <Bar dataKey="saldo" fill="url(#colorGreen)" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           <div className="card">
-            <div className="card-title">Top 10 Clientes</div>
-            {topClientesData && <Bar data={topClientesData} options={{ responsive: true, maintainAspectRatio: true, indexAxis: "y" }} />}
+            <div className="card-title">👥 Top 10 Clientes por Saldo</div>
+            {topClientesData ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topClientesData} layout="vertical" margin={{ top: 10, right: 20, left: 200, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
+                  <YAxis dataKey="name" type="category" width={195} stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                  <Bar dataKey="saldo" radius={[0, 8, 8, 0]}>
+                    {topClientesData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="empty-state">
+                <div className="empty-icon">📊</div>
+                <p>No hay clientes con saldo pendiente</p>
+              </div>
+            )}
           </div>
 
           {promesas.length > 0 && (
@@ -680,31 +873,42 @@ export default function App() {
           {alertas.length > 0 && (
             <div className="card">
               <div className="card-title">🚨 Top 5 Alertas de Incumplimiento</div>
-              <div className="table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th className="num">Días Vencido</th>
-                      <th className="num">Severidad</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {alertas.slice(0, 5).map((a, i) => (
-                      <tr key={i}>
-                        <td>{a.cliente}</td>
-                        <td className="num">{a.diasVencidos}</td>
-                        <td className="num">
-                          <span className={a.severidad === "Crítico" ? "kpi-negative" : a.severidad === "Alto" ? "kpi-warning" : ""}>
-                            {a.severidad}
-                          </span>
-                        </td>
-                      </tr>
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart 
+                  data={alertas.slice(0, 5).map(a => ({
+                    cliente: a.cliente.substring(0, 20),
+                    dias: a.diasVencidos,
+                    fill: a.severidad === "Crítico" ? "#ef4444" : a.severidad === "Alto" ? "#f59e0b" : "#3b82f6"
+                  }))} 
+                  layout="vertical" 
+                  margin={{ top: 10, right: 20, left: 150, bottom: 10 }}
+                >
+                  <defs>
+                    <linearGradient id="colorCritico" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#dc2626" stopOpacity={0.9} />
+                    </linearGradient>
+                    <linearGradient id="colorAlto" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#d97706" stopOpacity={0.9} />
+                    </linearGradient>
+                    <linearGradient id="colorMedio" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
+                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0.9} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} label={{ value: 'Días Vencidos', position: 'insideBottom', offset: -5 }} />
+                  <YAxis dataKey="cliente" type="category" width={145} stroke="#9ca3af" style={{ fontSize: '0.7rem' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.85rem' }} />
+                  <Bar dataKey="dias" radius={[0, 8, 8, 0]}>
+                    {alertas.slice(0, 5).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.severidad === "Crítico" ? "url(#colorCritico)" : entry.severidad === "Alto" ? "url(#colorAlto)" : "url(#colorMedio)"} />
                     ))}
-                  </tbody>
-                </table>
-              </div>
-              <button className="btn primary alertas-btn" onClick={() => setTab("alertas")}>Ver todas las alertas →</button>
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <button className="btn primary alertas-btn alertas-btn-margin" onClick={() => setTab("alertas")}>Ver todas las alertas →</button>
             </div>
           )}
         </div>
@@ -1287,17 +1491,73 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>💰 Cartera Dashboard</h1>
-        <span className="badge">{empresa.nombre}</span>
+        <div className="header-left">
+          <h1>💰 Cartera Dashboard</h1>
+          <span className="badge">{empresa.nombre}</span>
+        </div>
+        <div className="header-right">
+          <div className="header-info">
+            <span className="info-label">🔧</span>
+            <span className="info-value">React + Electron + SQLite</span>
+          </div>
+          <div className="header-info">
+            <span className="info-label">📦</span>
+            <span className="info-value">Contifico Import</span>
+          </div>
+          <div className="header-info">
+            <span className="info-label">🔗</span>
+            <span className="info-value info-ok">Detectado</span>
+          </div>
+          {/* URL unificada que alterna entre Local y Túnel */}
+          {(repoUrl || tunnelUrl) && (
+            <div 
+              className={`header-info header-info-clickable url-primary`}
+              onClick={() => copyToClipboard(primaryUrl === "tunnel" && tunnelUrl ? tunnelUrl : repoUrl)} 
+              title={`📍 URL COMPARTIBLE - ${primaryUrl === "tunnel" ? "LocalTunnel (remoto)" : "Red Local"} - Clic para copiar`}
+            >
+              <span className="info-label">
+                {primaryUrl === "tunnel" && tunnelUrlHealthy ? "🌍" : 
+                 primaryUrl === "tunnel" && !tunnelUrlHealthy ? "🔴" : "🟢"}
+              </span>
+              <span className="info-value info-url url-max-width">
+                {primaryUrl === "tunnel" && tunnelUrl ? tunnelUrl : repoUrl}
+              </span>
+              {primaryUrl === "tunnel" && !tunnelUrlHealthy && <span className="health-badge">⚠️</span>}
+            </div>
+          )}
+          {/* Control de activación de túnel */}
+          <div 
+            className={`header-info header-info-clickable ${tunnelActive ? 'tunnel-active' : ''}`}
+            onClick={() => {
+              if (tunnelActive && tunnelUrl) {
+                // Si está activo, copiar la URL
+                copyToClipboard(tunnelUrl);
+              } else {
+                // Si está inactivo, activar
+                toggleLocalTunnel();
+              }
+            }}
+            title={tunnelActive ? "LocalTunnel ACTIVO - Clic para copiar URL" : "Clic para activar LocalTunnel (acceso remoto)"}
+          >
+            <span className="info-label">{tunnelActive ? "🔗" : "🌍"}</span>
+            <span className={`info-value ${tunnelActive ? "tunnel-on" : "tunnel-off"}`}>
+              {tunnelActive ? "Túnel ON" : "Activar Túnel"}
+            </span>
+          </div>
+          <div className="header-info">
+            <span className="info-label">💾</span>
+            <span className="info-value info-path">{isWeb ? "Modo Web" : "C:\\Users\\...\\cartera.db"}</span>
+          </div>
+        </div>
       </header>
 
       <nav className="nav-bar">
-        <button className={tab === "dashboard" ? "nav-item active" : "nav-item"} onClick={() => setTab("dashboard")}>Dashboard</button>
-        <button className={tab === "gestion" ? "nav-item active" : "nav-item"} onClick={() => setTab("gestion")}>Gestión</button>
-        <button className={tab === "reportes" ? "nav-item active" : "nav-item"} onClick={() => setTab("reportes")}>Reportes</button>
-        <button className={tab === "crm" ? "nav-item active" : "nav-item"} onClick={() => setTab("crm")}>CRM</button>
-        <button className={tab === "campanas" ? "nav-item active" : "nav-item"} onClick={() => setTab("campanas")}>Campañas</button>
-        <button className={tab === "analisis" ? "nav-item active" : "nav-item"} onClick={() => setTab("analisis")}>Análisis</button>
+        <button className={tab === "dashboard" ? "nav-item active" : "nav-item"} onClick={() => setTab("dashboard")}>📊 Dashboard</button>
+        <button className={tab === "gestion" ? "nav-item active" : "nav-item"} onClick={() => setTab("gestion")}>📋 Gestión</button>
+        <button className={tab === "reportes" ? "nav-item active" : "nav-item"} onClick={() => setTab("reportes")}>📄 Reportes</button>
+        <button className={tab === "crm" ? "nav-item active" : "nav-item"} onClick={() => setTab("crm")}>👥 CRM</button>
+        <button className={tab === "campanas" ? "nav-item active" : "nav-item"} onClick={() => setTab("campanas")}>📢 Campañas</button>
+        <button className={tab === "analisis" ? "nav-item active" : "nav-item"} onClick={() => setTab("analisis")}>🔍 Análisis</button>
         <button className={tab === "alertas" ? "nav-item active" : "nav-item"} onClick={() => setTab("alertas")}>🚨 Alertas</button>
         <button className={tab === "tendencias" ? "nav-item active" : "nav-item"} onClick={() => setTab("tendencias")}>📈 Tendencias</button>
         <button className={tab === "disputas" ? "nav-item active" : "nav-item"} onClick={() => setTab("disputas")}>⚖️ Disputas</button>

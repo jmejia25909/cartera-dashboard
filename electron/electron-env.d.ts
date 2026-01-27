@@ -1,7 +1,18 @@
-// electron/preload.ts
-import { contextBridge, ipcRenderer } from "electron";
+/// <reference types="vite-plugin-electron/electron-env" />
 
-contextBridge.exposeInMainWorld("carteraApi", {
-  ping: async () => "OK",
-  getDbPath: async () => ipcRenderer.invoke("db:getPath"),
-});
+declare module 'localtunnel' {
+  interface TunnelConfig {
+    port: number;
+    subdomain?: string;
+    host?: string;
+    local_host?: string;
+  }
+  
+  interface Tunnel {
+    url: string;
+    close(): Promise<void>;
+  }
+  
+  function localtunnel(config: TunnelConfig): Promise<Tunnel>;
+  export = localtunnel;
+}
