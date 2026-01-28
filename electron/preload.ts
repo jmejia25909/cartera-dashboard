@@ -3,6 +3,8 @@ import { contextBridge, ipcRenderer } from "electron";
 const apiMethods = {
   ping: () => ipcRenderer.invoke("ping"),
   getDbPath: () => ipcRenderer.invoke("getDbPath"),
+  getDesktopToken: () => ipcRenderer.invoke("getDesktopToken"),
+  hasWritePermissions: () => ipcRenderer.invoke("hasWritePermissions"),
   statsObtener: () => ipcRenderer.invoke("statsObtener"),
   filtrosListar: () => ipcRenderer.invoke("filtrosListar"),
   topClientes: (limit?: number) => ipcRenderer.invoke("topClientes", limit),
@@ -36,9 +38,6 @@ const apiMethods = {
   cuentaAplicarCrear: (data: unknown) => ipcRenderer.invoke("cuentaAplicarCrear", data),
   cuentaAplicarActualizar: (data: unknown) => ipcRenderer.invoke("cuentaAplicarActualizar", data),
   getGitRemoteUrl: () => ipcRenderer.invoke("getGitRemoteUrl"),
-  startLocalTunnel: () => ipcRenderer.invoke("startLocalTunnel"),
-  closeTunnel: () => ipcRenderer.invoke("closeTunnel"),
-  getTunnelStatus: () => ipcRenderer.invoke("getTunnelStatus"),
 };
 
 contextBridge.exposeInMainWorld("carteraApi", apiMethods);

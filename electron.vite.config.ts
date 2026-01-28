@@ -7,6 +7,9 @@ const external = [
   "better-sqlite3",
   "bindings",
 
+  // Mantener externo (binarios nativos)
+  "@ngrok/ngrok",
+
   // Node builtins (por seguridad):
   "node:fs",
   "node:path",

@@ -283,6 +283,13 @@ export function openDb() {
   const dbPath = path.join(dataDir, "cartera.db");
   const db = new Database(dbPath);
 
+  // Configuración de SQLite para permitir múltiples lectores
+  db.pragma("journal_mode = WAL");  // Write-Ahead Logging
+  db.pragma("synchronous = NORMAL"); // Balance entre velocidad y seguridad
+  db.pragma("cache_size = -64000");  // 64MB cache
+  db.pragma("foreign_keys = ON");    // Integridad referencial
+  db.pragma("temp_store = MEMORY");  // Tablas temp en memoria
+
   ensureSchema(db);
 
   return { db, dbPath };

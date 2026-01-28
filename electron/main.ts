@@ -6,14 +6,40 @@ import * as XLSX from "xlsx";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
-import localtunnel from "localtunnel";
+import { spawn } from "child_process";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+// Exponer __dirname para dependencias CommonJS (ej. ngrok) en entorno ESM
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).__dirname = __dirname;
 
 let mainWindow: BrowserWindow | null = null;
 let db: any;
-let tunnelUrl: string | null = null;
+let cloudflaredProcess: any = null;
+let ngrokUrl: string = "";
+let ngrokListener: any = null;
+
+// Token secreto para identificar que la petición viene de la app desktop
+const DESKTOP_TOKEN = `desktop-${Date.now()}-${Math.random().toString(36)}`;
+
+// Constantes para ngrok (acceso remoto)
+const NGROK_PORT = 3000;
+const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || "";
+
+// Verbosidad de logs (por defecto reducido para evitar ruido en terminal)
+const VERBOSE_API_LOGS = process.env.VERBOSE_API_LOGS === "1";
+const VERBOSE_IP_LOGS = process.env.VERBOSE_IP_LOGS === "1";
+
+// Constantes placeholder para compatibilidad con lógica previa de Cloudflare
+const CLOUDFLARE_TUNNEL_URL = "";
+const CLOUDFLARE_TUNNEL_NAME = "";
+
+// Función para verificar si la petición viene de la aplicación desktop
+function isDesktopClient(req: http.IncomingMessage): boolean {
+  return req.headers["x-desktop-token"] === DESKTOP_TOKEN;
+}
 
 // --- FUNCIONES AUXILIARES (Extraídas para usar en API Web y Desktop) ---
 
@@ -59,22 +85,158 @@ function getAnalisisRiesgo() {
       return { ...r, score: Math.max(0, Math.round(score)) };
     });
 
-    return { ok: true, rows: analisis.sort((a: any, b: any) => a.score - b.score) };
+    const sorted = analisis.sort((a: any, b: any) => a.score - b.score) as Array<Record<string, unknown>>;
+    return { ok: true, rows: sorted };
   } catch (e: any) {
-    return { ok: false, message: e.message, rows: [] };
+    return { ok: false, message: e.message, rows: [] as unknown[] };
   }
 }
 
-function getNetworkIp() {
+function getNetworkIp(log: boolean = false) {
   const interfaces = os.networkInterfaces();
+  const validIps: { name: string; address: string; priority: number }[] = [];
+  
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]!) {
       if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
+        // Determinar prioridad: WiFi > Ethernet > VirtualBox > Otros
+        let priority = 999;
+        const nameLower = name.toLowerCase();
+        
+        if (nameLower.includes('wi-fi') || nameLower.includes('wifi') || nameLower.includes('wlan')) {
+          priority = 1; // Mayor prioridad para WiFi
+        } else if (nameLower.includes('ethernet') || nameLower.includes('eth')) {
+          priority = 2;
+        } else if (nameLower.includes('virtualbox') || nameLower.includes('vmware') || nameLower.includes('vbox')) {
+          priority = 100; // Menor prioridad para adaptadores virtuales
+        }
+        
+        validIps.push({ name, address: iface.address, priority });
       }
     }
   }
+  
+  // Ordenar por prioridad y devolver la primera
+  if (validIps.length > 0) {
+    validIps.sort((a, b) => a.priority - b.priority);
+    if (log || VERBOSE_IP_LOGS) {
+      console.log(`📡 IP seleccionada: ${validIps[0].address} (${validIps[0].name})`);
+    }
+    return validIps[0].address;
+  }
+  
   return "localhost";
+}
+
+// Función para verificar si el túnel de Cloudflare está activo
+async function checkCloudflaredTunnel(): Promise<boolean> {
+  try {
+    const response = await fetch(`${CLOUDFLARE_TUNNEL_URL}/api/stats`, {
+      method: "GET",
+      timeout: 5000,
+    } as any);
+    const isHealthy = response.status >= 200 && response.status < 500;
+    console.log(`🌐 Tunnel health check: ${isHealthy ? "✓ OK" : "✗ FAILED"} (${response.status})`);
+    return isHealthy;
+  } catch (error) {
+    console.log(`🌐 Tunnel health check failed:`, error);
+    return false;
+  }
+}
+
+// Función para reiniciar el túnel de Cloudflare
+async function restartCloudflaredTunnel(): Promise<boolean> {
+  try {
+    console.log("🌐 Intentando reiniciar túnel de Cloudflare...");
+    
+    // Path del ejecutable cloudflared
+    const cloudflaredPath = "C:\\Users\\j-mej\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.exe";
+    
+    // Ejecutar el túnel en background
+    cloudflaredProcess = spawn(cloudflaredPath, ["tunnel", "run", CLOUDFLARE_TUNNEL_NAME], {
+      detached: true,
+      stdio: "ignore",
+    });
+    
+    cloudflaredProcess.unref();
+    console.log(`✅ Túnel reiniciado (PID: ${cloudflaredProcess?.pid})`);
+    
+    // Esperar 5 segundos para que se conecte
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Verificar que esté conectado
+    const isHealthy = await checkCloudflaredTunnel();
+    if (isHealthy) {
+      mainWindow?.webContents.send("tunnel-status", { status: "connected" });
+      return true;
+    } else {
+      console.log("⚠️ Túnel reiniciado pero aún no responde");
+      return false;
+    }
+  } catch (error) {
+    console.error("❌ Error reiniciando túnel:", error);
+    return false;
+  }
+}
+
+// Función para iniciar ngrok y obtener URL remota
+async function startNgrok(): Promise<string> {
+  try {
+    const ngrok = await import("@ngrok/ngrok");
+    console.log("🌐 Iniciando ngrok para acceso remoto...");
+    
+    // Configurar authtoken si existe
+    if (NGROK_AUTHTOKEN) {
+      console.log("🔐 Usando authtoken de ngrok");
+    }
+    
+    // Iniciar listener
+    ngrokListener = await ngrok.forward({
+      addr: NGROK_PORT,
+      authtoken_from_env: true,
+    });
+    
+    const url = ngrokListener.url();
+    ngrokUrl = url || "";
+    console.log(`✅ ngrok conectado: ${ngrokUrl}`);
+    mainWindow?.webContents.send("remote-url-updated", { url: ngrokUrl });
+    return ngrokUrl;
+  } catch (error) {
+    console.error("❌ Error iniciando ngrok:", error);
+    return "";
+  }
+}
+
+// Función para verificar y reiniciar ngrok si es necesario
+async function checkAndRefreshNgrok(): Promise<string> {
+  try {
+    // Probar si la URL actual funciona
+    if (ngrokUrl) {
+      const response = await fetch(`${ngrokUrl}/api/stats`, {
+        timeout: 5000,
+      } as any);
+      
+      if (response.status >= 200 && response.status < 500) {
+        console.log(`✅ ngrok sigue activo: ${ngrokUrl}`);
+        return ngrokUrl;
+      }
+    }
+    
+    // Si no funciona, reiniciar
+    console.log("⚠️ ngrok desconectado, reiniciando...");
+    if (ngrokListener) {
+      await ngrokListener.close();
+      ngrokListener = null;
+    }
+    return await startNgrok();
+  } catch (error) {
+    console.error("❌ Error verificando ngrok:", error);
+    try {
+      return await startNgrok();
+    } catch (e) {
+      return "";
+    }
+  }
 }
 
 function getClienteInfo(codigo: string) {
@@ -181,16 +343,67 @@ function getGestionesReporte(args?: { desde?: string, hasta?: string }) {
 function startWebServer() {
   const server = http.createServer((req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-desktop-token");
+    
+    // Manejar preflight requests
+    if (req.method === "OPTIONS") {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
     
     const url = new URL(req.url || "/", `http://${req.headers.host}`);
+    const isDesktop = isDesktopClient(req);
     
     // 1. API Endpoints
     if (url.pathname.startsWith("/api/")) {
       res.setHeader("Content-Type", "application/json");
+      
+      // Operaciones que requieren permisos de escritura (solo desktop)
+      const writeOperations = [
+        "/api/importar",
+        "/api/limpiar",
+        "/api/empresa/guardar",
+        "/api/cliente/guardar",
+        "/api/gestion/guardar",
+        "/api/gestion/eliminar",
+        "/api/gestion/cumplir",
+        "/api/campana/guardar",
+        "/api/campana/eliminar",
+        "/api/disputa/crear",
+        "/api/cuenta-aplicar/crear",
+        "/api/cuenta-aplicar/actualizar"
+      ];
+      
+      // Verificar permisos para operaciones de escritura
+      if (writeOperations.some(op => url.pathname.startsWith(op)) && !isDesktop) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ 
+          ok: false, 
+          message: "⚠️ Operación no permitida. Solo la aplicación de escritorio puede hacer cambios."
+        }));
+        return;
+      }
+      
       try {
         let data: any = { ok: false, message: "Ruta no encontrada" };
 
-        if (url.pathname === "/api/stats") data = computeStats();
+        if (VERBOSE_API_LOGS) {
+          console.log(`📥 [${url.pathname}] Request desde ${isDesktop ? 'Desktop' : 'Web'}`);
+        }
+
+        if (url.pathname === "/api/config") {
+          // Endpoint para obtener configuración (IP local, etc)
+          const localIp = getNetworkIp();
+          data = { 
+            ok: true, 
+            remoteUrl: `http://${localIp}:${NGROK_PORT}`,
+            localIp,
+            port: NGROK_PORT
+          };
+        }
+        else if (url.pathname === "/api/stats") data = computeStats();
         else if (url.pathname === "/api/filtros") data = listFiltros();
         else if (url.pathname === "/api/empresa") data = getEmpresa();
         else if (url.pathname === "/api/top-clientes") data = topClientes(Number(url.searchParams.get("limit")) || 10);
@@ -228,7 +441,7 @@ function startWebServer() {
     if (!fs.existsSync(distPath)) {
       console.log("⚠️  ADVERTENCIA: No se encontró la carpeta 'dist'. Recuerda ejecutar 'npm run build' para que funcione en el celular.");
     }
-    let filePath = join(distPath, safePath.startsWith("/") ? safePath.slice(1) : safePath);
+    const filePath = join(distPath, safePath.startsWith("/") ? safePath.slice(1) : safePath);
 
     // Tipos MIME correctos (CRUCIAL para que no salga pantalla blanca)
     const mimeTypes: Record<string, string> = {
@@ -265,17 +478,29 @@ function startWebServer() {
   });
 
   server.listen(3000, "0.0.0.0", () => {
-    console.log("--- SERVIDOR WEB LOCAL INICIADO ---");
     const interfaces = os.networkInterfaces();
+    const urls: string[] = [];
     Object.keys(interfaces).forEach((ifaceName) => {
       interfaces[ifaceName]?.forEach((iface) => {
         if (iface.family === "IPv4" && !iface.internal) {
-          console.log(`Accede desde el celular a: http://${iface.address}:3000`);
+          urls.push(`http://${iface.address}:3000`);
         }
       });
     });
+
+    console.log(`--- SERVIDOR WEB LOCAL INICIADO --- ${urls.join(" | ")}`);
+    if (VERBOSE_IP_LOGS) {
+      urls.forEach(u => console.log(`Acceso disponible en: ${u}`));
+    }
+    
+    // Enviar IP local como URL remota inicial
+    const localIp = getNetworkIp();
+    if (localIp !== "localhost") {
+      mainWindow?.webContents.send("remote-url-updated", { url: `http://${localIp}:3000` });
+    }
   });
 }
+
 
 function shouldOpenDevTools() {
   return process.env.OPEN_DEVTOOLS === "1" || process.env.OPEN_DEVTOOLS === "true";
@@ -283,15 +508,21 @@ function shouldOpenDevTools() {
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
-    fullscreen: true,
+    width: 1400,
+    height: 900,
+    minWidth: 1000,
+    minHeight: 600,
     frame: true,
-    maximizable: false,
+    show: false,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+
+  mainWindow.maximize();
+  mainWindow.show();
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) {
@@ -723,7 +954,9 @@ function parseExcel(filePath: string, ivaPercent: number) {
     // Primera importación: guardar la estructura
     try {
       db.prepare("UPDATE empresa SET excel_headers_json = @headers WHERE id = 1").run({ headers: JSON.stringify(normalizedHeaders) });
-    } catch {}
+    } catch (err) {
+      console.warn("No se pudo guardar la estructura de encabezados en DB:", err);
+    }
   }
 
   const getVal = (row: any[], keys: string[], exclude: string[] = []) => {
@@ -904,6 +1137,10 @@ app.whenReady().then(async () => {
 
   await createWindow();
 
+  // ngrok deshabilitado (requiere cuenta verificada con authtoken)
+  // Para acceso remoto, usa la IP local mostrada en la consola
+  console.log("ℹ️  ngrok deshabilitado. Usa la IP local para acceso remoto en tu red WiFi.");
+
   app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       await createWindow();
@@ -921,6 +1158,12 @@ app.on("window-all-closed", () => {
 // -----------------------------
 ipcMain.handle("ping", async () => ({ ok: true }));
 ipcMain.handle("getDbPath", async () => getDbFilePath());
+
+// Obtener el token de la aplicación desktop
+ipcMain.handle("getDesktopToken", async () => DESKTOP_TOKEN);
+
+// Verificar si tiene permisos de escritura (siempre true en desktop)
+ipcMain.handle("hasWritePermissions", async () => true);
 
 ipcMain.handle("statsObtener", async () => {
   return computeStats();
@@ -1374,49 +1617,46 @@ ipcMain.handle("getGitRemoteUrl", async () => {
   // Retornar URL del servidor web local para compartir
   const networkIp = getNetworkIp();
   const port = 3000; // Puerto del servidor web
-  return `http://${networkIp}:${port}`;
+  return { ok: true, url: `http://${networkIp}:${port}` };
 });
 
-ipcMain.handle("startLocalTunnel", async () => {
+// Handler para obtener la URL remota de Cloudflare
+ipcMain.handle("getCloudflareUrl", async () => {
+  return { ok: true, url: CLOUDFLARE_TUNNEL_URL };
+});
+
+// Handler para verificar el estado del túnel de Cloudflare
+ipcMain.handle("checkCloudflaredStatus", async () => {
   try {
-    if (tunnelUrl) {
-      return { ok: true, url: tunnelUrl, message: "🌐 Túnel ya activo" };
-    }
-
-    console.log("🔌 Iniciando LocalTunnel...");
-    const tunnel = await localtunnel({
-      port: 3000,
-      subdomain: undefined, // O especificar uno: subdomain: "cartera-dashboard"
-    });
-
-    tunnelUrl = tunnel.url;
-    console.log("✅ LocalTunnel activo:", tunnelUrl);
-
-    tunnel.on("close", () => {
-      console.log("❌ Túnel cerrado");
-      tunnelUrl = null;
-    });
-
-    tunnel.on("error", (err: any) => {
-      console.error("❌ Error en túnel:", err);
-      tunnelUrl = null;
-    });
-
-    return { ok: true, url: tunnelUrl, message: "✅ LocalTunnel iniciado" };
-  } catch (e: any) {
-    console.error("❌ Error al iniciar LocalTunnel:", e);
-    return { ok: false, url: null, message: `Error: ${e?.message || String(e)}` };
+    const isHealthy = await checkCloudflaredTunnel();
+    return { ok: true, status: isHealthy ? "connected" : "disconnected" };
+  } catch (error) {
+    return { ok: false, status: "error" };
   }
 });
 
-ipcMain.handle("closeTunnel", async () => {
-  if (tunnelUrl) {
-    tunnelUrl = null;
-    return { ok: true, message: "Túnel cerrado" };
+// Handler para reiniciar manualmente el túnel (si falla)
+ipcMain.handle("restartCloudflared", async () => {
+  try {
+    const success = await restartCloudflaredTunnel();
+    return { ok: success, message: success ? "Túnel reiniciado" : "Error reiniciando túnel" };
+  } catch (error: any) {
+    return { ok: false, message: error.message };
   }
-  return { ok: false, message: "No hay túnel activo" };
 });
 
-ipcMain.handle("getTunnelStatus", async () => {
-  return { active: tunnelUrl !== null, url: tunnelUrl };
+// Handler para obtener la URL remota de ngrok (dinámica)
+ipcMain.handle("getRemoteUrl", async () => {
+  if (!ngrokUrl) {
+    ngrokUrl = await startNgrok();
+  }
+  return { ok: !!ngrokUrl, url: ngrokUrl };
 });
+
+// Handler para verificar y actualizar ngrok si es necesario
+ipcMain.handle("checkRemoteUrl", async () => {
+  const url = await checkAndRefreshNgrok();
+  return { ok: !!url, url };
+});
+
+

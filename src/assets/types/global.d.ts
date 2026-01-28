@@ -21,6 +21,8 @@ declare global {
     carteraApi?: {
       ping: () => Promise<{ ok: boolean }>;
       getDbPath: () => Promise<string>;
+      getDesktopToken: () => Promise<string>;
+      hasWritePermissions: () => Promise<boolean>;
 
       importarContifico: () => Promise<{
         ok: boolean;
@@ -93,9 +95,11 @@ declare global {
       generarPDF: (filename: string) => Promise<{ ok: boolean; message?: string }>;
       getNetworkInfo: () => Promise<{ ip: string; tunnel?: string }>;
       getGitRemoteUrl: () => Promise<{ ok: boolean; url?: string }>;
-      startLocalTunnel: () => Promise<{ ok: boolean; url?: string; message?: string }>;
-      closeTunnel: () => Promise<{ ok: boolean; message?: string }>;
-      getTunnelStatus: () => Promise<{ active: boolean; url?: string }>;
+      getRemoteUrl: () => Promise<{ ok: boolean; url?: string }>;
+      checkRemoteUrl: () => Promise<{ ok: boolean; url?: string }>;
+      getCloudflareUrl: () => Promise<{ ok: boolean; url: string }>;
+      checkCloudflaredStatus: () => Promise<{ ok: boolean; status: "connected" | "disconnected" | "error" }>;
+      restartCloudflared: () => Promise<{ ok: boolean; message: string }>;
       campanaCrear?: (data: CampanaData) => Promise<{ ok: boolean; message?: string }>;
       campanaEliminar?: (id: number) => Promise<{ ok: boolean; message?: string }>;
       reiniciarEstructuraExcel?: () => Promise<{ ok: boolean; message?: string }>;

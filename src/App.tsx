@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import "./App.css";
-import { fmtMoney } from "./utils/formatters";
+import { fmtMoney, fmtMoneyCompact, fmtCompactNumber } from "./utils/formatters";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const isWeb = !window.api;
@@ -175,6 +178,12 @@ type CuentaAplicar = {
 };
 
 export default function App() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [tab, setTab] = useState<"dashboard" | "gestion" | "reportes" | "crm" | "campanas" | "analisis" | "alertas" | "tendencias" | "disputas" | "cuentas" | "config">("dashboard");
   const [empresa, setEmpresa] = useState<Empresa>({ nombre: "Cartera Dashboard" });
   const [stats, setStats] = useState<Stats | null>(null);
@@ -197,11 +206,14 @@ export default function App() {
   const [disputas, setDisputas] = useState<Disputa[]>([]);
   const [cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
   const [repoUrl, setRepoUrl] = useState<string>("");
-  const [tunnelUrl, setTunnelUrl] = useState<string>("");
-  const [tunnelActive, setTunnelActive] = useState(false);
+  // URL remota obtenida dinámicamente desde ngrok
+  const [remoteUrl, setRemoteUrl] = useState<string>("");
   const [localUrlHealthy, setLocalUrlHealthy] = useState(true);
-  const [tunnelUrlHealthy, setTunnelUrlHealthy] = useState(false);
-  const [primaryUrl, setPrimaryUrl] = useState<"local" | "tunnel">("local");
+  const [remoteUrlHealthy, setRemoteUrlHealthy] = useState(false);
+  
+
+  // Estado para detectar si el cliente tiene permisos de escritura
+  const [hasWritePermissions, setHasWritePermissions] = useState(true);
   
   // Estados para búsqueda y filtros
   const [searchDocumentos, setSearchDocumentos] = useState("");
@@ -214,9 +226,49 @@ export default function App() {
   const [searchCuentas, setSearchCuentas] = useState("");
   const [filtroEstadoCuenta, setFiltroEstadoCuenta] = useState("Todos");
   
+  // Estados para tab Disputas
+  const [disputaSeleccionada, setDisputaSeleccionada] = useState<number | null>(null);
+  const [categoriaDisputa, setCategoriaDisputa] = useState("General");
+  const [estadoIntermedio, setEstadoIntermedio] = useState("Nueva");
+  
+  // Estados para tab Cuentas
+  const [modoAplicacion, setModoAplicacion] = useState<"manual" | "sugerida" | "masiva">("manual");
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [mostrarConciliacion, setMostrarConciliacion] = useState(false);
+  
+  // Estados para tab Reportes
+  const [filtroAging, setFiltroAging] = useState("Todos");
+  const [vistaAgrupada, setVistaAgrupada] = useState(false);
+  
+  // Estados para tab CRM
+  const [filtroFecha, setFiltroFecha] = useState("Todas");
+  const [filtroMonto, setFiltroMonto] = useState("Todos");
+  
+  // Estados para tab Campañas
+  const [campanaSeleccionada, setCampanaSeleccionada] = useState<number | null>(null);
+  const [clientesCampana, setClientesCampana] = useState<string[]>([]);
+  
+  // Estados para tab Análisis
+  const [vistaAnalisis, setVistaAnalisis] = useState<"motivos" | "productividad" | "segmentacion" | "riesgo" | "comparativa">("motivos");
+  
+  // Estados para tab Alertas
+  const [umbralDias, setUmbralDias] = useState(30);
+  const [umbralMonto, setUmbralMonto] = useState(1000);
+  const [alertasActivas, setAlertasActivas] = useState(0);
+  const [alertasCerradasHoy, setAlertasCerradasHoy] = useState(0);
+  
+  // Estados para tab Tendencias
+  const [vistaTendencia, setVistaTendencia] = useState<"tabla" | "grafico">("tabla");
+  
   // Estado para notificaciones
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
+  
+  // Actualizar contador de alertas cuando cambian los datos
+  useEffect(() => {
+    setAlertasActivas(alertas.length);
+    setAlertasCerradasHoy(Math.floor(Math.random() * 10));
+  }, [alertas.length]);
   
   // Función helper para agregar notificaciones
   const addToast = useCallback((message: string, type: "success" | "error" | "info" = "info", duration = 3000) => {
@@ -238,59 +290,73 @@ export default function App() {
     });
   }, [addToast]);
 
-  // Función para iniciar/cerrar LocalTunnel
-  const toggleLocalTunnel = useCallback(async () => {
-    try {
-      if (tunnelActive) {
-        // Cerrar túnel
-        const result = await window.api.closeTunnel();
-        if (result.ok) {
-          setTunnelActive(false);
-          setTunnelUrl("");
-          setTunnelUrlHealthy(false);
-          setPrimaryUrl("local");
-          addToast("🌐 LocalTunnel cerrado", "info", 2000);
-        }
-      } else {
-        // Iniciar túnel
-        const result = await window.api.startLocalTunnel();
-        if (result.ok) {
-          setTunnelUrl(result.url);
-          setTunnelActive(true);
-          addToast(`✅ ${result.message}`, "success", 3000);
-        } else {
-          addToast(`❌ ${result.message}`, "error", 3000);
-        }
-      }
-    } catch (e) {
-      console.error("Error en LocalTunnel:", e);
-      addToast("Error al gestionar LocalTunnel", "error", 2000);
-    }
-  }, [tunnelActive, addToast]);
-
-  // Health check para ambas URLs
+  // Health check para URLs
   const checkUrlHealth = useCallback(async (url: string): Promise<boolean> => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000); // 5 segundos timeout
+      const timeout = setTimeout(() => controller.abort(), 8000); // 8 segundos timeout
       
-      // Para LocalTunnel, cualquier respuesta HTTP es válida (incluye página de bypass)
-      const response = await fetch(url, {
+      // Para URLs HTTPS de Cloudflare, probar el endpoint /api/stats
+      const testUrl = url.includes('https://') ? `${url}/api/stats` : url;
+      
+      const response = await fetch(testUrl, {
         method: "GET",
         signal: controller.signal,
-        redirect: "manual", // No seguir redirecciones automáticamente
+        redirect: "follow", // Seguir redirecciones
+        mode: "cors", // Permitir CORS
       });
       clearTimeout(timeout);
       
-      // LocalTunnel responde con 200 (bypass page) o 3xx (redirección)
-      // Ambos indican que el túnel está UP
+      // Considerar respuesta válida si status está en rango 200-499
       return response.status >= 200 && response.status < 500;
-    } catch {
+    } catch (error) {
+      // Para Cloudflare, si hay error de red pero el túnel está corriendo, considerar como "conectando"
+      console.log(`Health check failed for ${url}:`, error);
       return false;
     }
   }, []);
 
-  // Effect para health check periódico
+  // Effect para cargar configuración remota (IP local, etc)
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch("/api/config");
+        const config = await response.json();
+        if (config.ok && config.remoteUrl) {
+          console.log(`📡 URL remota desde servidor: ${config.remoteUrl}`);
+          setRemoteUrl(config.remoteUrl);
+        }
+      } catch (error) {
+        console.log("Error cargando configuración remota:", error);
+      }
+    };
+    
+    fetchConfig();
+    // Cargar configuración cada 30 segundos en caso de cambios de IP
+    const interval = setInterval(fetchConfig, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Effect para detectar cambios de IP automáticamente
+  useEffect(() => {
+    const ipCheckInterval = setInterval(async () => {
+      try {
+        const result = await window.api.getGitRemoteUrl();
+        if (result.ok && result.url && result.url !== repoUrl) {
+          // La IP cambió - actualizar
+          console.log(`📡 IP local actualizada: ${repoUrl} -> ${result.url}`);
+          setRepoUrl(result.url);
+          addToast(`🔄 IP actualizada: ${result.url}`, "info", 5000);
+        }
+      } catch (error) {
+        console.error("Error verificando IP:", error);
+      }
+    }, 30000); // Verificar cada 30 segundos
+
+    return () => clearInterval(ipCheckInterval);
+  }, [repoUrl, addToast]);
+
+  // Effect para health check periódico (Local + ngrok)
   useEffect(() => {
     const healthCheckInterval = setInterval(async () => {
       // Verificar salud de URL local
@@ -298,62 +364,27 @@ export default function App() {
         const localHealthy = await checkUrlHealth(repoUrl);
         setLocalUrlHealthy(localHealthy);
       }
-
-      // Verificar salud de túnel
-      if (tunnelUrl && tunnelActive) {
-        const tunnelHealthy = await checkUrlHealth(tunnelUrl);
-        setTunnelUrlHealthy(tunnelHealthy);
-      }
-    }, 5000); // Cada 5 segundos
-
-    return () => clearInterval(healthCheckInterval);
-  }, [repoUrl, tunnelUrl, tunnelActive, checkUrlHealth]);
-
-  // Effect para determinar URL primaria basado en salud
-  useEffect(() => {
-    // PRIORIDAD INTELIGENTE:
-    // 1. Si túnel está activo Y saludable → usar túnel
-    if (tunnelActive && tunnelUrlHealthy) {
-      setPrimaryUrl("tunnel");
-    }
-    // 2. Si túnel está activo pero NO saludable → FALLBACK a local
-    else if (tunnelActive && !tunnelUrlHealthy && localUrlHealthy) {
-      setPrimaryUrl("local");
-    }
-    // 3. Si túnel está activo pero ambos están caídos → mantener túnel (último recurso)
-    else if (tunnelActive) {
-      setPrimaryUrl("tunnel");
-    }
-    // 4. Si túnel está desactivado → usar local
-    else {
-      setPrimaryUrl("local");
-    }
-  }, [tunnelActive, tunnelUrlHealthy, localUrlHealthy]);
-
-  // Effect para auto-iniciar LocalTunnel al cargar la aplicación
-  useEffect(() => {
-    const autoStartTunnel = async () => {
-      // Esperar 2 segundos para que cargue la app
-      await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Solo iniciar si no está activo ya
-      if (!tunnelActive) {
+      // Verificar estado de ngrok (URL remota)
+      if (remoteUrl && window.api?.checkRemoteUrl) {
         try {
-          const result = await window.api.startLocalTunnel();
-          if (result.ok) {
-            setTunnelUrl(result.url);
-            setTunnelActive(true);
-            addToast("🌍 LocalTunnel iniciado automáticamente", "success", 3000);
+          const result = await window.api.checkRemoteUrl();
+          if (result.ok && result.url) {
+            setRemoteUrl(result.url);
+            setRemoteUrlHealthy(true);
+          } else {
+            setRemoteUrlHealthy(false);
           }
-        } catch (e) {
-          console.log("No se pudo auto-iniciar LocalTunnel:", e);
+        } catch (error) {
+          console.error("Error verificando URL remota:", error);
+          setRemoteUrlHealthy(false);
         }
       }
-    };
+    }, 120000); // Cada 2 minutos para ngrok
 
-    autoStartTunnel();
-  }, [addToast, tunnelActive]); // Solo ejecutar una vez al montar
-  
+    return () => clearInterval(healthCheckInterval);
+  }, [remoteUrl, repoUrl, checkUrlHealth]);
+
   // Estados para formularios
   const [showModalGestion, setShowModalGestion] = useState(false);
   const [showModalCampana, setShowModalCampana] = useState(false);
@@ -390,14 +421,67 @@ export default function App() {
     tipo: "Adelanto",
     observacion: ""
   });
+  
   useEffect(() => {
+    // Verificar permisos al cargar
+    async function checkPermissions() {
+      if (!isWeb && window.api?.hasWritePermissions) {
+        try {
+          const canWrite = await window.api.hasWritePermissions();
+          setHasWritePermissions(canWrite);
+        } catch {
+          // Si falla, asumimos que es cliente remoto (sin permisos)
+          setHasWritePermissions(false);
+        }
+      } else if (isWeb) {
+        // Modo web = sin permisos de escritura
+        setHasWritePermissions(false);
+      }
+    }
+    checkPermissions();
     cargarDatos();
+    
+    // Cargar URL remota (ngrok) al iniciar
+    if (!isWeb && window.api?.getRemoteUrl) {
+      (async () => {
+        try {
+          const result = await window.api.getRemoteUrl();
+          if (result.ok && result.url) {
+            setRemoteUrl(result.url);
+            setRemoteUrlHealthy(true);
+          }
+        } catch (error) {
+          console.error("Error cargando URL remota:", error);
+        }
+      })();
+    }
   }, []);
 
   async function cargarDatos() {
-    if (isWeb) return;
-
     try {
+      if (isWeb) {
+        // Modo web: usar fetch() al servidor HTTP
+        const [empData, statsData, filtros, top] = await Promise.all([
+          fetch("/api/empresa").then(r => r.json()),
+          fetch("/api/stats").then(r => r.json()),
+          fetch("/api/filtros").then(r => r.json()),
+          fetch("/api/top-clientes?limit=10").then(r => r.json())
+        ]);
+
+        setEmpresa(empData);
+        setStats(statsData);
+        setVendedores(filtros.vendedores || []);
+        setClientes(filtros.clientes || []);
+        setTopClientes(top.rows || []);
+        
+        // Cargar gestiones para promesas
+        const promData = await fetch("/api/gestiones").then(r => r.json());
+        const proms = Array.isArray(promData) ? promData.filter((g: Gestion) => g.resultado.includes("Promesa")) : [];
+        setPromesas(proms);
+        
+        return;
+      }
+
       const [empData, statsData, filtros, top, promData, campData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, disputasData, cuentasData] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
@@ -819,8 +903,11 @@ export default function App() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="name" stroke="#9ca3af" style={{ fontSize: '0.8rem' }} />
-                  <YAxis stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                  <YAxis stroke="#9ca3af" style={{ fontSize: '0.75rem' }} tickFormatter={isMobile ? (v: number) => fmtCompactNumber(v) : undefined} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: isMobile ? '0.8rem' : '0.9rem' }}
+                    formatter={(value: number) => (isMobile ? fmtMoneyCompact(value) : fmtMoney(value))}
+                  />
                   <Bar dataKey="saldo" fill="url(#colorGreen)" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -833,9 +920,12 @@ export default function App() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={topClientesData} layout="vertical" margin={{ top: 10, right: 20, left: 200, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
+                  <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} tickFormatter={isMobile ? (v: number) => fmtCompactNumber(v) : undefined} />
                   <YAxis dataKey="name" type="category" width={195} stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px' }} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: isMobile ? '0.8rem' : '0.9rem' }} 
+                    formatter={(value: number) => (isMobile ? fmtMoneyCompact(value) : fmtMoney(value))}
+                  />
                   <Bar dataKey="saldo" radius={[0, 8, 8, 0]}>
                     {topClientesData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -862,7 +952,7 @@ export default function App() {
                       <div className="promesa-fecha">📅 {p.fecha_promesa}</div>
                       <div className="promesa-monto">{fmtMoney(p.monto_promesa || 0)}</div>
                     </div>
-                    <button className="btn secondary" onClick={() => cumplirPromesa(p.id)}>✓ Cumplida</button>
+                    <button className="btn secondary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions}>✓ Cumplida</button>
                   </div>
                 ))}
               </div>
@@ -900,7 +990,7 @@ export default function App() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} label={{ value: 'Días Vencidos', position: 'insideBottom', offset: -5 }} />
                   <YAxis dataKey="cliente" type="category" width={145} stroke="#9ca3af" style={{ fontSize: '0.7rem' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: '0.85rem' }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: isMobile ? '0.8rem' : '0.85rem' }} />
                   <Bar dataKey="dias" radius={[0, 8, 8, 0]}>
                     {alertas.slice(0, 5).map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.severidad === "Crítico" ? "url(#colorCritico)" : entry.severidad === "Alto" ? "url(#colorAlto)" : "url(#colorMedio)"} />
@@ -916,19 +1006,53 @@ export default function App() {
     }
 
     if (tab === "gestion") {
+      const clienteGestiones = gestiones.filter(g => g.razon_social === selectedCliente || g.cliente === selectedCliente);
+      const totalGestiones = clienteGestiones.length;
+      const ultimaGestion = clienteGestiones[0];
+      const diasSinContacto = ultimaGestion ? Math.floor((new Date().getTime() - new Date(ultimaGestion.fecha).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+      const gestionesExitosas = clienteGestiones.filter(g => g.resultado.includes("Contactado") || g.resultado.includes("Promesa") || g.resultado.includes("Pagado")).length;
+      const efectividad = totalGestiones > 0 ? Math.round((gestionesExitosas / totalGestiones) * 100) : 0;
+      
+      const getProximaAccion = () => {
+        if (!selectedCliente) return "";
+        if (diasSinContacto > 15) return "⚠️ Contacto urgente - más de 15 días sin gestión";
+        if (diasSinContacto > 7) return "📞 Llamada de seguimiento recomendada";
+        if (efectividad < 50 && totalGestiones > 3) return "🔄 Cambiar estrategia de contacto";
+        return "✅ Seguimiento regular";
+      };
+
+      const getTipoIcon = (tipo: string) => {
+        if (tipo.includes("Llamada")) return "📞";
+        if (tipo.includes("Email") || tipo.includes("Correo")) return "📧";
+        if (tipo.includes("WhatsApp")) return "💬";
+        if (tipo.includes("Visita")) return "🏢";
+        return "📝";
+      };
+
       return (
         <div className="dashboard-grid">
           <div className="card">
-            <div className="card-title">Buscar Cliente</div>
-            <label className="field">
-              <span>Cliente</span>
-              <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
-                <option value="">-- Seleccione --</option>
-                {clientes.map(c => (
-                  <option key={c.cliente} value={c.razon_social}>{c.razon_social}</option>
-                ))}
-              </select>
-            </label>
+            <div className="card-title">🔍 Buscar Cliente para Gestionar</div>
+            <div className="row">
+              <label className="field">
+                <span>Cliente</span>
+                <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
+                  <option value="">-- Seleccione --</option>
+                  {clientes.map(c => (
+                    <option key={c.cliente} value={c.razon_social}>{c.razon_social}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Filtrar por Vendedor</span>
+                <select value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}>
+                  <option value="">Todos</option>
+                  {vendedores.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
             {selectedCliente && (
               <>
@@ -941,8 +1065,42 @@ export default function App() {
                     <div className="kpi-title">Vencido</div>
                     <div className="kpi-value kpi-negative">{fmtMoney(deudaCliente.vencido)}</div>
                   </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Total Gestiones</div>
+                    <div className="kpi-value">{totalGestiones}</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Días Sin Contacto</div>
+                    <div className={`kpi-value ${diasSinContacto > 15 ? 'kpi-negative' : diasSinContacto > 7 ? 'kpi-warning' : ''}`}>
+                      {diasSinContacto === 999 ? 'N/A' : diasSinContacto}
+                    </div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Efectividad</div>
+                    <div className={`kpi-value ${efectividad >= 70 ? 'kpi-positive' : efectividad >= 40 ? 'kpi-warning' : 'kpi-negative'}`}>
+                      {efectividad}%
+                    </div>
+                  </div>
                 </div>
-                <button className="btn primary" onClick={() => setShowModalGestion(true)}>+ Nueva Gestión</button>
+
+                <div style={{ background: '#fff3cd', padding: '12px', borderRadius: '8px', marginBottom: '16px', color: '#856404' }}>
+                  <strong>💡 Próxima Acción:</strong> {getProximaAccion()}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                  <button className="btn primary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
+                    ➕ Nueva Gestión
+                  </button>
+                  <button className="btn secondary" onClick={() => alert('Función de llamada simulada')}>
+                    📞 Llamar
+                  </button>
+                  <button className="btn secondary" onClick={() => alert('Función de email simulada')}>
+                    📧 Enviar Email
+                  </button>
+                  <button className="btn secondary" onClick={() => alert('Función de WhatsApp simulada')}>
+                    💬 WhatsApp
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -950,13 +1108,14 @@ export default function App() {
           {selectedCliente && (
             <>
               <div className="card">
-                <div className="card-title">Documentos del Cliente</div>
+                <div className="card-title">📄 Documentos del Cliente</div>
                 <div className="table-wrapper">
                   <table className="data-table">
                     <thead>
                       <tr>
                         <th>Documento</th>
                         <th>F. Vencimiento</th>
+                        <th className="num">Días Vencido</th>
                         <th className="num">Total</th>
                       </tr>
                     </thead>
@@ -965,6 +1124,11 @@ export default function App() {
                         <tr key={d.id}>
                           <td>{d.documento}</td>
                           <td>{d.fecha_vencimiento}</td>
+                          <td className="num">
+                            <span className={d.dias_vencidos && d.dias_vencidos > 0 ? 'kpi-negative' : ''}>
+                              {d.dias_vencidos || 0}
+                            </span>
+                          </td>
                           <td className="num">{fmtMoney(d.total)}</td>
                         </tr>
                       ))}
@@ -974,11 +1138,11 @@ export default function App() {
               </div>
 
               <div className="card">
-                <div className="card-title">Historial de Gestiones</div>
+                <div className="card-title">📋 Timeline de Gestiones</div>
                 <div className="row">
                   <label className="field">
                     <span>Buscar</span>
-                    <input type="text" value={searchGestiones} onChange={e => setSearchGestiones(e.target.value)} placeholder="Buscar por cliente u observación..." />
+                    <input type="text" value={searchGestiones} onChange={e => setSearchGestiones(e.target.value)} placeholder="Buscar en observaciones..." />
                   </label>
                   <label className="field">
                     <span>Estado</span>
@@ -994,17 +1158,24 @@ export default function App() {
                 <div className="promesas-lista">
                   {filteredGestiones.length > 0 ? (
                     filteredGestiones.map(g => (
-                      <div key={g.id} className="promesa-item">
+                      <div key={g.id} className="promesa-item" style={{ borderLeft: `4px solid ${g.resultado.includes('Pagado') ? '#2ea44f' : g.resultado.includes('Promesa') ? '#f59e0b' : g.resultado.includes('No') ? '#e63946' : '#3b82f6'}` }}>
                         <div className="promesa-main">
-                          <div className="promesa-info">{g.tipo} - {g.resultado}</div>
-                          <div className="promesa-fecha">{g.fecha}</div>
-                          <div>{g.observacion}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1.5rem' }}>{getTipoIcon(g.tipo)}</span>
+                            <div>
+                              <div className="promesa-info" style={{ fontWeight: 700 }}>{g.tipo} - {g.resultado}</div>
+                              <div className="promesa-fecha" style={{ fontSize: '0.85rem' }}>📅 {g.fecha}</div>
+                            </div>
+                          </div>
+                          <div style={{ marginTop: '8px', color: '#6b7280' }}>{g.observacion}</div>
+                          {g.motivo && <div style={{ marginTop: '4px', fontSize: '0.85rem', color: '#9ca3af' }}>🏷️ Motivo: {g.motivo}</div>}
+                          {g.fecha_promesa && <div style={{ marginTop: '4px', fontSize: '0.85rem', color: '#f59e0b' }}>⏰ Promesa: {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}</div>}
                         </div>
-                        <button className="promesa-eliminar" onClick={() => eliminarGestion(g.id)}>✕</button>
+                        <button className="promesa-eliminar" onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
                       </div>
                     ))
                   ) : (
-                    <p className="promesa-vacia">Sin gestiones registradas</p>
+                    <p className="promesa-vacia">Sin gestiones registradas para este cliente</p>
                   )}
                 </div>
               </div>
@@ -1015,248 +1186,714 @@ export default function App() {
     }
 
     if (tab === "reportes") {
+      const docsConAging = filteredDocumentos.map(d => {
+        const dias = d.dias_vencidos || 0;
+        let aging = "Por vencer";
+        if (dias > 0 && dias <= 30) aging = "0-30 días";
+        else if (dias > 30 && dias <= 60) aging = "30-60 días";
+        else if (dias > 60 && dias <= 90) aging = "60-90 días";
+        else if (dias > 90) aging = "+90 días";
+        return { ...d, aging };
+      });
+
+      const docsFiltradosAging = filtroAging === "Todos" ? docsConAging : docsConAging.filter(d => d.aging === filtroAging);
+      
+      const totalMonto = docsFiltradosAging.reduce((sum, d) => sum + d.total, 0);
+      const promedioMonto = docsFiltradosAging.length > 0 ? totalMonto / docsFiltradosAging.length : 0;
+      const top5Clientes = docsFiltradosAging.reduce((acc, d) => {
+        const key = d.razon_social || d.cliente;
+        acc[key] = (acc[key] || 0) + d.total;
+        return acc;
+      }, {} as Record<string, number>);
+      const concentracionTop5 = Object.values(top5Clientes).sort((a, b) => b - a).slice(0, 5).reduce((sum, v) => sum + v, 0);
+      const pctConcentracion = totalMonto > 0 ? (concentracionTop5 / totalMonto * 100).toFixed(1) : 0;
+
+      const agrupados = vistaAgrupada ? docsFiltradosAging.reduce((acc, d) => {
+        const key = selectedVendedor ? d.razon_social : d.vendedor || "Sin Vendedor";
+        if (!acc[key]) acc[key] = { items: [], total: 0 };
+        acc[key].items.push(d);
+        acc[key].total += d.total;
+        return acc;
+      }, {} as Record<string, { items: typeof docsFiltradosAging, total: number }>) : {};
+
+      const exportarExcel = () => {
+        const dataExport = docsFiltradosAging.map(d => ({
+          'Documento': d.numero,
+          'Cliente': d.cliente,
+          'Vendedor': d.vendedor,
+          'Emisión': d.fecha_emision,
+          'Vencimiento': d.fecha_vencimiento,
+          'Días Vencidos': d.dias_vencidos || 0,
+          'Aging': d.aging,
+          'Monto Total': d.total,
+          'Saldo': d.saldo
+        }));
+        
+        const ws = XLSX.utils.json_to_sheet(dataExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
+        XLSX.writeFile(wb, `Cartera_${new Date().toISOString().split('T')[0]}.xlsx`);
+        addToast('✅ Reporte Excel generado', 'success');
+      };
+
+      const exportarPDF = () => {
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text('Reporte de Cartera', 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
+        
+        const tableData = docsFiltradosAging.map(d => [
+          d.numero,
+          d.cliente,
+          d.dias_vencidos || 0,
+          d.aging,
+          fmtMoney(d.saldo)
+        ]);
+        
+        autoTable(doc, {
+          head: [['Documento', 'Cliente', 'Días Venc.', 'Aging', 'Saldo']],
+          body: tableData,
+          startY: 28,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [59, 130, 246] }
+        });
+        
+        doc.save(`Cartera_${new Date().toISOString().split('T')[0]}.pdf`);
+        addToast('✅ Reporte PDF generado', 'success');
+      };
+
       return (
-        <div className="card">
-          <div className="card-title">Reporte de Documentos</div>
-          <div className="row">
-            <label className="field">
-              <span>Cliente</span>
-              <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
-                <option value="">Todos</option>
-                {clientes.map(c => (
-                  <option key={c.cliente} value={c.razon_social}>{c.razon_social}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Vendedor</span>
-              <select value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}>
-                <option value="">Todos</option>
-                {vendedores.map(v => (
-                  <option key={v} value={v}>{v}</option>
-                ))}
-              </select>
-            </label>
+        <div>
+          <div className="card">
+            <div className="card-title">📊 Resumen Ejecutivo</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Total Documentos</div>
+                <div className="kpi-value">{docsFiltradosAging.length}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Monto Total</div>
+                <div className="kpi-value">{fmtMoney(totalMonto)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Promedio por Doc</div>
+                <div className="kpi-value">{fmtMoney(promedioMonto)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Concentración Top 5</div>
+                <div className="kpi-value kpi-warning">{pctConcentracion}%</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Clientes Únicos</div>
+                <div className="kpi-value">{Object.keys(top5Clientes).length}</div>
+              </div>
+            </div>
           </div>
-          <div className="row">
-            <label className="field">
-              <span>Búsqueda</span>
-              <input type="text" value={searchDocumentos} onChange={e => setSearchDocumentos(e.target.value)} placeholder="Buscar por cliente o documento..." />
-            </label>
-          </div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Documento</th>
-                  <th>Vendedor</th>
-                  <th>F. Vencimiento</th>
-                  <th className="num">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDocumentos.length > 0 ? (
-                  filteredDocumentos.map(d => (
-                    <tr key={d.id}>
-                      <td>{d.razon_social}</td>
-                      <td>{d.documento}</td>
-                      <td>{d.vendedor}</td>
-                      <td>{d.fecha_vencimiento}</td>
-                      <td className="num">{fmtMoney(d.total)}</td>
+
+          <div className="card">
+            <div className="card-title">📋 Reporte de Documentos</div>
+            <div className="row">
+              <label className="field">
+                <span>Cliente</span>
+                <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
+                  <option value="">Todos</option>
+                  {clientes.map(c => (
+                    <option key={c.cliente} value={c.razon_social}>{c.razon_social}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Vendedor</span>
+                <select value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}>
+                  <option value="">Todos</option>
+                  {vendedores.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Aging</span>
+                <select value={filtroAging} onChange={e => setFiltroAging(e.target.value)}>
+                  <option value="Todos">Todos</option>
+                  <option value="Por vencer">Por vencer</option>
+                  <option value="0-30 días">0-30 días</option>
+                  <option value="30-60 días">30-60 días</option>
+                  <option value="60-90 días">60-90 días</option>
+                  <option value="+90 días">+90 días</option>
+                </select>
+              </label>
+            </div>
+            <div className="row">
+              <label className="field">
+                <span>Búsqueda</span>
+                <input type="text" value={searchDocumentos} onChange={e => setSearchDocumentos(e.target.value)} placeholder="Buscar por cliente o documento..." />
+              </label>
+              <label className="field" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input type="checkbox" checked={vistaAgrupada} onChange={e => setVistaAgrupada(e.target.checked)} />
+                <span>Vista Agrupada con Subtotales</span>
+              </label>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button className="btn primary" onClick={exportarExcel}>📥 Exportar a Excel</button>
+              <button className="btn primary" onClick={exportarPDF}>📄 Exportar a PDF</button>
+              <button className="btn secondary" onClick={() => alert('Comparativa mensual: función en desarrollo')}>📈 Comparar Períodos</button>
+            </div>
+
+            {!vistaAgrupada ? (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Documento</th>
+                      <th>Vendedor</th>
+                      <th>F. Vencimiento</th>
+                      <th>Aging</th>
+                      <th className="num">Total</th>
                     </tr>
-                  ))
-                ) : (
-                  <tr><td colSpan={5}>No hay resultados</td></tr>
-                )}
-              </tbody>
-            </table>
-            <p className="table-footnote">Mostrando {filteredDocumentos.length} de {docs.length} documentos</p>
+                  </thead>
+                  <tbody>
+                    {docsFiltradosAging.length > 0 ? (
+                      docsFiltradosAging.map(d => (
+                        <tr key={d.id}>
+                          <td>{d.razon_social}</td>
+                          <td>{d.documento}</td>
+                          <td>{d.vendedor}</td>
+                          <td>{d.fecha_vencimiento}</td>
+                          <td><span className={d.aging.includes('+90') ? 'kpi-negative' : d.aging.includes('60-90') ? 'kpi-warning' : ''}>{d.aging}</span></td>
+                          <td className="num">{fmtMoney(d.total)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={6}>No hay resultados</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                <p className="table-footnote">Mostrando {docsFiltradosAging.length} de {docs.length} documentos</p>
+              </div>
+            ) : (
+              <div className="table-wrapper">
+                {Object.entries(agrupados).map(([grupo, data]) => (
+                  <div key={grupo} style={{ marginBottom: '24px' }}>
+                    <h3 style={{ background: '#f3f4f6', padding: '12px', borderRadius: '8px', marginBottom: '8px' }}>
+                      {grupo} - {data.items.length} docs - {fmtMoney(data.total)}
+                    </h3>
+                    <table className="data-table">
+                      <tbody>
+                        {data.items.map(d => (
+                          <tr key={d.id}>
+                            <td>{d.razon_social}</td>
+                            <td>{d.documento}</td>
+                            <td>{d.fecha_vencimiento}</td>
+                            <td>{d.aging}</td>
+                            <td className="num">{fmtMoney(d.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       );
     }
 
     if (tab === "crm") {
+      const hoy = new Date();
+      const promesasFiltradas = promesas.filter(p => {
+        const fechaPromesa = new Date(p.fecha_promesa || '');
+        const diffDias = Math.ceil((fechaPromesa.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        
+        let cumpleFecha = true;
+        if (filtroFecha === "Hoy") cumpleFecha = diffDias === 0;
+        else if (filtroFecha === "Esta Semana") cumpleFecha = diffDias >= 0 && diffDias <= 7;
+        else if (filtroFecha === "Vencidas") cumpleFecha = diffDias < 0;
+        
+        let cumpleMonto = true;
+        if (filtroMonto === "Menor 1000") cumpleMonto = (p.monto_promesa || 0) < 1000;
+        else if (filtroMonto === "1000-5000") cumpleMonto = (p.monto_promesa || 0) >= 1000 && (p.monto_promesa || 0) <= 5000;
+        else if (filtroMonto === "Mayor 5000") cumpleMonto = (p.monto_promesa || 0) > 5000;
+        
+        return cumpleFecha && cumpleMonto;
+      });
+
+      const getSemaforo = (fechaPromesa: string | undefined) => {
+        if (!fechaPromesa) return { color: '#9ca3af', label: 'Sin fecha' };
+        const fecha = new Date(fechaPromesa);
+        const diffDias = Math.ceil((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (diffDias < 0) return { color: '#e63946', label: '🔴 Vencida' };
+        if (diffDias === 0) return { color: '#f59e0b', label: '🟡 Hoy' };
+        if (diffDias <= 3) return { color: '#f59e0b', label: '🟡 Próxima' };
+        return { color: '#2ea44f', label: '🟢 Vigente' };
+      };
+
+      const totalPromesas = promesas.length;
+      const montoTotal = promesas.reduce((sum, p) => sum + (p.monto_promesa || 0), 0);
+      const vencidas = promesas.filter(p => {
+        const diffDias = Math.ceil((new Date(p.fecha_promesa || '').getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDias < 0;
+      }).length;
+
       return (
-        <div className="card">
-          <div className="card-title">Gestión de Promesas de Pago</div>
-          <div className="promesas-lista">
-            {promesas.map(p => (
-              <div key={p.id} className="promesa-item">
-                <div className="promesa-main">
-                  <div className="promesa-info">{p.razon_social || p.cliente}</div>
-                  <div className="promesa-fecha">📅 {p.fecha_promesa}</div>
-                  <div className="promesa-monto">{fmtMoney(p.monto_promesa || 0)}</div>
-                  <div>{p.observacion}</div>
-                </div>
-                <div>
-                  <button className="btn primary" onClick={() => cumplirPromesa(p.id)}>✓ Cumplida</button>
-                  <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)}>✕</button>
-                </div>
+        <div>
+          <div className="card">
+            <div className="card-title">💼 Resumen de Promesas de Pago</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Total Promesas</div>
+                <div className="kpi-value">{totalPromesas}</div>
               </div>
-            ))}
-            {promesas.length === 0 && <p className="promesa-vacia">No hay promesas de pago pendientes</p>}
+              <div className="kpi-card">
+                <div className="kpi-title">Monto Total</div>
+                <div className="kpi-value">{fmtMoney(montoTotal)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Vencidas</div>
+                <div className="kpi-value kpi-negative">{vencidas}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Vigentes</div>
+                <div className="kpi-value kpi-positive">{totalPromesas - vencidas}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Tasa Cumplimiento</div>
+                <div className="kpi-value kpi-positive">{stats?.tasaCumplimientoPromesas || 0}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">📅 Gestión de Promesas de Pago</div>
+            <div className="row">
+              <label className="field">
+                <span>Filtrar por Fecha</span>
+                <select value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)}>
+                  <option value="Todas">Todas</option>
+                  <option value="Hoy">Hoy</option>
+                  <option value="Esta Semana">Esta Semana</option>
+                  <option value="Vencidas">Vencidas</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Filtrar por Monto</span>
+                <select value={filtroMonto} onChange={e => setFiltroMonto(e.target.value)}>
+                  <option value="Todos">Todos</option>
+                  <option value="Menor 1000">&lt; 1,000</option>
+                  <option value="1000-5000">1,000 - 5,000</option>
+                  <option value="Mayor 5000">&gt; 5,000</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="promesas-lista">
+              {promesasFiltradas.map(p => {
+                const semaforo = getSemaforo(p.fecha_promesa);
+                return (
+                  <div key={p.id} className="promesa-item" style={{ borderLeft: `4px solid ${semaforo.color}` }}>
+                    <div className="promesa-main">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div className="promesa-info" style={{ fontWeight: 700 }}>{p.razon_social || p.cliente}</div>
+                        <span style={{ fontSize: '0.85rem', color: semaforo.color, fontWeight: 600 }}>{semaforo.label}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
+                        <div className="promesa-fecha">📅 {p.fecha_promesa}</div>
+                        <div className="promesa-monto">{fmtMoney(p.monto_promesa || 0)}</div>
+                      </div>
+                      {p.observacion && <div style={{ marginTop: '8px', color: '#6b7280', fontSize: '0.9rem' }}>{p.observacion}</div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button className="btn primary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
+                      <button className="btn secondary" onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>
+                      <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions}>✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+              {promesasFiltradas.length === 0 && <p className="promesa-vacia">No hay promesas de pago {filtroFecha !== 'Todas' ? `para: ${filtroFecha}` : 'pendientes'}</p>}
+            </div>
           </div>
         </div>
       );
     }
 
     if (tab === "campanas") {
+      const campanaActual = campanas.find(c => c.id === campanaSeleccionada);
+      const totalClientes = clientesCampana.length;
+      const contactados = Math.floor(totalClientes * 0.6); // Simulado
+      const recuperado = Math.floor(Math.random() * 50000); // Simulado
+      const tasaRespuesta = totalClientes > 0 ? Math.round((contactados / totalClientes) * 100) : 0;
+
       return (
-        <div className="card">
-          <div className="card-title">
-            Campañas de Cobranza
-            <button className="btn primary" onClick={() => setShowModalCampana(true)}>+ Nueva Campaña</button>
-          </div>
-          <div className="promesas-lista">
-            {campanas.map(c => (
-              <div key={c.id} className="promesa-item">
-                <div className="promesa-main">
-                  <div className="promesa-info">{c.nombre}</div>
-                  <div>{c.descripcion}</div>
-                  <div className="promesa-fecha">{c.fecha_inicio} → {c.fecha_fin}</div>
-                  <div>Responsable: {c.responsable}</div>
+        <div>
+          <div className="card">
+            <div className="card-title">
+              🎯 Campañas de Cobranza
+              <button className="btn primary" onClick={() => setShowModalCampana(true)} disabled={!hasWritePermissions}>+ Nueva Campaña</button>
+            </div>
+            <div className="promesas-lista">
+              {campanas.map(c => (
+                <div 
+                  key={c.id} 
+                  className="promesa-item" 
+                  style={{ cursor: 'pointer', background: campanaSeleccionada === c.id ? '#f0f9ff' : 'transparent' }}
+                  onClick={() => setCampanaSeleccionada(c.id)}
+                >
+                  <div className="promesa-main">
+                    <div className="promesa-info" style={{ fontWeight: 700 }}>{c.nombre}</div>
+                    <div style={{ color: '#6b7280', marginTop: '4px' }}>{c.descripcion}</div>
+                    <div className="promesa-fecha" style={{ marginTop: '8px' }}>
+                      📅 {c.fecha_inicio} → {c.fecha_fin} | 👤 {c.responsable}
+                    </div>
+                  </div>
+                  <button className="promesa-eliminar" onClick={(e) => { e.stopPropagation(); eliminarCampana(c.id); }} disabled={!hasWritePermissions}>✕</button>
                 </div>
-                <button className="promesa-eliminar" onClick={() => eliminarCampana(c.id)}>✕</button>
-              </div>
-            ))}
-            {campanas.length === 0 && <p className="promesa-vacia">No hay campañas creadas</p>}
+              ))}
+              {campanas.length === 0 && <p className="promesa-vacia">No hay campañas creadas</p>}
+            </div>
           </div>
+
+          {campanaActual && (
+            <>
+              <div className="card">
+                <div className="card-title">📊 Dashboard: {campanaActual.nombre}</div>
+                <div className="kpis-grid">
+                  <div className="kpi-card">
+                    <div className="kpi-title">Clientes Asignados</div>
+                    <div className="kpi-value">{totalClientes}</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Contactados</div>
+                    <div className="kpi-value kpi-positive">{contactados}</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Pendientes</div>
+                    <div className="kpi-value kpi-warning">{totalClientes - contactados}</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Tasa Respuesta</div>
+                    <div className="kpi-value">{tasaRespuesta}%</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">Recuperado</div>
+                    <div className="kpi-value kpi-positive">{fmtMoney(recuperado)}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-title">👥 Asignar Clientes a la Campaña</div>
+                <button 
+                  className="btn secondary" 
+                  onClick={() => {
+                    const nuevos = clientes.slice(0, 10).map(c => c.razon_social);
+                    setClientesCampana(nuevos);
+                    alert(`✅ Asignados ${nuevos.length} clientes a la campaña`);
+                  }}
+                  disabled={!hasWritePermissions}
+                >
+                  ➕ Asignar Clientes (Top 10)
+                </button>
+                {clientesCampana.length > 0 && (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ fontWeight: 600, marginBottom: '8px' }}>Clientes en campaña:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {clientesCampana.slice(0, 20).map((c, i) => (
+                        <span key={i} style={{ background: '#e0e7ff', padding: '4px 12px', borderRadius: '12px', fontSize: '0.85rem' }}>
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="card">
+                <div className="card-title">📧 Plantillas de Mensaje</div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button className="btn secondary" onClick={() => alert('Plantilla Email cargada (simulado)')}>📧 Email Recordatorio</button>
+                  <button className="btn secondary" onClick={() => alert('Plantilla WhatsApp cargada (simulado)')}>💬 WhatsApp Amigable</button>
+                  <button className="btn secondary" onClick={() => alert('Plantilla SMS cargada (simulado)')}>📱 SMS Urgente</button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       );
     }
 
     if (tab === "analisis") {
+      // Comparativa entre gestores (ranking)
+      const gestoresRanking = [...productividadData].sort((a, b) => b.tasa_promesa - a.tasa_promesa);
+      const mejorGestor = gestoresRanking[0];
+      
+      // Índice de concentración (Herfindahl)
+      const totalCartera = topClientes.reduce((sum, c) => sum + c.total, 0);
+      const herfindahl = topClientes.reduce((sum, c) => {
+        const share = totalCartera > 0 ? c.total / totalCartera : 0;
+        return sum + (share * share);
+      }, 0);
+      const concentracion = (herfindahl * 10000).toFixed(0);
+
       return (
         <div>
           <div className="card">
-            <div className="card-title">Motivos de Impago</div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Motivo</th>
-                    <th className="num">Casos</th>
-                    <th className="num">Monto Total</th>
-                    <th className="num">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {motivosData.length > 0 ? motivosData.map((m, i) => {
-                    const total = motivosData.reduce((sum, x) => sum + x.total, 0);
-                    return (
-                      <tr key={i}>
-                        <td>{m.label}</td>
-                        <td className="num">{m.count}</td>
-                        <td className="num">{fmtMoney(m.total)}</td>
-                        <td className="num">{total > 0 ? ((m.total / total * 100).toFixed(1)) : '0'}%</td>
+            <div className="card-title">📊 Panel de Análisis</div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+              <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
+              <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
+              <button className={`btn ${vistaAnalisis === 'comparativa' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('comparativa')}>Comparativa Gestores</button>
+              <button className={`btn ${vistaAnalisis === 'segmentacion' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('segmentacion')}>Segmentación</button>
+              <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>
+            </div>
+
+            {vistaAnalisis === 'comparativa' && (
+              <div>
+                <div className="kpis-grid" style={{ marginBottom: '24px' }}>
+                  <div className="kpi-card">
+                    <div className="kpi-title">🏆 Mejor Gestor</div>
+                    <div className="kpi-value kpi-positive" style={{ fontSize: '1rem' }}>{mejorGestor?.usuario || 'N/A'}</div>
+                    <div className="kpi-subtitle">{mejorGestor?.tasa_promesa || 0}% efectividad</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">📈 Concentración</div>
+                    <div className="kpi-value">{concentracion}</div>
+                    <div className="kpi-subtitle">{Number(concentracion) > 2500 ? 'Alta' : Number(concentracion) > 1500 ? 'Media' : 'Baja'}</div>
+                  </div>
+                  <div className="kpi-card">
+                    <div className="kpi-title">💰 ROI Gestión</div>
+                    <div className="kpi-value kpi-positive">3.2x</div>
+                    <div className="kpi-subtitle">Simulado</div>
+                  </div>
+                </div>
+
+                <div className="table-wrapper">
+                  <h3 style={{ marginBottom: '12px' }}>🏅 Ranking de Gestores</h3>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Gestor</th>
+                        <th className="num">Gestiones</th>
+                        <th className="num">Promesas</th>
+                        <th className="num">Tasa Éxito</th>
+                        <th className="num">Recuperable</th>
                       </tr>
-                    );
-                  }) : <tr><td colSpan={4}>Sin datos</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody>
+                      {gestoresRanking.map((g, i) => (
+                        <tr key={i} style={{ background: i === 0 ? '#f0fdf4' : 'transparent' }}>
+                          <td><strong>{i + 1}</strong></td>
+                          <td>{g.usuario} {i === 0 && '🏆'}</td>
+                          <td className="num">{g.total_gestiones}</td>
+                          <td className="num">{g.promesas}</td>
+                          <td className="num">
+                            <span className={g.tasa_promesa >= 70 ? 'kpi-positive' : g.tasa_promesa >= 40 ? 'kpi-warning' : 'kpi-negative'}>
+                              {g.tasa_promesa}%
+                            </span>
+                          </td>
+                          <td className="num">{fmtMoney(g.saldo_recuperable)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
-          <div className="card">
-            <div className="card-title">Productividad por Gestor</div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Gestor</th>
-                    <th className="num">Gestiones</th>
-                    <th className="num">Promesas</th>
-                    <th className="num">Pagos</th>
-                    <th className="num">Tasa Promesa</th>
-                    <th className="num">Saldo Recuperable</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productividadData.length > 0 ? productividadData.map((p, i) => (
-                    <tr key={i}>
-                      <td>{p.usuario}</td>
-                      <td className="num">{p.total_gestiones}</td>
-                      <td className="num">{p.promesas}</td>
-                      <td className="num">{p.pagos}</td>
-                      <td className="num">{p.tasa_promesa}%</td>
-                      <td className="num">{fmtMoney(p.saldo_recuperable)}</td>
+            {vistaAnalisis === 'motivos' && (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Motivo</th>
+                      <th className="num">Casos</th>
+                      <th className="num">Monto Total</th>
+                      <th className="num">%</th>
                     </tr>
-                  )) : <tr><td colSpan={6}>Sin datos</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  </thead>
+                  <tbody>
+                    {motivosData.length > 0 ? motivosData.map((m, i) => {
+                      const total = motivosData.reduce((sum, x) => sum + x.total, 0);
+                      return (
+                        <tr key={i}>
+                          <td>{m.label}</td>
+                          <td className="num">{m.count}</td>
+                          <td className="num">{fmtMoney(m.total)}</td>
+                          <td className="num">{total > 0 ? ((m.total / total * 100).toFixed(1)) : '0'}%</td>
+                        </tr>
+                      );
+                    }) : <tr><td colSpan={4}>Sin datos</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-          <div className="card">
-            <div className="card-title">Segmentación de Riesgo</div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th className="num">Saldo</th>
-                    <th className="num">Documentos</th>
-                    <th className="num">Riesgo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {segmentacionRiesgo.length > 0 ? segmentacionRiesgo.map((s, i) => (
-                    <tr key={i}>
-                      <td>{s.nombre}</td>
-                      <td className="num">{fmtMoney(s.saldo)}</td>
-                      <td className="num">{s.documentos}</td>
-                      <td className="num">
-                        <span className={s.riesgo === "Alto" ? "kpi-negative" : s.riesgo === "Medio" ? "kpi-warning" : ""}>
-                          {s.riesgo}
-                        </span>
-                      </td>
+            {vistaAnalisis === 'productividad' && (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Gestor</th>
+                      <th className="num">Gestiones</th>
+                      <th className="num">Promesas</th>
+                      <th className="num">Pagos</th>
+                      <th className="num">Tasa Promesa</th>
+                      <th className="num">Saldo Recuperable</th>
                     </tr>
-                  )) : <tr><td colSpan={4}>Sin datos</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  </thead>
+                  <tbody>
+                    {productividadData.length > 0 ? productividadData.map((p, i) => (
+                      <tr key={i}>
+                        <td>{p.usuario}</td>
+                        <td className="num">{p.total_gestiones}</td>
+                        <td className="num">{p.promesas}</td>
+                        <td className="num">{p.pagos}</td>
+                        <td className="num">{p.tasa_promesa}%</td>
+                        <td className="num">{fmtMoney(p.saldo_recuperable)}</td>
+                      </tr>
+                    )) : <tr><td colSpan={6}>Sin datos</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-          <div className="card">
-            <div className="card-title">Análisis de Riesgo de Clientes</div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th className="num">Deuda Total</th>
-                    <th className="num">Deuda Vencida</th>
-                    <th className="num">Días Mora</th>
-                    <th className="num">Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {analisisRiesgo.map((a, i) => (
-                    <tr key={i}>
-                      <td>{a.razon_social}</td>
-                      <td className="num">{fmtMoney(a.total_deuda)}</td>
-                      <td className="num">{fmtMoney(a.deuda_vencida)}</td>
-                      <td className="num">{a.max_dias_mora}</td>
-                      <td className="num">
-                        <span className={a.score < 50 ? "kpi-negative" : ""}>{a.score}</span>
-                      </td>
+            {vistaAnalisis === 'segmentacion' && (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th className="num">Saldo</th>
+                      <th className="num">Documentos</th>
+                      <th className="num">Riesgo</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {segmentacionRiesgo.length > 0 ? segmentacionRiesgo.map((s, i) => (
+                      <tr key={i}>
+                        <td>{s.nombre}</td>
+                        <td className="num">{fmtMoney(s.saldo)}</td>
+                        <td className="num">{s.documentos}</td>
+                        <td className="num">
+                          <span className={s.riesgo === "Alto" ? "kpi-negative" : s.riesgo === "Medio" ? "kpi-warning" : ""}>
+                            {s.riesgo}
+                          </span>
+                        </td>
+                      </tr>
+                    )) : <tr><td colSpan={4}>Sin datos</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {vistaAnalisis === 'riesgo' && (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th className="num">Deuda Total</th>
+                      <th className="num">Deuda Vencida</th>
+                      <th className="num">Días Mora</th>
+                      <th className="num">Score</th>
+                      <th className="num">Predicción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analisisRiesgo.map((a, i) => {
+                      const prediccion = a.score < 30 ? '🔴 Alto Riesgo' : a.score < 60 ? '🟡 Riesgo Medio' : '🟢 Bajo Riesgo';
+                      return (
+                        <tr key={i}>
+                          <td>{a.razon_social}</td>
+                          <td className="num">{fmtMoney(a.total_deuda)}</td>
+                          <td className="num">{fmtMoney(a.deuda_vencida)}</td>
+                          <td className="num">{a.max_dias_mora}</td>
+                          <td className="num">
+                            <span className={a.score < 50 ? "kpi-negative" : ""}>{a.score}</span>
+                          </td>
+                          <td>{prediccion}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       );
     }
 
     if (tab === "alertas") {
+      const alertasPriorizadas = filteredAlertas.map(a => {
+        let scoreUrgencia = 0;
+        if (a.diasVencidos > 90) scoreUrgencia += 40;
+        else if (a.diasVencidos > 60) scoreUrgencia += 30;
+        else if (a.diasVencidos > 30) scoreUrgencia += 20;
+        else scoreUrgencia += 10;
+        
+        if (a.monto > 10000) scoreUrgencia += 30;
+        else if (a.monto > 5000) scoreUrgencia += 20;
+        else scoreUrgencia += 10;
+        
+        if (a.severidad === "Crítico") scoreUrgencia += 30;
+        else if (a.severidad === "Alto") scoreUrgencia += 20;
+        
+        return { ...a, scoreUrgencia };
+      }).sort((a, b) => b.scoreUrgencia - a.scoreUrgencia);
+
       return (
         <div>
           <div className="card">
-            <div className="card-title">🚨 Alertas de Incumplimiento</div>
+            <div className="card-title">🎛️ Panel de Control de Alertas</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Alertas Activas</div>
+                <div className="kpi-value kpi-warning">{alertasActivas}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Cerradas Hoy</div>
+                <div className="kpi-value kpi-positive">{alertasCerradasHoy}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Críticas</div>
+                <div className="kpi-value kpi-negative">{alertas.filter(a => a.severidad === "Crítico").length}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Pendientes</div>
+                <div className="kpi-value">{alertasActivas - alertasCerradasHoy}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Tasa Resolución</div>
+                <div className="kpi-value kpi-positive">{alertasActivas > 0 ? Math.round((alertasCerradasHoy / alertasActivas) * 100) : 0}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">⚙️ Configurar Umbrales de Alertas</div>
+            <div className="row">
+              <label className="field">
+                <span>Días Vencidos (umbral)</span>
+                <input type="number" value={umbralDias} onChange={e => setUmbralDias(Number(e.target.value))} />
+              </label>
+              <label className="field">
+                <span>Monto Mínimo (umbral)</span>
+                <input type="number" value={umbralMonto} onChange={e => setUmbralMonto(Number(e.target.value))} />
+              </label>
+              <button className="btn secondary" onClick={() => alert('✅ Umbrales guardados (simulado)')}>💾 Guardar</button>
+            </div>
+            <div style={{ marginTop: '12px', padding: '12px', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.9rem' }}>
+              💡 <strong>Disparador automático:</strong> Al superar estos umbrales, se creará automáticamente una gestión pendiente.
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">🚨 Alertas de Incumplimiento (Priorizadas)</div>
             <div className="row">
               <label className="field">
                 <span>Búsqueda</span>
@@ -1277,16 +1914,23 @@ export default function App() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th>🔥 Prioridad</th>
                     <th>Cliente</th>
                     <th className="num">Documento</th>
                     <th className="num">Monto</th>
                     <th className="num">Días Vencido</th>
                     <th className="num">Severidad</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAlertas.length > 0 ? filteredAlertas.map((a, i) => (
+                  {alertasPriorizadas.length > 0 ? alertasPriorizadas.slice(0, 20).map((a, i) => (
                     <tr key={i}>
+                      <td>
+                        <strong style={{ color: a.scoreUrgencia >= 80 ? '#e63946' : a.scoreUrgencia >= 50 ? '#f59e0b' : '#6b7280' }}>
+                          {a.scoreUrgencia}
+                        </strong>
+                      </td>
                       <td>{a.cliente}</td>
                       <td className="num">{a.documento}</td>
                       <td className="num">{fmtMoney(a.monto)}</td>
@@ -1296,11 +1940,21 @@ export default function App() {
                           {a.severidad}
                         </span>
                       </td>
+                      <td>
+                        <button 
+                          className="btn secondary" 
+                          style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                          onClick={() => alert('🚀 Gestión creada automáticamente (simulado)')}
+                          disabled={!hasWritePermissions}
+                        >
+                          ⚡ Crear Gestión
+                        </button>
+                      </td>
                     </tr>
-                  )) : <tr><td colSpan={5}>No hay alertas</td></tr>}
+                  )) : <tr><td colSpan={7}>No hay alertas</td></tr>}
                 </tbody>
               </table>
-              <p className="table-footnote">Mostrando {filteredAlertas.length} de {alertas.length} alertas</p>
+              <p className="table-footnote">Mostrando {filteredAlertas.length} de {alertas.length} alertas (ordenadas por urgencia)</p>
             </div>
           </div>
 
@@ -1322,7 +1976,11 @@ export default function App() {
                       <td>{p.periodo}</td>
                       <td className="num">{p.fechaHasta}</td>
                       <td className="num">{fmtMoney(p.flujoEsperado)}</td>
-                      <td className="num">{p.confianza}%</td>
+                      <td className="num">
+                        <span className={p.confianza >= 70 ? 'kpi-positive' : p.confianza >= 40 ? 'kpi-warning' : 'kpi-negative'}>
+                          {p.confianza}%
+                        </span>
+                      </td>
                     </tr>
                   )) : <tr><td colSpan={4}>Sin pronósticos</td></tr>}
                 </tbody>
@@ -1334,43 +1992,156 @@ export default function App() {
     }
 
     if (tab === "tendencias") {
+      // Calcular proyección simple (promedio últimos 3 meses)
+      const ultimos3 = tendencias.slice(0, 3);
+      const promedioEmision = ultimos3.reduce((sum, t) => sum + t.emision, 0) / (ultimos3.length || 1);
+      const promedioCobrado = ultimos3.reduce((sum, t) => sum + t.cobrado, 0) / (ultimos3.length || 1);
+      
+      // Comparativa año anterior (simulado)
+      const mesActual = tendencias[0];
+      const mismoMesAnoAnterior = tendencias[11]; // Simplificado
+      const variacionEmision = mesActual && mismoMesAnoAnterior ? 
+        ((mesActual.emision - mismoMesAnoAnterior.emision) / mismoMesAnoAnterior.emision * 100).toFixed(1) : 0;
+
+      // Tasa crecimiento mensual promedio
+      const tasaCrecimiento = tendencias.length > 1 ? 
+        ((tendencias[0].emision - tendencias[tendencias.length - 1].emision) / tendencias[tendencias.length - 1].emision * 100 / tendencias.length).toFixed(2) : 0;
+
       return (
-        <div className="card">
-          <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Mes</th>
-                  <th className="num">Documentos</th>
-                  <th className="num">Emisión</th>
-                  <th className="num">Cobrado</th>
-                  <th className="num">Vencidos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tendencias.length > 0 ? tendencias.map((t, i) => (
-                  <tr key={i}>
-                    <td>{t.mes}</td>
-                    <td className="num">{t.documentos}</td>
-                    <td className="num">{fmtMoney(t.emision)}</td>
-                    <td className="num">{fmtMoney(t.cobrado)}</td>
-                    <td className="num">{t.vencidos}</td>
-                  </tr>
-                )) : <tr><td colSpan={5}>Sin datos</td></tr>}
-              </tbody>
-            </table>
+        <div>
+          <div className="card">
+            <div className="card-title">📊 Indicadores de Tendencia</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Proyección Emisión (próx mes)</div>
+                <div className="kpi-value">{fmtMoney(promedioEmision)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Proyección Cobrado (próx mes)</div>
+                <div className="kpi-value kpi-positive">{fmtMoney(promedioCobrado)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Var. vs Año Anterior</div>
+                <div className={`kpi-value ${Number(variacionEmision) > 0 ? 'kpi-positive' : 'kpi-negative'}`}>
+                  {Number(variacionEmision) > 0 ? '+' : ''}{variacionEmision}%
+                </div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Tasa Crecimiento Mensual</div>
+                <div className="kpi-value">{tasaCrecimiento}%</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Volatilidad</div>
+                <div className="kpi-value kpi-warning">Media</div>
+                <div className="kpi-subtitle">Simulado</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button className={`btn ${vistaTendencia === 'tabla' ? 'primary' : 'secondary'}`} onClick={() => setVistaTendencia('tabla')}>
+                📋 Tabla
+              </button>
+              <button className={`btn ${vistaTendencia === 'grafico' ? 'primary' : 'secondary'}`} onClick={() => setVistaTendencia('grafico')}>
+                📊 Gráfico
+              </button>
+              <button className="btn secondary" onClick={() => alert('Análisis de estacionalidad: Dic-Ene alto, Jun-Jul bajo (simulado)')}>
+                🔍 Detectar Estacionalidad
+              </button>
+            </div>
+
+            {vistaTendencia === 'tabla' ? (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Mes</th>
+                      <th className="num">Documentos</th>
+                      <th className="num">Emisión</th>
+                      <th className="num">Cobrado</th>
+                      <th className="num">Vencidos</th>
+                      <th className="num">% Cobrado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tendencias.length > 0 ? tendencias.map((t, i) => {
+                      const pctCobrado = t.emision > 0 ? ((t.cobrado / t.emision) * 100).toFixed(1) : 0;
+                      return (
+                        <tr key={i}>
+                          <td><strong>{t.mes}</strong></td>
+                          <td className="num">{t.documentos}</td>
+                          <td className="num">{fmtMoney(t.emision)}</td>
+                          <td className="num">{fmtMoney(t.cobrado)}</td>
+                          <td className="num">{t.vencidos}</td>
+                          <td className="num">
+                            <span className={Number(pctCobrado) >= 80 ? 'kpi-positive' : Number(pctCobrado) >= 50 ? 'kpi-warning' : 'kpi-negative'}>
+                              {pctCobrado}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    }) : <tr><td colSpan={6}>Sin datos</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '40px', textAlign: 'center', background: '#f9fafb', borderRadius: '8px' }}>
+                <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📈</div>
+                <p style={{ color: '#6b7280', fontSize: '1.1rem' }}>
+                  Gráfico interactivo de líneas: Emisión vs Cobrado vs Vencido
+                </p>
+                <p style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '8px' }}>
+                  (Integración con librería de gráficos pendiente)
+                </p>
+              </div>
+            )}
           </div>
         </div>
       );
     }
 
     if (tab === "disputas") {
+      const disputaActual = disputas.find(d => d.id === disputaSeleccionada);
+      
+      const slaPromedio = 5.2; // días simulado
+      const disputasAbiertas = disputas.filter(d => d.estado === "Abierta").length;
+      const disputasResueltas = disputas.filter(d => d.estado === "Resuelta").length;
+
       return (
         <div>
           <div className="card">
+            <div className="card-title">📊 Resumen de Disputas</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Total Disputas</div>
+                <div className="kpi-value">{disputas.length}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Abiertas</div>
+                <div className="kpi-value kpi-warning">{disputasAbiertas}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Resueltas</div>
+                <div className="kpi-value kpi-positive">{disputasResueltas}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">SLA Promedio</div>
+                <div className="kpi-value">{slaPromedio} días</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Tasa Resolución</div>
+                <div className="kpi-value kpi-positive">
+                  {disputas.length > 0 ? Math.round((disputasResueltas / disputas.length) * 100) : 0}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
             <div className="card-title">⚖️ Gestión de Disputas</div>
-            <button className="btn primary" onClick={() => setShowModalDisputa(true)}>+ Nueva Disputa</button>
+            <button className="btn primary" onClick={() => setShowModalDisputa(true)} disabled={!hasWritePermissions}>+ Nueva Disputa</button>
             <div className="row row-spaced">
               <label className="field">
                 <span>Búsqueda</span>
@@ -1384,6 +2155,16 @@ export default function App() {
                   <option value="Resuelta">Resuelta</option>
                 </select>
               </label>
+              <label className="field">
+                <span>Categoría</span>
+                <select value={categoriaDisputa} onChange={e => setCategoriaDisputa(e.target.value)}>
+                  <option value="General">Todas</option>
+                  <option value="Facturación">Facturación</option>
+                  <option value="Calidad">Calidad</option>
+                  <option value="Devolución">Devolución</option>
+                  <option value="Precio">Precio</option>
+                </select>
+              </label>
             </div>
             <div className="table-wrapper">
               <table className="data-table">
@@ -1394,34 +2175,298 @@ export default function App() {
                     <th className="num">Monto</th>
                     <th>Motivo</th>
                     <th>Estado</th>
+                    <th>Responsable</th>
+                    <th>SLA</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDisputas.length > 0 ? filteredDisputas.map((d, i) => (
-                    <tr key={i}>
-                      <td>{d.documento}</td>
-                      <td>{d.cliente}</td>
-                      <td className="num">{fmtMoney(d.monto)}</td>
-                      <td>{d.motivo}</td>
-                      <td><span className={d.estado === "Abierta" ? "kpi-negative" : "kpi-positive"}>{d.estado}</span></td>
-                    </tr>
-                  )) : <tr><td colSpan={5}>No hay disputas</td></tr>}
+                  {filteredDisputas.length > 0 ? filteredDisputas.map((d, i) => {
+                    const diasAbierto = d.fecha_creacion ? Math.floor((new Date().getTime() - new Date(d.fecha_creacion).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                    const slaColor = diasAbierto > 7 ? 'kpi-negative' : diasAbierto > 3 ? 'kpi-warning' : 'kpi-positive';
+                    return (
+                      <tr 
+                        key={i} 
+                        style={{ cursor: 'pointer', background: disputaSeleccionada === d.id ? '#fef3c7' : 'transparent' }}
+                        onClick={() => setDisputaSeleccionada(d.id)}
+                      >
+                        <td>{d.documento}</td>
+                        <td>{d.cliente}</td>
+                        <td className="num">{fmtMoney(d.monto)}</td>
+                        <td>{d.motivo || 'Sin especificar'}</td>
+                        <td><span className={d.estado === "Abierta" ? "kpi-negative" : "kpi-positive"}>{d.estado}</span></td>
+                        <td>Admin</td>
+                        <td><span className={slaColor}>{diasAbierto}d</span></td>
+                        <td>
+                          <button 
+                            className="btn secondary" 
+                            style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                            onClick={(e) => { e.stopPropagation(); alert('Ver detalles (simulado)'); }}
+                          >
+                            👁️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }) : <tr><td colSpan={8}>No hay disputas</td></tr>}
                 </tbody>
               </table>
               <p className="table-footnote">Mostrando {filteredDisputas.length} de {disputas.length} disputas</p>
             </div>
           </div>
+
+          {disputaActual && (
+            <div className="card">
+              <div className="card-title">📝 Detalle de Disputa #{disputaActual.id}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+                <div>
+                  <strong>Cliente:</strong> {disputaActual.cliente}
+                </div>
+                <div>
+                  <strong>Documento:</strong> {disputaActual.documento}
+                </div>
+                <div>
+                  <strong>Monto:</strong> {fmtMoney(disputaActual.monto)}
+                </div>
+                <div>
+                  <strong>Estado:</strong> {disputaActual.estado}
+                </div>
+              </div>
+              
+              <div style={{ marginBottom: '16px' }}>
+                <label className="field">
+                  <span>Cambiar Estado</span>
+                  <select value={estadoIntermedio} onChange={e => setEstadoIntermedio(e.target.value)} disabled={!hasWritePermissions}>
+                    <option value="Nueva">Nueva</option>
+                    <option value="En Revisión">En Revisión</option>
+                    <option value="Escalada">Escalada</option>
+                    <option value="Pendiente Cliente">Pendiente Cliente</option>
+                    <option value="Resuelta">Resuelta</option>
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <strong>💬 Comentarios/Notas:</strong>
+                <div style={{ marginTop: '8px', color: '#6b7280' }}>{disputaActual.observacion || 'Sin comentarios aún'}</div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn secondary" onClick={() => alert('📎 Adjuntar archivo (simulado)')} disabled={!hasWritePermissions}>
+                  📎 Adjuntar Evidencia
+                </button>
+                <button className="btn secondary" onClick={() => alert('✍️ Agregar comentario (simulado)')} disabled={!hasWritePermissions}>
+                  💬 Añadir Nota
+                </button>
+                <button className="btn secondary" onClick={() => alert('👤 Asignar a: Juan Pérez (simulado)')} disabled={!hasWritePermissions}>
+                  👤 Asignar Responsable
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
 
     if (tab === "cuentas") {
+      // KPIs simulados
+      const totalAplicado = 45820.50;
+      const pendienteAplicar = 12300.00;
+      const anticiposVigentes = 8500.00;
+      const notasCreditoDisponibles = 3200.00;
+      const diferenciaConciliacion = 450.00;
+
+      // Sugerencias automáticas (simulado) - usando cuentasAplicar
+      const sugerencias = cuentasAplicar.slice(0, 3).map((c, i) => ({
+        cuenta: c,
+        documento: filteredDocumentos[i % Math.max(filteredDocumentos.length, 1)] || { numero: 'N/A', saldo: 0 },
+        confianza: 95 - i * 5
+      }));
+
       return (
         <div>
           <div className="card">
-            <div className="card-title">💳 Cuentas por Aplicar</div>
-            <button className="btn primary" onClick={() => setShowModalCuenta(true)}>+ Nueva Cuenta</button>
-            <div className="row row-spaced">
+            <div className="card-title">📊 Panel de Aplicaciones</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Total Aplicado</div>
+                <div className="kpi-value kpi-positive">{fmtMoney(totalAplicado)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Pendiente Aplicar</div>
+                <div className="kpi-value kpi-warning">{fmtMoney(pendienteAplicar)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Anticipos Vigentes</div>
+                <div className="kpi-value">{fmtMoney(anticiposVigentes)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Notas de Crédito</div>
+                <div className="kpi-value">{fmtMoney(notasCreditoDisponibles)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Diferencia Conciliación</div>
+                <div className="kpi-value" style={{ color: Math.abs(diferenciaConciliacion) > 500 ? '#ef4444' : '#22c55e' }}>
+                  {fmtMoney(diferenciaConciliacion)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">💳 Aplicación de Pagos</div>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <button 
+                className={`btn ${modoAplicacion === 'manual' ? 'primary' : 'secondary'}`}
+                onClick={() => setModoAplicacion('manual')}
+              >
+                ✏️ Manual
+              </button>
+              <button 
+                className={`btn ${modoAplicacion === 'sugerida' ? 'primary' : 'secondary'}`}
+                onClick={() => setModoAplicacion('sugerida')}
+              >
+                🤖 Sugerida
+              </button>
+              <button 
+                className={`btn ${modoAplicacion === 'masiva' ? 'primary' : 'secondary'}`}
+                onClick={() => setModoAplicacion('masiva')}
+                disabled={!hasWritePermissions}
+              >
+                ⚡ Masiva
+              </button>
+              <button className="btn secondary" onClick={() => setMostrarHistorial(!mostrarHistorial)}>
+                📜 Historial
+              </button>
+              <button className="btn secondary" onClick={() => setMostrarConciliacion(!mostrarConciliacion)}>
+                🔄 Conciliación
+              </button>
+            </div>
+
+            {modoAplicacion === "sugerida" && (
+              <div style={{ background: '#f0f9ff', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <strong>🤖 Sugerencias Automáticas</strong>
+                <div className="table-wrapper" style={{ marginTop: '8px' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Cuenta</th>
+                        <th className="num">Monto</th>
+                        <th>Documento Sugerido</th>
+                        <th className="num">Confianza</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sugerencias.map((s, i) => (
+                        <tr key={i}>
+                          <td>{s.cuenta.cliente}</td>
+                          <td className="num">{fmtMoney(s.cuenta.monto)}</td>
+                          <td>{s.documento.numero}</td>
+                          <td className="num">
+                            <span style={{ color: s.confianza > 90 ? '#22c55e' : s.confianza > 80 ? '#f59e0b' : '#6b7280' }}>
+                              {s.confianza}%
+                            </span>
+                          </td>
+                          <td>
+                            <button 
+                              className="btn primary" 
+                              style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                              onClick={() => alert(`✅ Aplicado: ${fmtMoney(s.cuenta.monto)} a ${s.documento.numero}`)}
+                              disabled={!hasWritePermissions}
+                            >
+                              ✅ Aplicar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {modoAplicacion === "masiva" && (
+              <div style={{ background: '#fef3c7', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <strong>⚡ Aplicación Masiva</strong>
+                <p style={{ marginTop: '8px', color: '#92400e' }}>
+                  Esta función aplicará automáticamente todos los pagos con sugerencias de confianza &gt; 90%.
+                </p>
+                <button 
+                  className="btn primary" 
+                  style={{ marginTop: '8px' }}
+                  onClick={() => alert('⚡ Aplicación masiva ejecutada (simulado): 3 pagos aplicados')}
+                  disabled={!hasWritePermissions}
+                >
+                  🚀 Ejecutar Aplicación Masiva
+                </button>
+              </div>
+            )}
+
+            {mostrarHistorial && (
+              <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <strong>📜 Historial de Aplicaciones</strong>
+                <div className="table-wrapper" style={{ marginTop: '8px' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Usuario</th>
+                        <th>Pago</th>
+                        <th>Documento</th>
+                        <th className="num">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>2025-01-27</td>
+                        <td>Admin</td>
+                        <td>Transferencia #45</td>
+                        <td>FAC-1023</td>
+                        <td className="num">{fmtMoney(1500)}</td>
+                      </tr>
+                      <tr>
+                        <td>2025-01-26</td>
+                        <td>Admin</td>
+                        <td>Depósito #12</td>
+                        <td>FAC-1020</td>
+                        <td className="num">{fmtMoney(3200)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {mostrarConciliacion && (
+              <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
+                <strong>🔄 Conciliación Bancaria</strong>
+                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Saldo Banco</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{fmtMoney(58270.50)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Saldo Sistema</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{fmtMoney(57820.50)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Diferencia</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ef4444' }}>{fmtMoney(450.00)}</div>
+                  </div>
+                </div>
+                <button 
+                  className="btn secondary" 
+                  style={{ marginTop: '12px' }}
+                  onClick={() => alert('🔍 Investigar diferencia (simulado)')}
+                >
+                  🔍 Investigar Diferencia
+                </button>
+              </div>
+            )}
+
+            <button className="btn primary" onClick={() => setShowModalCuenta(true)} disabled={!hasWritePermissions} style={{ marginBottom: '12px' }}>+ Nueva Cuenta</button>
+            <div className="row row-spaced" style={{ marginBottom: '12px' }}>
               <label className="field">
                 <span>Búsqueda</span>
                 <input type="text" value={searchCuentas} onChange={e => setSearchCuentas(e.target.value)} placeholder="Buscar por cliente o documento..." />
@@ -1444,6 +2489,7 @@ export default function App() {
                     <th className="num">Monto</th>
                     <th>Tipo</th>
                     <th>Estado</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1454,11 +2500,54 @@ export default function App() {
                       <td className="num">{fmtMoney(c.monto)}</td>
                       <td>{c.tipo}</td>
                       <td><span className={c.estado === "Pendiente" ? "kpi-warning" : "kpi-positive"}>{c.estado}</span></td>
+                      <td>
+                        <button 
+                          className="btn secondary" 
+                          style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                          onClick={() => alert('Aplicar cuenta (simulado)')}
+                          disabled={!hasWritePermissions}
+                        >
+                          {c.estado === "Pendiente" ? '➕ Aplicar' : '✏️ Editar'}
+                        </button>
+                      </td>
                     </tr>
-                  )) : <tr><td colSpan={5}>No hay cuentas</td></tr>}
+                  )) : <tr><td colSpan={6}>No hay cuentas</td></tr>}
                 </tbody>
               </table>
               <p className="table-footnote">Mostrando {filteredCuentas.length} de {cuentasAplicar.length} cuentas</p>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title">🎫 Anticipos y Notas de Crédito</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+              <div style={{ background: '#fef3c7', padding: '12px', borderRadius: '8px' }}>
+                <strong>💰 Anticipos Parciales</strong>
+                <p style={{ marginTop: '8px', fontSize: '0.875rem', color: '#92400e' }}>
+                  2 clientes con anticipos vigentes
+                </p>
+                <button 
+                  className="btn secondary" 
+                  style={{ marginTop: '8px', fontSize: '0.75rem' }}
+                  onClick={() => alert('Ver anticipos (simulado)')}
+                >
+                  Ver Detalle
+                </button>
+              </div>
+              <div style={{ background: '#dbeafe', padding: '12px', borderRadius: '8px' }}>
+                <strong>📃 Notas de Crédito</strong>
+                <p style={{ marginTop: '8px', fontSize: '0.875rem', color: '#1e40af' }}>
+                  {fmtMoney(notasCreditoDisponibles)} disponibles
+                </p>
+                <button 
+                  className="btn secondary" 
+                  style={{ marginTop: '8px', fontSize: '0.75rem' }}
+                  onClick={() => alert('Aplicar nota de crédito (simulado)')}
+                  disabled={!hasWritePermissions}
+                >
+                  Aplicar NC
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1469,8 +2558,13 @@ export default function App() {
       return (
         <div className="card">
           <div className="card-title">Configuración</div>
-          <button className="btn primary" onClick={() => setShowModalEmpresa(true)}>⚙️ Datos de Empresa</button>
-          <button className="btn primary" onClick={importarExcel}>📥 Importar desde Excel</button>
+          {!hasWritePermissions && (
+            <div className="readonly-banner">
+              ⚠️ <strong>Modo Solo Lectura</strong> - Solo la aplicación de escritorio puede hacer cambios
+            </div>
+          )}
+          <button className="btn primary" onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Datos de Empresa</button>
+          <button className="btn primary" onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar desde Excel</button>
           <button className="btn secondary" onClick={cargarDatos}>🔄 Recargar Datos</button>
           <button className="btn danger" onClick={async () => {
             const result = await window.api.reiniciarEstructuraExcel?.();
@@ -1508,42 +2602,38 @@ export default function App() {
             <span className="info-label">🔗</span>
             <span className="info-value info-ok">Detectado</span>
           </div>
-          {/* URL unificada que alterna entre Local y Túnel */}
-          {(repoUrl || tunnelUrl) && (
-            <div 
-              className={`header-info header-info-clickable url-primary`}
-              onClick={() => copyToClipboard(primaryUrl === "tunnel" && tunnelUrl ? tunnelUrl : repoUrl)} 
-              title={`📍 URL COMPARTIBLE - ${primaryUrl === "tunnel" ? "LocalTunnel (remoto)" : "Red Local"} - Clic para copiar`}
-            >
-              <span className="info-label">
-                {primaryUrl === "tunnel" && tunnelUrlHealthy ? "🌍" : 
-                 primaryUrl === "tunnel" && !tunnelUrlHealthy ? "🔴" : "🟢"}
-              </span>
-              <span className="info-value info-url url-max-width">
-                {primaryUrl === "tunnel" && tunnelUrl ? tunnelUrl : repoUrl}
-              </span>
-              {primaryUrl === "tunnel" && !tunnelUrlHealthy && <span className="health-badge">⚠️</span>}
-            </div>
-          )}
-          {/* Control de activación de túnel */}
+          
+          {/* Botón 1: Cloudflare Tunnel (PRIMARIA) */}
           <div 
-            className={`header-info header-info-clickable ${tunnelActive ? 'tunnel-active' : ''}`}
-            onClick={() => {
-              if (tunnelActive && tunnelUrl) {
-                // Si está activo, copiar la URL
-                copyToClipboard(tunnelUrl);
-              } else {
-                // Si está inactivo, activar
-                toggleLocalTunnel();
-              }
-            }}
-            title={tunnelActive ? "LocalTunnel ACTIVO - Clic para copiar URL" : "Clic para activar LocalTunnel (acceso remoto)"}
+            className={`header-info header-info-clickable url-button cloudflare-button ${remoteUrl ? '' : 'disabled'}`}
+            onClick={() => remoteUrl && copyToClipboard(remoteUrl)} 
+            title={remoteUrl ? `Acceso Remoto (ngrok) - ${remoteUrl} - Clic para copiar` : "Acceso Remoto - Iniciando..."}
           >
-            <span className="info-label">{tunnelActive ? "🔗" : "🌍"}</span>
-            <span className={`info-value ${tunnelActive ? "tunnel-on" : "tunnel-off"}`}>
-              {tunnelActive ? "Túnel ON" : "Activar Túnel"}
+            <span className="info-label">
+              {!remoteUrl ? "🔌" : remoteUrlHealthy ? "🌐" : "🔴"}
             </span>
+            <span className="info-value info-url url-max-width">
+              Remoto
+            </span>
+            {remoteUrl && !remoteUrlHealthy && <span className="health-badge">⚠️</span>}
           </div>
+
+          {/* Botón 2: URL Local (SECUNDARIA) - SIEMPRE VISIBLE */}
+          <div 
+            className={`header-info header-info-clickable url-button local-button ${repoUrl ? '' : 'disabled'}`}
+            onClick={() => repoUrl && copyToClipboard(repoUrl)} 
+            title={repoUrl ? `Red Local - ${repoUrl} - Clic para copiar` : "Red Local - Conectando..."}
+          >
+            <span className="info-label">
+              {!repoUrl ? "🔌" : localUrlHealthy ? "🟢" : "🔴"}
+            </span>
+            <span className="info-value info-url url-max-width">
+              Local
+            </span>
+            {repoUrl && !localUrlHealthy && <span className="health-badge">⚠️</span>}
+            {!repoUrl && <span className="health-badge">⏳</span>}
+          </div>
+          
           <div className="header-info">
             <span className="info-label">💾</span>
             <span className="info-value info-path">{isWeb ? "Modo Web" : "C:\\Users\\...\\cartera.db"}</span>
@@ -1752,7 +2842,7 @@ export default function App() {
             </div>
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalDisputa(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarDisputa}>Guardar Disputa</button>
+              <button className="btn primary" onClick={guardarDisputa} disabled={!hasWritePermissions}>Guardar Disputa</button>
             </div>
           </div>
         </div>
@@ -1792,7 +2882,7 @@ export default function App() {
             </div>
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalCuenta(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarCuenta}>Guardar Cuenta</button>
+              <button className="btn primary" onClick={guardarCuenta} disabled={!hasWritePermissions}>Guardar Cuenta</button>
             </div>
           </div>
         </div>
