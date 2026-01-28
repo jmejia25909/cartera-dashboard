@@ -14,5 +14,6 @@ module.exports = {
       'warn',
       { allowConstantExport: true },
     ],
+    'react/style-prop-object': 'warn', // Permitir estilos inline en App.tsx para elementos dinámicos
   },
 }

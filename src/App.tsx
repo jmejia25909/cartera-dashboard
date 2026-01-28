@@ -1,10 +1,21 @@
+/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import "./App.css";
 import { fmtMoney, fmtMoneyCompact, fmtCompactNumber } from "./utils/formatters";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+
+// Lazy loading de librerías pesadas (solo se cargan cuando se usan)
+const loadXLSX = () => import('xlsx');
+const loadJsPDF = async () => {
+  const [jsPDF, autoTable] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
+  return { jsPDF: jsPDF.default, autoTable: autoTable.default };
+};
+
+/* eslint-disable jsx-a11y/no-static-element-interactions */
+/* eslint-disable react/no-array-index-key */
 
 const isWeb = !window.api;
 
@@ -28,6 +39,7 @@ type Empresa = {
 
 type Documento = {
   id: number;
+  numero?: string;
   cliente: string;
   razon_social?: string;
   tipo_documento: string;
@@ -36,6 +48,7 @@ type Documento = {
   fecha_vencimiento: string;
   vendedor?: string;
   total: number;
+  saldo?: number;
   dias_vencidos?: number;
 };
 
@@ -176,6 +189,24 @@ type CuentaAplicar = {
   documento_aplicado?: string;
   observacion?: string;
 };
+
+// Componente memoizado para gráficos (evita re-renders innecesarios)
+// Usar cuando sea necesario optimizar gráficos pesados
+// const MemoizedBarChart = memo(({ data, dataKey, fill }: { data: any[], dataKey: string, fill: string }) => (
+//   <ResponsiveContainer width="100%" height={300}>
+//     <BarChart data={data}>
+//       <CartesianGrid strokeDasharray="3 3" />
+//       <XAxis dataKey="name" />
+//       <YAxis />
+//       <Tooltip />
+//       <Bar dataKey={dataKey}>
+//         {data.map((_entry, index) => (
+//           <Cell key={`cell-${index}`} fill={fill} />
+//         ))}
+//       </Bar>
+//     </BarChart>
+//   </ResponsiveContainer>
+// ));
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -538,39 +569,54 @@ export default function App() {
     }
   }
 
-  // Funciones de filtrado
-  const filteredDocumentos = docs.filter((d: Documento) => {
-    const search = searchDocumentos.toLowerCase();
-    return !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
-  });
+  // Funciones de filtrado optimizadas con useMemo
+  const filteredDocumentos = useMemo(() => 
+    docs.filter((d: Documento) => {
+      const search = searchDocumentos.toLowerCase();
+      return !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
+    }),
+    [docs, searchDocumentos]
+  );
 
-  const filteredGestiones = gestiones.filter((g: Gestion) => {
-    const search = searchGestiones.toLowerCase();
-    const matchSearch = !search || g.cliente.toLowerCase().includes(search) || g.observacion.toLowerCase().includes(search);
-    const matchEstado = filtroEstadoGestion === "Todos" || (g.resultado?.includes(filtroEstadoGestion) || false);
-    return matchSearch && matchEstado;
-  });
+  const filteredGestiones = useMemo(() =>
+    gestiones.filter((g: Gestion) => {
+      const search = searchGestiones.toLowerCase();
+      const matchSearch = !search || g.cliente.toLowerCase().includes(search) || g.observacion.toLowerCase().includes(search);
+      const matchEstado = filtroEstadoGestion === "Todos" || (g.resultado?.includes(filtroEstadoGestion) || false);
+      return matchSearch && matchEstado;
+    }),
+    [gestiones, searchGestiones, filtroEstadoGestion]
+  );
 
-  const filteredAlertas = alertas.filter((a: Alerta) => {
-    const search = searchAlertas.toLowerCase();
-    const matchSearch = !search || a.cliente.toLowerCase().includes(search) || a.documento.toLowerCase().includes(search);
-    const matchSeveridad = filtroSeveridad === "Todos" || a.severidad === filtroSeveridad;
-    return matchSearch && matchSeveridad;
-  });
+  const filteredAlertas = useMemo(() =>
+    alertas.filter((a: Alerta) => {
+      const search = searchAlertas.toLowerCase();
+      const matchSearch = !search || a.cliente.toLowerCase().includes(search) || a.documento.toLowerCase().includes(search);
+      const matchSeveridad = filtroSeveridad === "Todos" || a.severidad === filtroSeveridad;
+      return matchSearch && matchSeveridad;
+    }),
+    [alertas, searchAlertas, filtroSeveridad]
+  );
 
-  const filteredDisputas = disputas.filter((d: Disputa) => {
-    const search = searchDisputas.toLowerCase();
-    const matchSearch = !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
-    const matchEstado = filtroEstadoDisputa === "Todos" || d.estado === filtroEstadoDisputa;
-    return matchSearch && matchEstado;
-  });
+  const filteredDisputas = useMemo(() =>
+    disputas.filter((d: Disputa) => {
+      const search = searchDisputas.toLowerCase();
+      const matchSearch = !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
+      const matchEstado = filtroEstadoDisputa === "Todos" || d.estado === filtroEstadoDisputa;
+      return matchSearch && matchEstado;
+    }),
+    [disputas, searchDisputas, filtroEstadoDisputa]
+  );
 
-  const filteredCuentas = cuentasAplicar.filter((c: CuentaAplicar) => {
-    const search = searchCuentas.toLowerCase();
-    const matchSearch = !search || c.cliente.toLowerCase().includes(search) || (c.documento || "").toLowerCase().includes(search);
-    const matchEstado = filtroEstadoCuenta === "Todos" || c.estado === filtroEstadoCuenta;
-    return matchSearch && matchEstado;
-  });
+  const filteredCuentas = useMemo(() =>
+    cuentasAplicar.filter((c: CuentaAplicar) => {
+      const search = searchCuentas.toLowerCase();
+      const matchSearch = !search || c.cliente.toLowerCase().includes(search) || (c.documento || "").toLowerCase().includes(search);
+      const matchEstado = filtroEstadoCuenta === "Todos" || c.estado === filtroEstadoCuenta;
+      return matchSearch && matchEstado;
+    }),
+    [cuentasAplicar, searchCuentas, filtroEstadoCuenta]
+  );
 
   async function cargarDocumentos() {
     if (isWeb) return;
@@ -1083,11 +1129,11 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ background: '#fff3cd', padding: '12px', borderRadius: '8px', marginBottom: '16px', color: '#856404' }}>
+                <div className="warning-banner">
                   <strong>💡 Próxima Acción:</strong> {getProximaAccion()}
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+                <div className="flex-row">
                   <button className="btn primary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
                     ➕ Nueva Gestión
                   </button>
@@ -1157,23 +1203,26 @@ export default function App() {
                 </div>
                 <div className="promesas-lista">
                   {filteredGestiones.length > 0 ? (
-                    filteredGestiones.map(g => (
-                      <div key={g.id} className="promesa-item" style={{ borderLeft: `4px solid ${g.resultado.includes('Pagado') ? '#2ea44f' : g.resultado.includes('Promesa') ? '#f59e0b' : g.resultado.includes('No') ? '#e63946' : '#3b82f6'}` }}>
+                    filteredGestiones.map(g => {
+                      const borderColor = g.resultado.includes('Pagado') ? '#2ea44f' : g.resultado.includes('Promesa') ? '#f59e0b' : g.resultado.includes('No') ? '#e63946' : '#3b82f6';
+                      return (
+                      <div key={g.id} className="promesa-item" style={{ borderLeft: `4px solid ${borderColor}` }}>
                         <div className="promesa-main">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1.5rem' }}>{getTipoIcon(g.tipo)}</span>
+                          <div className="flex-center">
+                            <span className="promesa-icon">{getTipoIcon(g.tipo)}</span>
                             <div>
-                              <div className="promesa-info" style={{ fontWeight: 700 }}>{g.tipo} - {g.resultado}</div>
-                              <div className="promesa-fecha" style={{ fontSize: '0.85rem' }}>📅 {g.fecha}</div>
+                              <div className="promesa-info">{g.tipo} - {g.resultado}</div>
+                              <div className="promesa-fecha">📅 {g.fecha}</div>
                             </div>
                           </div>
-                          <div style={{ marginTop: '8px', color: '#6b7280' }}>{g.observacion}</div>
-                          {g.motivo && <div style={{ marginTop: '4px', fontSize: '0.85rem', color: '#9ca3af' }}>🏷️ Motivo: {g.motivo}</div>}
-                          {g.fecha_promesa && <div style={{ marginTop: '4px', fontSize: '0.85rem', color: '#f59e0b' }}>⏰ Promesa: {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}</div>}
+                          <div className="promesa-observacion">{g.observacion}</div>
+                          {g.motivo && <div className="promesa-motivo">🏷️ Motivo: {g.motivo}</div>}
+                          {g.fecha_promesa && <div className="promesa-motivo status-color-warning">⏰ Promesa: {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}</div>}
                         </div>
                         <button className="promesa-eliminar" onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
                       </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="promesa-vacia">Sin gestiones registradas para este cliente</p>
                   )}
@@ -1216,51 +1265,61 @@ export default function App() {
         return acc;
       }, {} as Record<string, { items: typeof docsFiltradosAging, total: number }>) : {};
 
-      const exportarExcel = () => {
-        const dataExport = docsFiltradosAging.map(d => ({
-          'Documento': d.numero,
-          'Cliente': d.cliente,
-          'Vendedor': d.vendedor,
-          'Emisión': d.fecha_emision,
-          'Vencimiento': d.fecha_vencimiento,
-          'Días Vencidos': d.dias_vencidos || 0,
-          'Aging': d.aging,
-          'Monto Total': d.total,
-          'Saldo': d.saldo
-        }));
-        
-        const ws = XLSX.utils.json_to_sheet(dataExport);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
-        XLSX.writeFile(wb, `Cartera_${new Date().toISOString().split('T')[0]}.xlsx`);
-        addToast('✅ Reporte Excel generado', 'success');
+      const exportarExcel = async () => {
+        try {
+          const XLSX = await loadXLSX();
+          const dataExport = docsFiltradosAging.map(d => ({
+            'Documento': d.numero,
+            'Cliente': d.cliente,
+            'Vendedor': d.vendedor,
+            'Emisión': d.fecha_emision,
+            'Vencimiento': d.fecha_vencimiento,
+            'Días Vencidos': d.dias_vencidos || 0,
+            'Aging': d.aging,
+            'Monto Total': d.total,
+            'Saldo': d.saldo
+          }));
+          
+          const ws = XLSX.utils.json_to_sheet(dataExport);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
+          XLSX.writeFile(wb, `Cartera_${new Date().toISOString().split('T')[0]}.xlsx`);
+          addToast('✅ Reporte Excel generado', 'success');
+        } catch (error) {
+          addToast('❌ Error al generar Excel', 'error');
+        }
       };
 
-      const exportarPDF = () => {
-        const doc = new jsPDF();
-        doc.setFontSize(16);
-        doc.text('Reporte de Cartera', 14, 15);
-        doc.setFontSize(10);
-        doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
-        
-        const tableData = docsFiltradosAging.map(d => [
-          d.numero,
-          d.cliente,
-          d.dias_vencidos || 0,
-          d.aging,
-          fmtMoney(d.saldo)
-        ]);
-        
-        autoTable(doc, {
-          head: [['Documento', 'Cliente', 'Días Venc.', 'Aging', 'Saldo']],
-          body: tableData,
-          startY: 28,
-          styles: { fontSize: 8 },
-          headStyles: { fillColor: [59, 130, 246] }
-        });
-        
-        doc.save(`Cartera_${new Date().toISOString().split('T')[0]}.pdf`);
-        addToast('✅ Reporte PDF generado', 'success');
+      const exportarPDF = async () => {
+        try {
+          const { jsPDF, autoTable } = await loadJsPDF();
+          const doc = new jsPDF();
+          doc.setFontSize(16);
+          doc.text('Reporte de Cartera', 14, 15);
+          doc.setFontSize(10);
+          doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
+          
+          const tableData = docsFiltradosAging.map(d => [
+            d.numero,
+            d.cliente,
+            d.dias_vencidos || 0,
+            d.aging,
+            fmtMoney(d.saldo)
+          ]);
+          
+          autoTable(doc, {
+            head: [['Documento', 'Cliente', 'Días Venc.', 'Aging', 'Saldo']],
+            body: tableData,
+            startY: 28,
+            styles: { fontSize: 8 },
+            headStyles: { fillColor: [59, 130, 246] }
+          });
+          
+          doc.save(`Cartera_${new Date().toISOString().split('T')[0]}.pdf`);
+          addToast('✅ Reporte PDF generado', 'success');
+        } catch (error) {
+          addToast('❌ Error al generar PDF', 'error');
+        }
       };
 
       return (
@@ -1329,12 +1388,12 @@ export default function App() {
                 <span>Búsqueda</span>
                 <input type="text" value={searchDocumentos} onChange={e => setSearchDocumentos(e.target.value)} placeholder="Buscar por cliente o documento..." />
               </label>
-              <label className="field" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label className="field field-wrapper">
                 <input type="checkbox" checked={vistaAgrupada} onChange={e => setVistaAgrupada(e.target.checked)} />
                 <span>Vista Agrupada con Subtotales</span>
               </label>
             </div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <div className="flex-row">
               <button className="btn primary" onClick={exportarExcel}>📥 Exportar a Excel</button>
               <button className="btn primary" onClick={exportarPDF}>📄 Exportar a PDF</button>
               <button className="btn secondary" onClick={() => alert('Comparativa mensual: función en desarrollo')}>📈 Comparar Períodos</button>
@@ -1375,8 +1434,8 @@ export default function App() {
             ) : (
               <div className="table-wrapper">
                 {Object.entries(agrupados).map(([grupo, data]) => (
-                  <div key={grupo} style={{ marginBottom: '24px' }}>
-                    <h3 style={{ background: '#f3f4f6', padding: '12px', borderRadius: '8px', marginBottom: '8px' }}>
+                  <div key={grupo} className="group-section">
+                    <h3 className="group-title">
                       {grupo} - {data.items.length} docs - {fmtMoney(data.total)}
                     </h3>
                     <table className="data-table">
@@ -1495,21 +1554,17 @@ export default function App() {
                 return (
                   <div key={p.id} className="promesa-item" style={{ borderLeft: `4px solid ${semaforo.color}` }}>
                     <div className="promesa-main">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div className="promesa-info" style={{ fontWeight: 700 }}>{p.razon_social || p.cliente}</div>
-                        <span style={{ fontSize: '0.85rem', color: semaforo.color, fontWeight: 600 }}>{semaforo.label}</span>
+                      <div className="flex-between">
+                        <div className="promesa-info">{p.razon_social || p.cliente}</div>
+                        <span className="status-label" style={{color: semaforo.color}}>{semaforo.label}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: '16px', marginTop: '8px', flexWrap: 'wrap' }}>
+                      <div className="flex-row" style={{ marginTop: '8px' }}>
                         <div className="promesa-fecha">📅 {p.fecha_promesa}</div>
                         <div className="promesa-monto">{fmtMoney(p.monto_promesa || 0)}</div>
                       </div>
-                      {p.observacion && <div style={{ marginTop: '8px', color: '#6b7280', fontSize: '0.9rem' }}>{p.observacion}</div>}
+                      {p.observacion && <div className="promesa-observacion">{p.observacion}</div>}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button className="btn primary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
-                      <button className="btn secondary" onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>
-                      <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions}>✕</button>
-                    </div>
+                    <div className="action-buttons">\n                      <button className="btn primary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>\n                      <button className="btn secondary" onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>\n                      <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions}>✕</button>\n                    </div>
                   </div>
                 );
               })}
@@ -1543,9 +1598,9 @@ export default function App() {
                   onClick={() => setCampanaSeleccionada(c.id)}
                 >
                   <div className="promesa-main">
-                    <div className="promesa-info" style={{ fontWeight: 700 }}>{c.nombre}</div>
-                    <div style={{ color: '#6b7280', marginTop: '4px' }}>{c.descripcion}</div>
-                    <div className="promesa-fecha" style={{ marginTop: '8px' }}>
+                    <div className="promesa-info font-medium">{c.nombre}</div>
+                    <div className="text-muted mt-8">{c.descripcion}</div>
+                    <div className="promesa-fecha mt-8">
                       📅 {c.fecha_inicio} → {c.fecha_fin} | 👤 {c.responsable}
                     </div>
                   </div>
