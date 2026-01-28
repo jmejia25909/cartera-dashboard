@@ -1150,8 +1150,42 @@ app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   closeDb();
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin") {
+    // Limpiar procesos antes de cerrar
+    cleanupProcesses();
+    app.quit();
+  }
 });
+
+// Manejador para antes de cerrar la aplicación (en Windows)
+app.on("before-quit", () => {
+  cleanupProcesses();
+});
+
+// Función para limpiar todos los procesos secundarios
+function cleanupProcesses() {
+  try {
+    // Cerrar ngrok listener
+    if (ngrokListener) {
+      ngrokListener.close?.();
+      ngrokListener = null;
+    }
+    
+    // Cerrar proceso de cloudflare si existe
+    if (cloudflaredProcess) {
+      try {
+        cloudflaredProcess.kill();
+      } catch (e) {
+        // Ignorar si no puede matar el proceso
+      }
+      cloudflaredProcess = null;
+    }
+    
+    console.log("✅ Procesos limpios");
+  } catch (e) {
+    console.error("Error al limpiar procesos:", e);
+  }
+}
 
 // -----------------------------
 // IPC
