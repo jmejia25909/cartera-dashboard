@@ -48,6 +48,9 @@ type Documento = {
   fecha_vencimiento: string;
   vendedor?: string;
   total: number;
+  valor_documento?: number;
+  retenciones?: number;
+  cobros?: number;
   saldo?: number;
   dias_vencidos?: number;
 };
@@ -190,6 +193,15 @@ type CuentaAplicar = {
   observacion?: string;
 };
 
+type Abono = {
+  id: number;
+  documento: string;
+  total_anterior: number;
+  total_nuevo: number;
+  fecha: string;
+  observacion?: string;
+};
+
 // Componente memoizado para gráficos (evita re-renders innecesarios)
 // Usar cuando sea necesario optimizar gráficos pesados
 // const MemoizedBarChart = memo(({ data, dataKey, fill }: { data: any[], dataKey: string, fill: string }) => (
@@ -236,6 +248,7 @@ export default function App() {
   const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
   const [disputas, setDisputas] = useState<Disputa[]>([]);
   const [cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
+  const [abonos, setAbonos] = useState<Abono[]>([]);
   const [repoUrl, setRepoUrl] = useState<string>("");
   // URL remota obtenida dinámicamente desde ngrok
   const [remoteUrl, setRemoteUrl] = useState<string>("");
@@ -298,7 +311,8 @@ export default function App() {
   // Actualizar contador de alertas cuando cambian los datos
   useEffect(() => {
     setAlertasActivas(alertas.length);
-    setAlertasCerradasHoy(Math.floor(Math.random() * 10));
+    // Alertas cerradas: requiere tabla de historial de alertas - por ahora 0
+    setAlertasCerradasHoy(0);
   }, [alertas.length]);
   
   // Función helper para agregar notificaciones
@@ -513,7 +527,7 @@ export default function App() {
         return;
       }
 
-      const [empData, statsData, filtros, top, promData, campData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, disputasData, cuentasData] = await Promise.all([
+      const [empData, statsData, filtros, top, promData, campData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, disputasData, cuentasData, abonosData] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
         window.api.filtrosListar(),
@@ -528,7 +542,8 @@ export default function App() {
         window.api.pronosticoFlujoCaja?.() || [],
         window.api.tendenciasHistoricas?.() || [],
         window.api.disputasListar?.() || [],
-        window.api.cuentasAplicarListar?.() || []
+        window.api.cuentasAplicarListar?.() || [],
+        window.api.abonosListar?.() || []
       ]);
 
       // Obtener URL del repositorio remoto Git
@@ -564,6 +579,7 @@ export default function App() {
       if (tendData) setTendencias(tendData as TendenciaMes[]);
       if (disputasData) setDisputas(disputasData as Disputa[]);
       if (cuentasData) setCuentasAplicar(cuentasData as CuentaAplicar[]);
+      if (abonosData) setAbonos(abonosData as Abono[]);
     } catch (e) {
       console.error("Error cargando datos:", e);
     }
@@ -1578,8 +1594,29 @@ export default function App() {
     if (tab === "campanas") {
       const campanaActual = campanas.find(c => c.id === campanaSeleccionada);
       const totalClientes = clientesCampana.length;
-      const contactados = Math.floor(totalClientes * 0.6); // Simulado
-      const recuperado = Math.floor(Math.random() * 50000); // Simulado
+      
+      // Calcular contactados desde gestiones de esta campaña
+      const gestionesCampana = gestiones.filter(g => 
+        clientesCampana.includes(g.cliente) && 
+        campanaActual && 
+        g.fecha >= campanaActual.fecha_inicio && 
+        g.fecha <= campanaActual.fecha_fin
+      );
+      const clientesContactados = new Set(gestionesCampana.map(g => g.cliente));
+      const contactados = clientesContactados.size;
+      
+      // Calcular recuperado desde promesas cumplidas en esta campaña
+      const promesasCumplidas = gestiones.filter(g => 
+        clientesCampana.includes(g.cliente) &&
+        campanaActual &&
+        g.fecha >= campanaActual.fecha_inicio &&
+        g.fecha <= campanaActual.fecha_fin &&
+        g.fecha_promesa &&
+        new Date(g.fecha_promesa) <= new Date() &&
+        g.monto_promesa > 0
+      );
+      const recuperado = promesasCumplidas.reduce((sum, p) => sum + (p.monto_promesa || 0), 0);
+      
       const tasaRespuesta = totalClientes > 0 ? Math.round((contactados / totalClientes) * 100) : 0;
 
       return (
@@ -1719,9 +1756,9 @@ export default function App() {
                     <div className="kpi-subtitle">{Number(concentracion) > 2500 ? 'Alta' : Number(concentracion) > 1500 ? 'Media' : 'Baja'}</div>
                   </div>
                   <div className="kpi-card">
-                    <div className="kpi-title">💰 ROI Gestión</div>
-                    <div className="kpi-value kpi-positive">3.2x</div>
-                    <div className="kpi-subtitle">Simulado</div>
+                    <div className="kpi-title">💰 Total Recuperado</div>
+                    <div className="kpi-value kpi-positive">{fmtMoney(gestiones.reduce((sum, g) => sum + (g.monto_promesa || 0), 0))}</div>
+                    <div className="kpi-subtitle">Promesas totales</div>
                   </div>
                 </div>
 
@@ -2062,6 +2099,14 @@ export default function App() {
       const tasaCrecimiento = tendencias.length > 1 ? 
         ((tendencias[0].emision - tendencias[tendencias.length - 1].emision) / tendencias[tendencias.length - 1].emision * 100 / tendencias.length).toFixed(2) : 0;
 
+      // Calcular volatilidad real (desviación estándar / promedio)
+      const emisiones = tendencias.map(t => t.emision);
+      const promedioTotal = emisiones.reduce((a, b) => a + b, 0) / emisiones.length;
+      const varianza = emisiones.reduce((sum, val) => sum + Math.pow(val - promedioTotal, 2), 0) / emisiones.length;
+      const desviacionEstandar = Math.sqrt(varianza);
+      const coefVariacion = promedioTotal > 0 ? (desviacionEstandar / promedioTotal * 100) : 0;
+      const nivelVolatilidad = coefVariacion < 15 ? 'Baja' : coefVariacion < 30 ? 'Media' : 'Alta';
+
       return (
         <div>
           <div className="card">
@@ -2087,8 +2132,8 @@ export default function App() {
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Volatilidad</div>
-                <div className="kpi-value kpi-warning">Media</div>
-                <div className="kpi-subtitle">Simulado</div>
+                <div className={`kpi-value ${nivelVolatilidad === 'Alta' ? 'kpi-negative' : nivelVolatilidad === 'Media' ? 'kpi-warning' : 'kpi-positive'}`}>{nivelVolatilidad}</div>
+                <div className="kpi-subtitle">{coefVariacion.toFixed(1)}% CV</div>
               </div>
             </div>
           </div>
@@ -2160,7 +2205,18 @@ export default function App() {
     if (tab === "disputas") {
       const disputaActual = disputas.find(d => d.id === disputaSeleccionada);
       
-      const slaPromedio = 5.2; // días simulado
+      // Calcular SLA promedio real desde disputas resueltas
+      const disputasConResolucion = disputas.filter(d => d.estado === "Resuelta" && d.fecha_resolucion && d.fecha_creacion);
+      let slaPromedio = 0;
+      if (disputasConResolucion.length > 0) {
+        const totalDias = disputasConResolucion.reduce((sum, d) => {
+          const inicio = new Date(d.fecha_creacion);
+          const fin = new Date(d.fecha_resolucion!);
+          const dias = Math.floor((fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+          return sum + dias;
+        }, 0);
+        slaPromedio = totalDias / disputasConResolucion.length;
+      }
       const disputasAbiertas = disputas.filter(d => d.estado === "Abierta").length;
       const disputasResueltas = disputas.filter(d => d.estado === "Resuelta").length;
 
@@ -2183,7 +2239,8 @@ export default function App() {
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">SLA Promedio</div>
-                <div className="kpi-value">{slaPromedio} días</div>
+                <div className="kpi-value">{slaPromedio > 0 ? `${slaPromedio.toFixed(1)} días` : 'N/A'}</div>
+                <div className="kpi-subtitle">{disputasResueltas} resueltas</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Tasa Resolución</div>
@@ -2324,12 +2381,28 @@ export default function App() {
     }
 
     if (tab === "cuentas") {
-      // KPIs simulados
-      const totalAplicado = 45820.50;
-      const pendienteAplicar = 12300.00;
-      const anticiposVigentes = 8500.00;
-      const notasCreditoDisponibles = 3200.00;
-      const diferenciaConciliacion = 450.00;
+      // KPIs calculados desde documentos y cuentas por aplicar
+      const docsForCuentas = docs || [];
+      const sumValorDocumento = docsForCuentas.reduce((s, d) => {
+        const valor = d.valor_documento ?? ((d.total || 0) + (d.retenciones || 0) + (d.cobros || 0));
+        return s + (Number.isFinite(valor) ? valor : 0);
+      }, 0);
+      const sumRetenciones = docsForCuentas.reduce((s, d) => s + (d.retenciones || 0), 0);
+      const sumCobros = docsForCuentas.reduce((s, d) => s + (d.cobros || 0), 0);
+      const sumTotalPendiente = docsForCuentas.reduce((s, d) => s + (d.total || 0), 0);
+
+      const totalAplicado = sumCobros;
+      const pendienteAplicar = sumTotalPendiente;
+
+      const anticiposVigentes = cuentasAplicar
+        .filter((c) => (c.tipo || "").toLowerCase().includes("adelanto") && c.estado === "Pendiente")
+        .reduce((s, c) => s + (c.monto || 0), 0);
+
+      const notasCreditoDisponibles = cuentasAplicar
+        .filter((c) => (c.tipo || "").toLowerCase().includes("nota") && c.estado === "Pendiente")
+        .reduce((s, c) => s + (c.monto || 0), 0);
+
+      const diferenciaConciliacion = (sumValorDocumento - sumRetenciones - sumCobros) - sumTotalPendiente;
 
       // Sugerencias automáticas (simulado) - usando cuentasAplicar
       const sugerencias = cuentasAplicar.slice(0, 3).map((c, i) => ({
@@ -2466,27 +2539,32 @@ export default function App() {
                     <thead>
                       <tr>
                         <th>Fecha</th>
-                        <th>Usuario</th>
-                        <th>Pago</th>
                         <th>Documento</th>
-                        <th className="num">Monto</th>
+                        <th className="num">Saldo Anterior</th>
+                        <th className="num">Pago Aplicado</th>
+                        <th className="num">Nuevo Saldo</th>
+                        <th>Observación</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td>2025-01-27</td>
-                        <td>Admin</td>
-                        <td>Transferencia #45</td>
-                        <td>FAC-1023</td>
-                        <td className="num">{fmtMoney(1500)}</td>
-                      </tr>
-                      <tr>
-                        <td>2025-01-26</td>
-                        <td>Admin</td>
-                        <td>Depósito #12</td>
-                        <td>FAC-1020</td>
-                        <td className="num">{fmtMoney(3200)}</td>
-                      </tr>
+                      {abonos.length > 0 ? (
+                        abonos.slice(0, 10).map(a => (
+                          <tr key={a.id}>
+                            <td>{a.fecha.split('T')[0]}</td>
+                            <td>{a.documento}</td>
+                            <td className="num">{fmtMoney(a.total_anterior)}</td>
+                            <td className="num kpi-positive">{fmtMoney(a.total_anterior - a.total_nuevo)}</td>
+                            <td className="num">{fmtMoney(a.total_nuevo)}</td>
+                            <td>{a.observacion || '-'}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', color: '#9ca3af', padding: '20px' }}>
+                            No hay historial de pagos aplicados
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

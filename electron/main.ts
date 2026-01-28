@@ -1543,6 +1543,16 @@ ipcMain.handle("cuentaAplicarCrear", (_evt, data) => {
   return { ok: true };
 });
 
+ipcMain.handle("abonosListar", async () => {
+  const data = db.prepare(`
+    SELECT id, documento, total_anterior, total_nuevo, fecha, observacion
+    FROM abonos
+    ORDER BY fecha DESC
+    LIMIT 50
+  `).all();
+  return data;
+});
+
 ipcMain.handle("cuentaAplicarActualizar", (_evt, data) => {
   db.prepare(`
     UPDATE cuentas_aplicar 
