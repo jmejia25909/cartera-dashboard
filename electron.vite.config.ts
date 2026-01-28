@@ -9,6 +9,14 @@ const external = [
 
   // Mantener externo (binarios nativos)
   "@ngrok/ngrok",
+  
+  // Librerías grandes que causan problemas
+  "xlsx",
+  "jspdf",
+  "jspdf-autotable",
+  "html2canvas",
+  "chart.js",
+  "recharts",
 
   // Node builtins (por seguridad):
   "node:fs",
