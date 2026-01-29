@@ -38,6 +38,7 @@ const apiMethods = {
   cuentaAplicarCrear: (data: unknown) => ipcRenderer.invoke("cuentaAplicarCrear", data),
   cuentaAplicarActualizar: (data: unknown) => ipcRenderer.invoke("cuentaAplicarActualizar", data),
   abonosListar: () => ipcRenderer.invoke("abonosListar"),
+  clientesListar: () => ipcRenderer.invoke("clientesListar"),
   getGitRemoteUrl: () => ipcRenderer.invoke("getGitRemoteUrl"),
 };
 

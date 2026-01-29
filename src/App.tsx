@@ -280,10 +280,6 @@ export default function App() {
   const [mostrarHistorial, setMostrarHistorial] = useState(false);
   const [mostrarConciliacion, setMostrarConciliacion] = useState(false);
   
-  // Estados para tab Reportes
-  const [filtroAging, setFiltroAging] = useState("Todos");
-  const [vistaAgrupada, setVistaAgrupada] = useState(false);
-  
   // Estados para tab CRM
   const [filtroFecha, setFiltroFecha] = useState("Todas");
   const [filtroMonto, setFiltroMonto] = useState("Todos");
@@ -303,6 +299,9 @@ export default function App() {
   
   // Estados para tab Tendencias
   const [vistaTendencia, setVistaTendencia] = useState<"tabla" | "grafico">("tabla");
+  
+  // Estados para tab Gestión
+  const [filtroVistaGestion, setFiltroVistaGestion] = useState("Todos");
   
   // Estado para notificaciones
     const [toasts, setToasts] = useState<Toast[]>([]);
@@ -589,9 +588,12 @@ export default function App() {
   const filteredDocumentos = useMemo(() => 
     docs.filter((d: Documento) => {
       const search = searchDocumentos.toLowerCase();
-      return !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
+      const matchSearch = !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
+      const matchCliente = !selectedCliente || d.razon_social === selectedCliente || d.cliente === selectedCliente;
+      const matchVendedor = !selectedVendedor || d.vendedor === selectedVendedor;
+      return matchSearch && matchCliente && matchVendedor;
     }),
-    [docs, searchDocumentos]
+    [docs, searchDocumentos, selectedCliente, selectedVendedor]
   );
 
   const filteredGestiones = useMemo(() =>
@@ -1068,175 +1070,322 @@ export default function App() {
     }
 
     if (tab === "gestion") {
-      const clienteGestiones = gestiones.filter(g => g.razon_social === selectedCliente || g.cliente === selectedCliente);
-      const totalGestiones = clienteGestiones.length;
-      const ultimaGestion = clienteGestiones[0];
-      const diasSinContacto = ultimaGestion ? Math.floor((new Date().getTime() - new Date(ultimaGestion.fecha).getTime()) / (1000 * 60 * 60 * 24)) : 999;
-      const gestionesExitosas = clienteGestiones.filter(g => g.resultado.includes("Contactado") || g.resultado.includes("Promesa") || g.resultado.includes("Pagado")).length;
-      const efectividad = totalGestiones > 0 ? Math.round((gestionesExitosas / totalGestiones) * 100) : 0;
+      // VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta
+      // Obtener documentos vencidos
+      const todosDocsVencidos = docs.filter(d => (d.dias_vencidos || 0) > 0);
       
-      const getProximaAccion = () => {
-        if (!selectedCliente) return "";
-        if (diasSinContacto > 15) return "⚠️ Contacto urgente - más de 15 días sin gestión";
-        if (diasSinContacto > 7) return "📞 Llamada de seguimiento recomendada";
-        if (efectividad < 50 && totalGestiones > 3) return "🔄 Cambiar estrategia de contacto";
-        return "✅ Seguimiento regular";
+      // Obtener clientes únicos con vencidos (desde documentos)
+      const clientesConVencidos = Array.from(new Set(todosDocsVencidos.map(d => d.razon_social || d.cliente)))
+        .filter(c => c && c.trim() !== "")
+        .sort();
+      
+      // Datos del cliente seleccionado
+      const docsVencidosCliente = selectedCliente && selectedCliente !== "Todos"
+        ? todosDocsVencidos.filter(d => (d.razon_social === selectedCliente || d.cliente === selectedCliente))
+            .sort((a, b) => (b.dias_vencidos || 0) - (a.dias_vencidos || 0))
+        : [];
+      const totalVencidoCliente = docsVencidosCliente.reduce((sum, d) => sum + d.total, 0);
+      
+      // Gestiones filtradas del cliente seleccionado
+      const filteredGestiones = selectedCliente && selectedCliente !== "Todos"
+        ? gestiones.filter(g => {
+            const matchCliente = g.cliente === selectedCliente || g.razon_social === selectedCliente;
+            const matchBusqueda = !searchGestiones || (g.observacion || "").toLowerCase().includes(searchGestiones.toLowerCase());
+            const matchEstado = filtroEstadoGestion === "Todos" || g.resultado.includes(filtroEstadoGestion);
+            return matchCliente && matchBusqueda && matchEstado;
+          }).sort((a, b) => b.fecha.localeCompare(a.fecha))
+        : [];
+      
+      // KPIs globales
+      const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + d.total, 0);
+      const diasPromedioVencidos = todosDocsVencidos.length > 0 
+        ? Math.round(todosDocsVencidos.reduce((s, d) => s + (d.dias_vencidos || 0), 0) / todosDocsVencidos.length) 
+        : 0;
+      
+      // Calcular gestiones de hoy
+      const hoy = new Date().toISOString().split('T')[0];
+      const gestionesHoy = gestiones.filter(g => g.fecha && g.fecha.startsWith(hoy)).length;
+      
+      // PDFs generados (placeholder - requiere tracking)
+      const pdfsGenerados = 0;
+      
+      // Función para exportar PDF
+      const exportarEstadoDeCuenta = async (clienteNombre: string) => {
+        if (!clienteNombre || clienteNombre === "Todos") {
+          addToast("Selecciona un cliente específico para generar su estado de cuenta", "warning");
+          return;
+        }
+        
+        const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre))
+          .sort((a, b) => (b.dias_vencidos || 0) - (a.dias_vencidos || 0));
+        const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+        
+        try {
+          const { jsPDF, autoTable } = await loadJsPDF();
+          const doc = new jsPDF();
+          
+          doc.setFontSize(18);
+          doc.text("ESTADO DE CUENTA", 14, 20);
+          
+          doc.setFontSize(10);
+          doc.text(`Cliente: ${clienteNombre}`, 14, 30);
+          doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString('es-ES')}`, 14, 37);
+          doc.text(`Moneda: USD`, 14, 44);
+          
+          doc.setFontSize(9);
+          doc.setFillColor(59, 130, 246);
+          doc.setTextColor(255, 255, 255);
+          doc.text(`Documentos Vencidos: ${docsCliente.length}`, 14, 53);
+          doc.setTextColor(0, 0, 0);
+          doc.text(`Total Vencido: ${fmtMoney(totalCliente)}`, 14, 60);
+          
+          const tableData = docsCliente.map(d => [
+            d.documento || d.numero,
+            d.fecha_emision,
+            d.fecha_vencimiento,
+            d.dias_vencidos || 0,
+            fmtMoney(d.total)
+          ]);
+          
+          autoTable(doc, {
+            head: [['Documento', 'Emisión', 'Vencimiento', 'Días Venc.', 'Saldo']],
+            body: tableData,
+            startY: 68,
+            styles: { fontSize: 9, cellPadding: 4 },
+            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' },
+            margin: { left: 14, right: 14 },
+            alternateRowStyles: { fillColor: [245, 247, 250] },
+            foot: [[{ content: `TOTAL VENCIDO: ${fmtMoney(totalCliente)}`, colSpan: 5, styles: { fontStyle: 'bold', fillColor: [239, 68, 68], textColor: [255, 255, 255] } }]]
+          });
+          
+          const pageHeight = doc.internal.pageSize.getHeight();
+          doc.setFontSize(8);
+          doc.setTextColor(150, 150, 150);
+          doc.text("Este documento fue generado automáticamente.", 14, pageHeight - 10);
+          doc.text(`Página 1 de 1`, pageHeight - 10, pageHeight - 5, { align: 'right' });
+          
+          doc.save(`EstadoDeCuenta_${clienteNombre.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+          addToast("✅ Estado de Cuenta generado correctamente", "success");
+        } catch (error) {
+          addToast("❌ Error al generar Estado de Cuenta", "error");
+          console.error(error);
+        }
       };
-
-      const getTipoIcon = (tipo: string) => {
-        if (tipo.includes("Llamada")) return "📞";
-        if (tipo.includes("Email") || tipo.includes("Correo")) return "📧";
-        if (tipo.includes("WhatsApp")) return "💬";
-        if (tipo.includes("Visita")) return "🏢";
-        return "📝";
+      
+      // Función para copiar texto de email
+      const copiarParaEmail = (clienteNombre: string) => {
+        const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre));
+        const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+        
+        const texto = `Estimado cliente ${clienteNombre},\n\nAdjunto encontrará su estado de cuenta actualizado.\n\nResumen:\n- Documentos vencidos: ${docsCliente.length}\n- Total vencido: ${fmtMoney(totalCliente)}\n\nPor favor, regularice su cuenta a la brevedad posible.\n\nSaludos cordiales,\n${empresa.nombre}`;
+        
+        navigator.clipboard.writeText(texto).then(() => {
+          addToast("✅ Texto copiado al portapapeles", "success");
+        }).catch(() => {
+          addToast("❌ Error al copiar texto", "error");
+        });
       };
 
       return (
-        <div className="dashboard-grid">
+        <div>
+          {/* KPIs de Gestión */}
           <div className="card">
-            <div className="card-title">🔍 Buscar Cliente para Gestionar</div>
+            <div className="card-title">📊 KPIs de Gestión</div>
+            <div className="kpis-grid">
+              <div className="kpi-card">
+                <div className="kpi-title">Clientes con Vencidos</div>
+                <div className="kpi-value">{clientesConVencidos.length}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Total por Gestionar</div>
+                <div className="kpi-value kpi-negative">{fmtMoney(totalVencidoSistema)}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">Contactados Hoy</div>
+                <div className="kpi-value">{gestionesHoy}</div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-title">PDFs Generados</div>
+                <div className="kpi-value">{pdfsGenerados}</div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Filtros y Acciones */}
+          <div className="card">
+            <div className="card-title">🔍 Filtros y Acciones</div>
             <div className="row">
               <label className="field">
                 <span>Cliente</span>
                 <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
-                  <option value="">-- Seleccione --</option>
-                  {clientes.map(c => (
-                    <option key={c.cliente} value={c.razon_social}>{c.razon_social}</option>
+                  <option value="Todos">Todos</option>
+                  {clientesConVencidos.map(c => (
+                    <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
               </label>
               <label className="field">
-                <span>Filtrar por Vendedor</span>
-                <select value={selectedVendedor} onChange={e => setSelectedVendedor(e.target.value)}>
-                  <option value="">Todos</option>
-                  {vendedores.map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
+                <span>Estado</span>
+                <select value={filtroVistaGestion} onChange={e => setFiltroVistaGestion(e.target.value)}>
+                  <option value="Todos">Todos</option>
+                  <option value="Con Vencidos">Con Vencidos</option>
+                  <option value="Mayor Deuda">Mayor Deuda</option>
+                  <option value="Más Días Vencidos">Más Días Vencidos</option>
                 </select>
               </label>
             </div>
-
-            {selectedCliente && (
-              <>
-                <div className="kpis-grid">
-                  <div className="kpi-card">
-                    <div className="kpi-title">Deuda Total</div>
-                    <div className="kpi-value">{fmtMoney(deudaCliente.total)}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Vencido</div>
-                    <div className="kpi-value kpi-negative">{fmtMoney(deudaCliente.vencido)}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Total Gestiones</div>
-                    <div className="kpi-value">{totalGestiones}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Días Sin Contacto</div>
-                    <div className={`kpi-value ${diasSinContacto > 15 ? 'kpi-negative' : diasSinContacto > 7 ? 'kpi-warning' : ''}`}>
-                      {diasSinContacto === 999 ? 'N/A' : diasSinContacto}
-                    </div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Efectividad</div>
-                    <div className={`kpi-value ${efectividad >= 70 ? 'kpi-positive' : efectividad >= 40 ? 'kpi-warning' : 'kpi-negative'}`}>
-                      {efectividad}%
-                    </div>
-                  </div>
-                </div>
-
-                <div className="warning-banner">
-                  <strong>💡 Próxima Acción:</strong> {getProximaAccion()}
-                </div>
-
-                <div className="flex-row">
-                  <button className="btn primary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
-                    ➕ Nueva Gestión
-                  </button>
-                  <button className="btn secondary" onClick={() => alert('Función de llamada simulada')}>
-                    📞 Llamar
-                  </button>
-                  <button className="btn secondary" onClick={() => alert('Función de email simulada')}>
-                    📧 Enviar Email
-                  </button>
-                  <button className="btn secondary" onClick={() => alert('Función de WhatsApp simulada')}>
-                    💬 WhatsApp
-                  </button>
-                </div>
-              </>
+            
+            <div className="flex-row">
+              <button className="btn secondary" onClick={() => addToast("Función de acción masiva en desarrollo", "info")} disabled={!hasWritePermissions}>
+                📞 Acción Masiva
+              </button>
+              <button className="btn secondary" onClick={() => addToast("Función de envío masivo en desarrollo", "info")} disabled={!hasWritePermissions}>
+                📧 Enviar Estados
+              </button>
+              <button className="btn primary" onClick={() => exportarEstadoDeCuenta(selectedCliente)} disabled={!selectedCliente || selectedCliente === "Todos"}>
+                📥 PDF Estado de Cuenta
+              </button>
+            </div>
+          </div>
+          
+          {/* Tabla Checklist de Gestión */}
+          <div className="card">
+            <div className="card-title">📋 Tabla de Gestión - Clientes</div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{width: '40px'}}>✓</th>
+                    <th>Cliente</th>
+                    <th className="num">Vencido $</th>
+                    <th>📞 Llamada</th>
+                    <th>📧 Email</th>
+                    <th>🎯 Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientesConVencidos.length > 0 ? (
+                    clientesConVencidos.slice(0, 50).map(cliente => {
+                      const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
+                      const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+                      const maxDias = Math.max(...docsCliente.map(d => d.dias_vencidos || 0));
+                      const ultimaGestion = gestiones.filter(g => g.cliente === cliente || g.razon_social === cliente).sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+                      
+                      // Indicador visual por días
+                      const colorIndicador = maxDias > 90 ? '#ef4444' : maxDias > 60 ? '#f59e0b' : '#10b981';
+                      
+                      return (
+                        <tr key={cliente} style={{borderLeft: `4px solid ${colorIndicador}`}}>
+                          <td style={{textAlign: 'center'}}>
+                            <input type="checkbox" />
+                          </td>
+                          <td><strong>{cliente}</strong></td>
+                          <td className="num" style={{color: colorIndicador, fontWeight: 'bold'}}>{fmtMoney(totalCliente)}</td>
+                          <td>{ultimaGestion ? ultimaGestion.fecha.split('T')[0] : '-'}</td>
+                          <td style={{textAlign: 'center'}}>{ultimaGestion && ultimaGestion.tipo.includes('Email') ? '✓' : 'X'}</td>
+                          <td>
+                            <button className="btn secondary" style={{fontSize: '0.75rem', padding: '4px 8px'}} onClick={() => exportarEstadoDeCuenta(cliente)}>
+                              📄 PDF
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
+                        No hay clientes con documentos vencidos
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {clientesConVencidos.length > 50 && (
+              <p className="table-footnote">Mostrando 50 de {clientesConVencidos.length} clientes</p>
             )}
           </div>
-
-          {selectedCliente && (
-            <>
-              <div className="card">
-                <div className="card-title">📄 Documentos del Cliente</div>
-                <div className="table-wrapper">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Documento</th>
-                        <th>F. Vencimiento</th>
-                        <th className="num">Días Vencido</th>
-                        <th className="num">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {docs.slice(0, 10).map(d => (
-                        <tr key={d.id}>
-                          <td>{d.documento}</td>
-                          <td>{d.fecha_vencimiento}</td>
-                          <td className="num">
-                            <span className={d.dias_vencidos && d.dias_vencidos > 0 ? 'kpi-negative' : ''}>
-                              {d.dias_vencidos || 0}
-                            </span>
-                          </td>
-                          <td className="num">{fmtMoney(d.total)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+          
+          {/* Panel de Gestión Rápida (cuando se selecciona un cliente) */}
+          {selectedCliente && selectedCliente !== "Todos" && (
+            <div className="card">
+              <div className="card-title">💬 Panel de Gestión Rápida - {selectedCliente}</div>
+              <div className="flex-row">
+                <button className="btn secondary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
+                  📞 Registrar Llamada
+                </button>
+                <button className="btn secondary" onClick={() => copiarParaEmail(selectedCliente)}>
+                  📧 Copiar Texto Email
+                </button>
+                <button className="btn secondary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
+                  💬 Nueva Gestión
+                </button>
+                <button className="btn primary" onClick={() => exportarEstadoDeCuenta(selectedCliente)}>
+                  📄 Generar PDF
+                </button>
               </div>
-
-              <div className="card">
-                <div className="card-title">📋 Timeline de Gestiones</div>
-                <div className="row">
-                  <label className="field">
-                    <span>Buscar</span>
-                    <input type="text" value={searchGestiones} onChange={e => setSearchGestiones(e.target.value)} placeholder="Buscar en observaciones..." />
-                  </label>
-                  <label className="field">
-                    <span>Estado</span>
-                    <select value={filtroEstadoGestion} onChange={e => setFiltroEstadoGestion(e.target.value)}>
-                      <option value="Todos">Todos</option>
-                      <option value="Contactado">Contactado</option>
-                      <option value="Promesa">Promesa</option>
-                      <option value="Pagado">Pagado</option>
-                      <option value="No contesta">No contesta</option>
-                    </select>
-                  </label>
+              
+              {/* Documentos Vencidos del Cliente */}
+              {docsVencidosCliente.length > 0 && (
+                <div style={{marginTop: '16px'}}>
+                  <h4 style={{margin: '16px 0 8px 0', color: '#374151'}}>📄 Documentos Vencidos ({docsVencidosCliente.length})</h4>
+                  <div className="table-wrapper">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Documento</th>
+                          <th>Emisión</th>
+                          <th>Vencimiento</th>
+                          <th className="num">Días Venc.</th>
+                          <th className="num">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {docsVencidosCliente.map(d => (
+                          <tr key={d.id}>
+                            <td>{d.documento || d.numero}</td>
+                            <td>{d.fecha_emision}</td>
+                            <td>{d.fecha_vencimiento}</td>
+                            <td className="num">
+                              <span className={`kpi-${(d.dias_vencidos || 0) > 90 ? 'negative' : (d.dias_vencidos || 0) > 60 ? 'warning' : 'negative'}`}>
+                                {d.dias_vencidos || 0}
+                              </span>
+                            </td>
+                            <td className="num">{fmtMoney(d.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{padding: '12px 16px', backgroundColor: '#f3f4f6', borderTop: '1px solid #e5e7eb', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between'}}>
+                      <span>TOTAL VENCIDO:</span>
+                      <span style={{color: '#ef4444'}}>{fmtMoney(totalVencidoCliente)}</span>
+                    </div>
+                  </div>
                 </div>
+              )}
+              
+              {/* Timeline de Gestiones */}
+              <div style={{marginTop: '24px'}}>
+                <h4 style={{margin: '16px 0 8px 0', color: '#374151'}}>📋 Historial de Gestiones</h4>
                 <div className="promesas-lista">
                   {filteredGestiones.length > 0 ? (
-                    filteredGestiones.map(g => {
+                    filteredGestiones.slice(0, 10).map(g => {
                       const borderColor = g.resultado.includes('Pagado') ? '#2ea44f' : g.resultado.includes('Promesa') ? '#f59e0b' : g.resultado.includes('No') ? '#e63946' : '#3b82f6';
                       return (
-                      <div key={g.id} className="promesa-item" style={{ borderLeft: `4px solid ${borderColor}` }}>
-                        <div className="promesa-main">
-                          <div className="flex-center">
-                            <span className="promesa-icon">{getTipoIcon(g.tipo)}</span>
-                            <div>
-                              <div className="promesa-info">{g.tipo} - {g.resultado}</div>
-                              <div className="promesa-fecha">📅 {g.fecha}</div>
+                        <div key={g.id} className="promesa-item" style={{ borderLeft: `4px solid ${borderColor}` }}>
+                          <div className="promesa-main">
+                            <div className="flex-center">
+                              <span className="promesa-icon">{g.tipo.includes("Llamada") ? "📞" : g.tipo.includes("Email") ? "📧" : g.tipo.includes("WhatsApp") ? "💬" : "📝"}</span>
+                              <div>
+                                <div className="promesa-info">{g.tipo} - {g.resultado}</div>
+                                <div className="promesa-fecha">📅 {g.fecha}</div>
+                              </div>
                             </div>
+                            <div className="promesa-observacion">{g.observacion}</div>
+                            {g.fecha_promesa && <div className="promesa-motivo status-color-warning">⏰ Promesa: {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}</div>}
                           </div>
-                          <div className="promesa-observacion">{g.observacion}</div>
-                          {g.motivo && <div className="promesa-motivo">🏷️ Motivo: {g.motivo}</div>}
-                          {g.fecha_promesa && <div className="promesa-motivo status-color-warning">⏰ Promesa: {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}</div>}
+                          <button className="promesa-eliminar" onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
                         </div>
-                        <button className="promesa-eliminar" onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
-                      </div>
                       );
                     })
                   ) : (
@@ -1244,7 +1393,7 @@ export default function App() {
                   )}
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       );
@@ -1261,7 +1410,11 @@ export default function App() {
         return { ...d, aging };
       });
 
-      const docsFiltradosAging = filtroAging === "Todos" ? docsConAging : docsConAging.filter(d => d.aging === filtroAging);
+      const docsFiltradosAging = filtroAging === "Todos" 
+        ? docsConAging 
+        : filtroAging === "Vencidos"
+        ? docsConAging.filter(d => (d.dias_vencidos || 0) > 0)
+        : docsConAging.filter(d => d.aging === filtroAging);
       
       const totalMonto = docsFiltradosAging.reduce((sum, d) => sum + d.total, 0);
       const promedioMonto = docsFiltradosAging.length > 0 ? totalMonto / docsFiltradosAging.length : 0;
@@ -1320,7 +1473,7 @@ export default function App() {
             d.cliente,
             d.dias_vencidos || 0,
             d.aging,
-            fmtMoney(d.saldo)
+            fmtMoney(d.total)
           ]);
           
           autoTable(doc, {
@@ -1352,12 +1505,14 @@ export default function App() {
                 <div className="kpi-value">{fmtMoney(totalMonto)}</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-title">Promedio por Doc</div>
-                <div className="kpi-value">{fmtMoney(promedioMonto)}</div>
+                <div className="kpi-title">Docs Vencidos</div>
+                <div className="kpi-value kpi-negative">{docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).length}</div>
+                <div className="kpi-subtitle">{docsFiltradosAging.length > 0 ? ((docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).length / docsFiltradosAging.length) * 100).toFixed(1) : 0}% del total</div>
               </div>
               <div className="kpi-card">
-                <div className="kpi-title">Concentración Top 5</div>
-                <div className="kpi-value kpi-warning">{pctConcentracion}%</div>
+                <div className="kpi-title">Monto Vencido</div>
+                <div className="kpi-value kpi-negative">{fmtMoney(docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + d.total, 0))}</div>
+                <div className="kpi-subtitle">{totalMonto > 0 ? ((docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + d.total, 0) / totalMonto) * 100).toFixed(1) : 0}% del total</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Clientes Únicos</div>
@@ -1391,6 +1546,7 @@ export default function App() {
                 <span>Aging</span>
                 <select value={filtroAging} onChange={e => setFiltroAging(e.target.value)}>
                   <option value="Todos">Todos</option>
+                  <option value="Vencidos">Vencidos (Todos)</option>
                   <option value="Por vencer">Por vencer</option>
                   <option value="0-30 días">0-30 días</option>
                   <option value="30-60 días">30-60 días</option>
@@ -3069,4 +3225,5 @@ export default function App() {
     </div>
   );
 }
+
 

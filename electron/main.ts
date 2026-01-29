@@ -853,6 +853,36 @@ function topClientes(limit = 10) {
     .all();
 }
 
+function clientesListar() {
+  try {
+    // Obtener todos los clientes de la tabla clientes con su información
+    const clientes = db.prepare(`
+      SELECT 
+        c.id,
+        c.cliente,
+        c.razon_social,
+        c.vendedor,
+        c.telefono,
+        c.email,
+        c.direccion,
+        c.contacto,
+        COALESCE(SUM(d.total), 0) as total_deuda,
+        COALESCE(SUM(CASE WHEN date(d.fecha_vencimiento) < date('now', 'localtime') AND d.total > 0 THEN d.total ELSE 0 END), 0) as deuda_vencida,
+        COUNT(d.id) as total_documentos,
+        MAX(CASE WHEN date(d.fecha_vencimiento) < date('now', 'localtime') THEN CAST(julianday(date('now', 'localtime')) - julianday(d.fecha_vencimiento) AS INTEGER) ELSE 0 END) as max_dias_vencidos
+      FROM clientes c
+      LEFT JOIN documentos d ON c.cliente = d.cliente AND d.is_subtotal = 0
+      GROUP BY c.id, c.cliente, c.razon_social, c.vendedor, c.telefono, c.email, c.direccion, c.contacto
+      ORDER BY c.razon_social ASC
+    `).all();
+    
+    return { ok: true, rows: clientes };
+  } catch (e: any) {
+    console.error("Error en clientesListar:", e);
+    return { ok: false, message: e.message, rows: [] };
+  }
+}
+
 // -----------------------------
 // Helpers de Importación
 // -----------------------------
@@ -1585,6 +1615,10 @@ ipcMain.handle("abonosListar", async () => {
     LIMIT 50
   `).all();
   return data;
+});
+
+ipcMain.handle("clientesListar", async () => {
+  return clientesListar();
 });
 
 ipcMain.handle("cuentaAplicarActualizar", (_evt, data) => {
