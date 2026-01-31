@@ -44,6 +44,7 @@ type Empresa = {
   email?: string;
   administrador?: string;
   meta_mensual?: number;
+  tema?: string;
 };
 
 type Documento = {
@@ -90,7 +91,15 @@ type Stats = {
     d60: number;
     d90: number;
     d120: number;
-    d120p: number;
+    d150: number;
+    d180: number;
+    d210: number;
+    d240: number;
+    d270: number;
+    d300: number;
+    d330: number;
+    d360: number;
+    d360p: number;
   };
   percentTop10: number;
   npl: number;
@@ -241,74 +250,22 @@ type Abono = {
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  // Temas disponibles
-  const themes = {
-    pastel: {
-      '--primary': '#FFB7B2', // rosa pastel
-      '--primary-dark': '#FFDAC1', // melón pastel
-      '--primary-light': '#FFD6E0', // rosado claro
-      '--accent': '#FFDAC1',
-      '--text': '#4B2E83', // morado profundo
-      '--card': '#FFFFFF',
-      '--border': '#FFD6E0',
-      '--bg-gradient': 'linear-gradient(135deg, #FFB7B2 0%, #FFD6E0 100%)',
-    },
-    lavanda: {
-      '--primary': '#B39DDB', // lavanda
-      '--primary-dark': '#4527A0', // violeta oscuro
-      '--primary-light': '#E1BEE7', // violeta claro
-      '--accent': '#CE93D8',
-      '--text': '#4527A0',
-      '--card': '#FFFFFF',
-      '--border': '#E1BEE7',
-      '--bg-gradient': 'linear-gradient(135deg, #B39DDB 0%, #E1BEE7 100%)',
-    },
-    coral: {
-      '--primary': '#FF6F61', // coral
-      '--primary-dark': '#6D4C41', // marrón oscuro
-      '--primary-light': '#FFB88C', // naranja suave
-      '--accent': '#FFD180',
-      '--text': '#6D4C41',
-      '--card': '#FFFFFF',
-      '--border': '#FFB88C',
-      '--bg-gradient': 'linear-gradient(135deg, #FF6F61 0%, #FFB88C 100%)',
-    },
-    azul: {
-      '--primary': '#1976D2', // azul fuerte
-      '--primary-dark': '#0D1B2A', // azul oscuro
-      '--primary-light': '#64B5F6', // azul claro
-      '--accent': '#00B8D4',
-      '--text': '#0D1B2A',
-      '--card': '#FFFFFF',
-      '--border': '#64B5F6',
-      '--bg-gradient': 'linear-gradient(135deg, #1976D2 0%, #64B5F6 100%)',
-    },
-    gris: {
-      '--primary': '#607D8B', // gris azulado
-      '--primary-dark': '#263238', // gris oscuro
-      '--primary-light': '#B0BEC5', // gris claro
-      '--accent': '#FFD54F', // amarillo cálido
-      '--text': '#263238',
-      '--card': '#FFFFFF',
-      '--border': '#B0BEC5',
-      '--bg-gradient': 'linear-gradient(135deg, #607D8B 0%, #B0BEC5 100%)',
-    },
-  };
+  // Temas disponibles (deben coincidir con los definidos en CSS)
+  const themeNames = ['claro', 'azul', 'pastel', 'oscuro', 'nature'];
+
   // Leer tema guardado en localStorage al iniciar
   const getInitialTheme = () => {
     const saved = window.localStorage.getItem('app_theme');
-    return saved && ['pastel','lavanda','coral','azul','gris'].includes(saved) ? saved : 'pastel';
+    return saved && themeNames.includes(saved) ? saved : 'azul';
   };
   const [theme, setTheme] = useState(getInitialTheme());
   const [pendingTheme, setPendingTheme] = useState(getInitialTheme());
 
-  // Aplica el tema al root
+
+  // Aplica el tema usando data-theme en <html> para CSS profesional
   useEffect(() => {
-    const root = document.documentElement;
-    const vars = themes[theme];
-    Object.entries(vars).forEach(([key, value]) => {
-      root.style.setProperty(key, value);
-    });
+    const html = document.documentElement;
+    html.setAttribute('data-theme', theme);
     window.localStorage.setItem('app_theme', theme);
   }, [theme]);
   useEffect(() => {
@@ -618,7 +575,14 @@ export default function App() {
         }
       }
 
-      if (empData) setEmpresa(empData as Empresa);
+      if (empData) {
+        const emp = empData as Empresa;
+        setEmpresa(emp);
+        if (emp.tema && themeNames.includes(emp.tema)) {
+          setTheme(emp.tema);
+          setPendingTheme(emp.tema);
+        }
+      }
       if (statsData) setStats(statsData as unknown as Stats);
       if (filtros) {
         const f = filtros as { clientes?: Array<{ cliente: string; razon_social: string }>; vendedores?: string[] };
@@ -965,6 +929,38 @@ export default function App() {
     }
   }
 
+  async function exportarBackup() {
+    if (isWeb) {
+      addToast("Esta función solo está disponible en la versión de escritorio", "info");
+      return;
+    }
+    try {
+      const result = await window.api.exportarBackup();
+      if (result.ok) {
+        addToast(`Respaldo guardado exitosamente`, "success");
+      } else if (result.message !== "Cancelado por el usuario") {
+        addToast("Error: " + result.message, "error");
+      }
+    } catch (e) {
+      console.error(e);
+      addToast("Error al exportar respaldo", "error");
+    }
+  }
+
+  async function cambiarLogo() {
+    if (isWeb) {
+      addToast("Solo disponible en la versión de escritorio", "info");
+      return;
+    }
+    try {
+      const result = await window.api.cambiarLogo();
+      if (result.ok) addToast("Logotipo actualizado correctamente", "success");
+      else if (result.message !== "Cancelado") addToast("Error: " + result.message, "error");
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const _deudaCliente = useMemo(() => {
     if (!selectedCliente) return { total: 0, vencido: 0 };
     const clienteDocs = docs.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente);
@@ -975,13 +971,20 @@ export default function App() {
 
   const agingData = useMemo(() => {
     if (!stats?.aging) return null;
+    // Calcular acumulado para >240 días (sumando todos los rangos posteriores)
+    const mas240 = (stats.aging.d270 || 0) + (stats.aging.d300 || 0) + (stats.aging.d330 || 0) + (stats.aging.d360 || 0) + (stats.aging.d360p || 0);
+
     return [
-      { name: "Por Vencer", saldo: stats.aging.porVencer, fill: "#10b981" },
-      { name: "1-30", saldo: stats.aging.d30, fill: "#3b82f6" },
-      { name: "31-60", saldo: stats.aging.d60, fill: "#f59e0b" },
-      { name: "61-90", saldo: stats.aging.d90, fill: "#ef4444" },
-      { name: "91-120", saldo: stats.aging.d120, fill: "#dc2626" },
-      { name: ">120", saldo: stats.aging.d120p, fill: "#991b1b" }
+      { name: "Por Vencer", saldo: stats.aging.porVencer || 0, fill: "#10b981" },
+      { name: "30", saldo: stats.aging.d30 || 0, fill: "#3b82f6" },
+      { name: "60", saldo: stats.aging.d60 || 0, fill: "#f59e0b" },
+      { name: "90", saldo: stats.aging.d90 || 0, fill: "#ef4444" },
+      { name: "120", saldo: stats.aging.d120 || 0, fill: "#dc2626" },
+      { name: "150", saldo: stats.aging.d150 || 0, fill: "#b91c1c" },
+      { name: "180", saldo: stats.aging.d180 || 0, fill: "#991b1b" },
+      { name: "210", saldo: stats.aging.d210 || 0, fill: "#7f1d1d" },
+      { name: "240", saldo: stats.aging.d240 || 0, fill: "#6b1515" },
+      { name: ">240", saldo: mas240, fill: "#5c0e0e" }
     ];
   }, [stats]);
 
@@ -1026,23 +1029,20 @@ export default function App() {
     if (tab === "dashboard") {
       return (
         <div style={{ 
-          padding: '8px', 
-          maxWidth: '100%', 
-          height: 'calc(100vh - 95px)', 
-          overflowY: 'hidden',
-          overflowX: 'auto',
+          width: '100%', 
+          height: '100%', 
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          gap: '6px',
-          background: 'linear-gradient(135deg, #fbeee6 0%, #f6e7d7 100%)',
+          gap: '12px',
         }}>
           
           {/* FILA 1: 6 KPIs ULTRA COMPACTOS - MÁS GRANDES */}
           <div style={{ 
+            flex: '0 0 auto',
             display: 'grid', 
             gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)', 
-            gap: '16px',
-            marginBottom: '18px',
+            gap: '12px',
           }}>
             <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>CARTERA TOTAL</div>
@@ -1079,48 +1079,49 @@ export default function App() {
 
           {/* FILA 2: 6 KPIs SECUNDARIOS */}
           <div style={{ 
+            flex: '0 0 auto',
             display: 'grid', 
             gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', 
-            gap: '6px'
+            gap: '12px'
           }}>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>DOCS</div>
+              <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>DOCS</div>
               <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>{stats?.docsPendientes || 0}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>VENCE 7D</div>
+              <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>VENCE 7D</div>
               <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f59e0b' }}>{fmtMoneyCompact(vencimientosProximos.monto7)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>VENCE 30D</div>
+              <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>VENCE 30D</div>
               <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f97316' }}>{fmtMoneyCompact(vencimientosProximos.monto30)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>RETENCIONES</div>
+              <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>RETENCIONES</div>
               <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>{fmtMoney(analisisRetenciones.totalRetenido)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>COBRADO MES</div>
+              <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>COBRADO MES</div>
               <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#10b981' }}>{fmtMoney(stats?.totalCobrado || 0)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
-              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>CRÓNICOS</div>
+              <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>CRÓNICOS</div>
               <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#ef4444' }}>{deudoresCronicos.length}</div>
             </div>
           </div>
 
           {/* FILA 3: 4 GRÁFICOS HORIZONTALES - BARRAS MUY FINAS Y COMPACTAS */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: 0, transform: 'translateY(-35px)' }}>
+          <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{
               display: 'grid',
               gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
-              gap: '2px',
-              minHeight: 110,
+              gap: '12px',
+              height: '100%',
               alignItems: 'stretch',
             }}>
             
             {/* AGING - BARRAS HORIZONTALES FINAS */}
-            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 110, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignSelf: 'end', marginTop: 'auto' }}>
+            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <RankingList
                 title="Aging de Cartera"
                 items={Array.isArray(agingData) ? agingData.map((a) => ({
@@ -1137,7 +1138,7 @@ export default function App() {
             </div>
 
             {/* TOP CLIENTES - BARRAS FINAS */}
-            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <RankingList
                 title="Top Clientes"
                 items={Array.isArray(topClientesData) ? topClientesData.slice(0, 10).map((c) => ({
@@ -1154,7 +1155,7 @@ export default function App() {
             </div>
 
             {/* VENDEDORES - BARRAS FINAS */}
-            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <RankingList
                 title="Por Vendedor"
                 items={Array.isArray(analisisPorVendedor) ? analisisPorVendedor.slice(0, 10).map((v) => ({
@@ -1171,7 +1172,7 @@ export default function App() {
             </div>
 
             {/* DEUDORES CRÓNICOS - BARRAS FINAS */}
-            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <RankingList
                 title="Deudores Crónicos"
                 items={Array.isArray(deudoresCronicos) ? deudoresCronicos.slice(0, 10).map((d) => ({
@@ -1438,7 +1439,7 @@ export default function App() {
           
           {/* Panel de Gestión Rápida (cuando se selecciona un cliente) */}
           {selectedCliente && selectedCliente !== "Todos" && (
-            <div className="card" style={{ background: '#e6f7f6' }}>
+            <div className="card">
               <div className="card-title">💬 Panel de Gestión Rápida - {selectedCliente}</div>
               <div className="flex-row">
                 <button className="btn secondary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
@@ -1458,7 +1459,7 @@ export default function App() {
               {/* Documentos Vencidos del Cliente */}
               {docsVencidosCliente.length > 0 && (
                 <div style={{marginTop: '16px'}}>
-                  <h4 style={{margin: '16px 0 8px 0', color: '#374151'}}>📄 Documentos Vencidos ({docsVencidosCliente.length})</h4>
+                  <h4 style={{margin: '16px 0 8px 0', color: 'var(--text-main)'}}>📄 Documentos Vencidos ({docsVencidosCliente.length})</h4>
                   <div className="table-wrapper">
                     <table className="data-table">
                       <thead>
@@ -1486,7 +1487,7 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
-                    <div style={{padding: '12px 16px', backgroundColor: '#f3f4f6', borderTop: '1px solid #e5e7eb', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between'}}>
+                    <div style={{padding: '12px 16px', backgroundColor: 'var(--bg-nav)', borderTop: '1px solid var(--border)', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between'}}>
                       <span>TOTAL VENCIDO:</span>
                       <span style={{color: '#ef4444'}}>{fmtMoney(totalVencidoCliente)}</span>
                     </div>
@@ -1496,7 +1497,7 @@ export default function App() {
               
               {/* Timeline de Gestiones */}
               <div style={{marginTop: '24px'}}>
-                <h4 style={{margin: '16px 0 8px 0', color: '#374151'}}>📋 Historial de Gestiones</h4>
+                <h4 style={{margin: '16px 0 8px 0', color: 'var(--text-main)'}}>📋 Historial de Gestiones</h4>
                 <div className="promesas-lista">
                   {filteredGestiones.length > 0 ? (
                     filteredGestiones.slice(0, 10).map(g => {
@@ -1531,66 +1532,162 @@ export default function App() {
 
     if (tab === "config") {
       return (
-        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: 'var(--card)', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
-          <h2 style={{ marginBottom: 18, fontWeight: 700, color: 'var(--text)' }}>Configuración y Administración</h2>
+        <div className="config-container">
+          <h2 style={{ marginBottom: 10, fontWeight: 800, color: 'var(--text-main)', fontSize: '1.8rem' }}>Configuración</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>Administra las preferencias generales y el sistema</p>
 
-          {/* Sección: Datos de Empresa */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Datos de Empresa</h3>
-            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }} onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Editar datos</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🖼️ Cambiar logo</button>
-          </div>
-
-          {/* Sección: Usuarios y Permisos */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Usuarios y Permisos</h3>
-            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }}>👤 Administrar usuarios</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔑 Roles y permisos</button>
-          </div>
-
-          {/* Sección: Importación/Exportación */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Importación y Exportación</h3>
-            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📤 Exportar respaldo</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📄 Descargar plantilla</button>
-          </div>
-
-          {/* Sección: Sincronización y Backup */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Sincronización y Backup</h3>
-            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }}>🔄 Sincronizar</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>💾 Backup manual</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>♻️ Restaurar backup</button>
-          </div>
-
-          {/* Sección: Personalización y Temas */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
-              <button className={`btn theme${pendingTheme === 'pastel' ? ' selected' : ''}`} style={{ background: themes.pastel['--bg-gradient'], color: themes.pastel['--text'], border: pendingTheme === 'pastel' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('pastel')}>🌸 Femenino Pastel</button>
-              <button className={`btn theme${pendingTheme === 'lavanda' ? ' selected' : ''}`} style={{ background: themes.lavanda['--bg-gradient'], color: themes.lavanda['--text'], border: pendingTheme === 'lavanda' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('lavanda')}>💜 Femenino Lavanda</button>
-              <button className={`btn theme${pendingTheme === 'coral' ? ' selected' : ''}`} style={{ background: themes.coral['--bg-gradient'], color: themes.coral['--text'], border: pendingTheme === 'coral' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('coral')}>🌷 Femenino Coral</button>
-              <button className={`btn theme${pendingTheme === 'azul' ? ' selected' : ''}`} style={{ background: themes.azul['--bg-gradient'], color: themes.azul['--text'], border: pendingTheme === 'azul' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('azul')}>🟦 Masculino Azul</button>
-              <button className={`btn theme${pendingTheme === 'gris' ? ' selected' : ''}`} style={{ background: themes.gris['--bg-gradient'], color: themes.gris['--text'], border: pendingTheme === 'gris' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('gris')}>🟫 Masculino Gris</button>
-              <button className="btn primary" style={{ marginLeft: 16, minWidth: 90 }} onClick={() => setTheme(pendingTheme)} disabled={theme === pendingTheme}>Aplicar</button>
+          <div className="config-grid">
+            
+            {/* TARJETA 1: PERSONALIZACIÓN (FULL WIDTH) */}
+            <div className="config-card full-width" style={{background: 'linear-gradient(to right, var(--bg-surface), var(--bg-main))'}}>
+              <div className="config-header">
+                <div className="config-icon-box">🎨</div>
+                <div className="config-title">
+                  <h3>Personalización Visual</h3>
+                  <p>Elige el tema que mejor se adapte a tu estilo</p>
+                </div>
+              </div>
+              
+              <div className="theme-section">
+                <div className="theme-options">
+                  {[
+                    { id: 'claro', name: 'Clásico', class: 'theme-preview-claro' },
+                    { id: 'azul', name: 'Corporativo', class: 'theme-preview-azul' },
+                    { id: 'pastel', name: 'Suave', class: 'theme-preview-pastel' },
+                    { id: 'oscuro', name: 'Noche', class: 'theme-preview-oscuro' },
+                    { id: 'nature', name: 'Nature', class: 'theme-preview-nature' }
+                  ].map((t) => (
+                    <div
+                      key={t.id}
+                      className={`theme-btn ${t.class} ${pendingTheme === t.id ? 'active' : ''}`}
+                      data-name={t.name}
+                      onClick={() => setPendingTheme(t.id)}
+                      title={`Seleccionar tema ${t.name}`}
+                    >
+                      {pendingTheme === t.id && <span className="theme-check">✓</span>}
+                    </div>
+                  ))}
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '25px' }}>
+                  <button 
+                    className="btn primary" 
+                    style={{ padding: '12px 32px', fontSize: '1rem', borderRadius: '12px', boxShadow: '0 4px 14px rgba(0,0,0,0.1)' }}
+                    onClick={async () => {
+                      setTheme(pendingTheme);
+                      const nuevaEmpresa = { ...empresa, tema: pendingTheme };
+                      setEmpresa(nuevaEmpresa);
+                      if (!isWeb) {
+                        try {
+                            await window.api.empresaGuardar(nuevaEmpresa);
+                            addToast("Tema guardado y aplicado", "success");
+                        } catch(e) {
+                            console.error(e);
+                            addToast("Error guardando tema", "error");
+                        }
+                      } else {
+                          addToast("Tema aplicado (local)", "success");
+                      }
+                    }} 
+                  >
+                    💾 Guardar y Aplicar Tema
+                  </button>
+                </div>
+              </div>
             </div>
-            <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Presiona "Aplicar" para ver los cambios.</span>
-          </div>
 
-          {/* Sección: Seguridad */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Seguridad</h3>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔒 Cambiar contraseña</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔐 Autenticación 2 pasos</button>
-          </div>
+            {/* TARJETA 2: EMPRESA */}
+            <div className="config-card">
+              <div className="config-header">
+                <div className="config-icon-box">🏢</div>
+                <div className="config-title">
+                  <h3>Empresa</h3>
+                  <p>Información legal y marca</p>
+                </div>
+              </div>
+              <div className="config-actions">
+                <button className="config-btn" onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>
+                  <span><span className="config-btn-icon">⚙️</span> Editar datos generales</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+                <button className="config-btn" onClick={cambiarLogo} disabled={!hasWritePermissions}>
+                  <span><span className="config-btn-icon">🖼️</span> Cambiar logotipo</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+              </div>
+            </div>
 
-          {/* Sección: Soporte y Ayuda */}
-          <div style={{ marginBottom: 0 }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Soporte y Ayuda</h3>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📖 Ver documentación</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>💬 Contactar soporte</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📝 Historial de cambios</button>
+            {/* TARJETA 3: DATOS */}
+            <div className="config-card">
+              <div className="config-header">
+                <div className="config-icon-box">💾</div>
+                <div className="config-title">
+                  <h3>Gestión de Datos</h3>
+                  <p>Importación y respaldos</p>
+                </div>
+              </div>
+              <div className="config-actions">
+                <button className="config-btn" onClick={importarExcel} disabled={!hasWritePermissions}>
+                  <span><span className="config-btn-icon">📥</span> Importar Excel Contifico</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+                <button className="config-btn" onClick={exportarBackup}>
+                  <span><span className="config-btn-icon">📤</span> Exportar respaldo completo</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+                <button className="config-btn" onClick={() => setShowModalLimpiar(true)} style={{color: '#ef4444', borderColor: '#fee2e2', background: '#fef2f2'}}>
+                  <span><span className="config-btn-icon">🗑️</span> Limpiar base de datos</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TARJETA 4: USUARIOS Y SEGURIDAD */}
+            <div className="config-card">
+              <div className="config-header">
+                <div className="config-icon-box">🛡️</div>
+                <div className="config-title">
+                  <h3>Seguridad</h3>
+                  <p>Usuarios y accesos</p>
+                </div>
+              </div>
+              <div className="config-actions">
+                <button className="config-btn" onClick={() => addToast("Módulo de Usuarios en desarrollo", "info")}>
+                  <span><span className="config-btn-icon">👤</span> Administrar usuarios</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+                <button className="config-btn" onClick={() => addToast("Cambio de contraseña en desarrollo", "info")}>
+                  <span><span className="config-btn-icon">🔒</span> Cambiar contraseña</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+                <button className="config-btn" onClick={() => addToast("Gestión de Roles en desarrollo", "info")}>
+                  <span><span className="config-btn-icon">🔑</span> Roles y permisos</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TARJETA 5: SISTEMA */}
+            <div className="config-card">
+              <div className="config-header">
+                <div className="config-icon-box">🔧</div>
+                <div className="config-title">
+                  <h3>Sistema</h3>
+                  <p>Mantenimiento y ayuda</p>
+                </div>
+              </div>
+              <div className="config-actions">
+                <button className="config-btn" onClick={() => addToast("Documentación próximamente", "info")}>
+                  <span><span className="config-btn-icon">📖</span> Documentación</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+                <button className="config-btn" onClick={() => addToast("Historial disponible en próximas versiones", "info")}>
+                  <span><span className="config-btn-icon">📝</span> Historial de cambios</span>
+                  <span className="config-btn-arrow">→</span>
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       );
@@ -1656,7 +1753,7 @@ export default function App() {
 
       return (
         <div>
-          <div className="card" style={{ background: '#fbeee6' }}>
+          <div className="card">
             <div className="card-title">📊 Resumen Ejecutivo</div>
             <div className="kpis-grid">
               <div className="kpi-card">
@@ -1679,12 +1776,12 @@ export default function App() {
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Clientes Únicos</div>
-                {/* Puedes agregar aquí el cálculo de top5Clientes si lo necesitas */}
+                <div className="kpi-value">{new Set(docs.map((d: any) => d.cliente)).size}</div>
               </div>
             </div>
           </div>
 
-          <div className="card" style={{ background: '#f6e7d7' }}>
+          <div className="card">
             <div className="card-title">📋 Reporte de Documentos</div>
             <div className="row">
               <label className="field">
@@ -1720,10 +1817,11 @@ export default function App() {
                   <option value="Todos">Todos</option>
                   <option value="Vencidos">Vencidos (Todos)</option>
                   <option value="Por vencer">Por vencer</option>
-                  <option value="0-30 días">0-30 días</option>
-                  <option value="30-60 días">30-60 días</option>
-                  <option value="60-90 días">60-90 días</option>
-                  <option value="+90 días">+90 días</option>
+                  <option value="30">30</option>
+                  <option value="60">60</option>
+                  <option value="90">90</option>
+                  <option value="120">120</option>
+                  <option value="+120">+120</option>
                 </select>
               </label>
             </div>
@@ -1765,20 +1863,27 @@ export default function App() {
                           <td>{d.vendedor}</td>
                           <td>{d.fecha_vencimiento}</td>
                           <td>
-                            <span className={((d.aging || (d.dias_vencidos !== undefined ? (d.dias_vencidos > 120 ? '>120' : d.dias_vencidos > 90 ? '91-120' : d.dias_vencidos > 60 ? '61-90' : d.dias_vencidos > 30 ? '31-60' : d.dias_vencidos > 0 ? '1-30' : 'Por Vencer') : '')).includes('+90')) ? 'kpi-negative' : ((d.aging || (d.dias_vencidos !== undefined ? (d.dias_vencidos > 120 ? '>120' : d.dias_vencidos > 90 ? '91-120' : d.dias_vencidos > 60 ? '61-90' : d.dias_vencidos > 30 ? '31-60' : d.dias_vencidos > 0 ? '1-30' : 'Por Vencer') : '')).includes('60-90')) ? 'kpi-warning' : ''}>
+                            <span className={((d.dias_vencidos || 0) > 90) ? 'kpi-negative' : ((d.dias_vencidos || 0) > 60) ? 'kpi-warning' : ''}>
                               {d.aging
                                 ? d.aging
                                 : d.dias_vencidos !== undefined
-                                  ? d.dias_vencidos > 120 ? '>120'
-                                    : d.dias_vencidos > 90 ? '91-120'
-                                    : d.dias_vencidos > 60 ? '61-90'
-                                    : d.dias_vencidos > 30 ? '31-60'
-                                    : d.dias_vencidos > 0 ? '1-30'
+                                  ? d.dias_vencidos > 360 ? '>360'
+                                    : d.dias_vencidos > 330 ? '360'
+                                    : d.dias_vencidos > 300 ? '330'
+                                    : d.dias_vencidos > 270 ? '300'
+                                    : d.dias_vencidos > 240 ? '270'
+                                    : d.dias_vencidos > 210 ? '240'
+                                    : d.dias_vencidos > 180 ? '210'
+                                    : d.dias_vencidos > 150 ? '180'
+                                    : d.dias_vencidos > 120 ? '150'
+                                    : d.dias_vencidos > 90 ? '120'
+                                    : d.dias_vencidos > 60 ? '90'
+                                    : d.dias_vencidos > 30 ? '60'
+                                    : d.dias_vencidos > 0 ? '30'
                                     : 'Por Vencer'
                                   : '-'}
                             </span>
                           </td>
-                          <td><span className={(d.aging || '').includes('+90') ? 'kpi-negative' : (d.aging || '').includes('60-90') ? 'kpi-warning' : ''}>{d.aging || '-'}</span></td>
                           <td className="num">{fmtMoney(typeof d.total === 'number' ? d.total : (d.valor_documento || 0))}</td>
                         </tr>
                       ))
@@ -1797,7 +1902,7 @@ export default function App() {
           </div>
 
           {/* NUEVO: Análisis por Vendedor */}
-          <div className="card" style={{ background: '#f7e6f7' }}>
+          <div className="card">
             <div className="card-title">👤 Análisis por Vendedor</div>
             <div className="table-wrapper">
               <table className="data-table">
@@ -1924,7 +2029,7 @@ export default function App() {
 
       return (
         <div>
-          <div className="card" style={{ background: '#f7f6f3' }}>
+          <div className="card">
             <div className="card-title">💼 Resumen de Promesas de Pago</div>
             <div className="kpis-grid">
               <div className="kpi-card">
@@ -1950,7 +2055,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="card" style={{ background: '#f7f6f3' }}>
+          <div className="card">
             <div className="card-title">📅 Gestión de Promesas de Pago</div>
             <div className="row">
               <label className="field">
@@ -2007,7 +2112,7 @@ export default function App() {
     if (tab === "analisis") {
       return (
         <div>
-          <div className="card" style={{ background: '#fbeee6' }}>
+          <div className="card">
             <div className="card-title">📊 Panel de Análisis</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
               <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
@@ -2154,7 +2259,7 @@ export default function App() {
                   <tbody>
                     {deudoresCronicos.length > 0 ? (
                       deudoresCronicos.map((d, idx) => (
-                        <tr key={idx} style={{ background: idx < 5 ? '#fef2f2' : 'transparent' }}>
+                        <tr key={idx} style={{ background: idx < 5 ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
                           <td><strong>{idx + 1}</strong></td>
                           <td>{d.razon_social}</td>
                           <td>{d.vendedor}</td>
@@ -2289,7 +2394,7 @@ export default function App() {
                       <td className="num">{fmtMoney(a.total_anterior)}</td>
                       <td className="num kpi-positive">{fmtMoney(a.total_anterior - a.total_nuevo)}</td>
                       <td className="num">{fmtMoney(a.total_nuevo)}</td>
-                      <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{a.observacion || '-'}</td>
+                      <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{a.observacion || '-'}</td>
                     </tr>
                   ))
                 ) : (
@@ -2310,8 +2415,8 @@ export default function App() {
 
     if (tab === "config") {
       return (
-        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
-          <h2 style={{ marginBottom: 18, fontWeight: 700, color: '#374151' }}>Configuración y Administración</h2>
+        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: 'var(--bg-surface)', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
+          <h2 style={{ marginBottom: 18, fontWeight: 700, color: 'var(--text-main)' }}>Configuración y Administración</h2>
 
           {/* Sección: Datos de Empresa */}
           <div style={{ marginBottom: 24 }}>
@@ -2346,7 +2451,7 @@ export default function App() {
           {/* Sección: Personalización y Temas */}
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
               <button className={`btn theme${theme === 'pastel' ? ' selected' : ''}`} style={{ background: themes.pastel['--bg-gradient'], color: themes.pastel['--text'], border: theme === 'pastel' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('pastel')}>🌸 Femenino Pastel</button>
               <button className={`btn theme${theme === 'lavanda' ? ' selected' : ''}`} style={{ background: themes.lavanda['--bg-gradient'], color: themes.lavanda['--text'], border: theme === 'lavanda' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('lavanda')}>💜 Femenino Lavanda</button>
               <button className={`btn theme${theme === 'coral' ? ' selected' : ''}`} style={{ background: themes.coral['--bg-gradient'], color: themes.coral['--text'], border: theme === 'coral' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('coral')}>🌷 Femenino Coral</button>
@@ -2358,17 +2463,17 @@ export default function App() {
 
           {/* Sección: Seguridad */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Seguridad</h3>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🔒 Cambiar contraseña</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🔐 Autenticación 2 pasos</button>
+            <h3 style={{ color: 'var(--accent)', marginBottom: 8 }}>Seguridad</h3>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔒 Cambiar contraseña</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔐 Autenticación 2 pasos</button>
           </div>
 
           {/* Sección: Soporte y Ayuda */}
           <div style={{ marginBottom: 0 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Soporte y Ayuda</h3>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📖 Ver documentación</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>💬 Contactar soporte</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📝 Historial de cambios</button>
+            <h3 style={{ color: 'var(--accent)', marginBottom: 8 }}>Soporte y Ayuda</h3>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📖 Ver documentación</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>💬 Contactar soporte</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📝 Historial de cambios</button>
           </div>
         </div>
       );
@@ -2396,11 +2501,11 @@ export default function App() {
               💰
             </div>
             <div>
-              <h1 style={{margin: 0, fontSize: '1.4rem', fontWeight: '700', color: '#0f172a'}}>
+              <h1 style={{margin: 0, fontSize: '1.4rem', fontWeight: '700', color: 'var(--text-main)'}}>
                 {empresa.nombre || 'Cartera Dashboard'}
               </h1>
               {empresa.administrador && (
-                <div style={{fontSize: '0.8rem', color: '#64748b', marginTop: '2px'}}>
+                <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '2px'}}>
                   👤 {empresa.administrador}
                 </div>
               )}
@@ -2646,7 +2751,7 @@ export default function App() {
                       percentMora90: 0,
                       docsPendientes: 0,
                       clientesConSaldo: 0,
-                      aging: { porVencer: 0, d30: 0, d60: 0, d90: 0, d120: 0, d120p: 0 },
+                      aging: { porVencer: 0, d30: 0, d60: 0, d90: 0, d120: 0, d150: 0, d180: 0, d210: 0, d240: 0, d270: 0, d300: 0, d330: 0, d360: 0, d360p: 0 },
                       percentTop10: 0,
                       npl: 0,
                       dso: 0,

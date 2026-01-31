@@ -519,6 +519,10 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    // Intentar cargar icono personalizado
+    icon: fs.existsSync(join(app.getPath('userData'), 'custom-logo.png')) 
+      ? join(app.getPath('userData'), 'custom-logo.png') 
+      : undefined
   });
 
   mainWindow.maximize();
@@ -626,7 +630,15 @@ function computeStats() {
         COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 30 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 60 THEN total ELSE 0 END), 0) AS d60,
         COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 60 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 90 THEN total ELSE 0 END), 0) AS d90,
         COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 90 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 120 THEN total ELSE 0 END), 0) AS d120,
-        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 120 THEN total ELSE 0 END), 0) AS d120p
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 120 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 150 THEN total ELSE 0 END), 0) AS d150,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 150 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 180 THEN total ELSE 0 END), 0) AS d180,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 180 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 210 THEN total ELSE 0 END), 0) AS d210,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 210 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 240 THEN total ELSE 0 END), 0) AS d240,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 240 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 270 THEN total ELSE 0 END), 0) AS d270,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 270 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 300 THEN total ELSE 0 END), 0) AS d300,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 300 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 330 THEN total ELSE 0 END), 0) AS d330,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 330 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 360 THEN total ELSE 0 END), 0) AS d360,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 360 THEN total ELSE 0 END), 0) AS d360p
        FROM documentos
        WHERE is_subtotal = 0`
     )
@@ -704,7 +716,15 @@ function computeStats() {
       d60: Number(aging.d60 || 0),
       d90: Number(aging.d90 || 0),
       d120: Number(aging.d120 || 0),
-      d120p: Number(aging.d120p || 0),
+      d150: Number(aging.d150 || 0),
+      d180: Number(aging.d180 || 0),
+      d210: Number(aging.d210 || 0),
+      d240: Number(aging.d240 || 0),
+      d270: Number(aging.d270 || 0),
+      d300: Number(aging.d300 || 0),
+      d330: Number(aging.d330 || 0),
+      d360: Number(aging.d360 || 0),
+      d360p: Number(aging.d360p || 0),
     },
     percentTop10,
     // KPIs Críticos FASE 1
@@ -879,7 +899,7 @@ function clientesListar() {
     return { ok: true, rows: clientes };
   } catch (e: any) {
     console.error("Error en clientesListar:", e);
-    return { ok: false, message: e.message, rows: [] };
+    return { ok: false, message: e.message, rows: [] as unknown[] };
   }
 }
 
@@ -1162,8 +1182,22 @@ app.whenReady().then(async () => {
   const dbInstance = openDb();
   db = dbInstance.db;
 
+  // MIGRACIÓN AUTOMÁTICA: Asegurar que existe la columna 'tema'
+  try {
+    const cols = db.prepare("PRAGMA table_info(empresa)").all();
+    if (!cols.find((c: any) => c.name === 'tema')) {
+      db.prepare("ALTER TABLE empresa ADD COLUMN tema TEXT DEFAULT 'claro'").run();
+    }
+  } catch (e) { console.error("Error verificando columna tema:", e); }
+
   // INICIAR SERVIDOR WEB
   startWebServer();
+
+  // Cargar icono personalizado si existe
+  const customIconPath = join(app.getPath('userData'), 'custom-logo.png');
+  if (fs.existsSync(customIconPath)) {
+    // Se aplicará cuando se cree la ventana
+  }
 
   await createWindow();
 
@@ -1291,13 +1325,60 @@ ipcMain.handle("empresaObtener", async () => {
 });
 
 ipcMain.handle("empresaGuardar", async (_evt, data) => {
+  // Obtenemos datos actuales para asegurar que no falten campos al hacer merge
+  const current = db.prepare("SELECT * FROM empresa WHERE id = 1").get();
+  const finalData = { ...current, ...data };
+
   const stmt = db.prepare(`
     UPDATE empresa 
-    SET nombre = @nombre, direccion = @direccion, telefono = @telefono, email = @email, ruc = @ruc, administrador = @administrador, iva_percent = @iva_percent
+    SET nombre = @nombre, direccion = @direccion, telefono = @telefono, 
+        email = @email, ruc = @ruc, administrador = @administrador, 
+        iva_percent = @iva_percent,
+        tema = @tema
     WHERE id = 1
   `);
-  stmt.run(data);
+  stmt.run(finalData);
   return { ok: true };
+});
+
+ipcMain.handle("exportarBackup", async () => {
+  try {
+    const dbPath = getDbFilePath();
+    const { filePath } = await dialog.showSaveDialog({
+      title: "Guardar Respaldo de Base de Datos",
+      defaultPath: `cartera-backup-${new Date().toISOString().split('T')[0]}.db`,
+      filters: [{ name: "SQLite Database", extensions: ["db"] }]
+    });
+
+    if (filePath) {
+      fs.copyFileSync(dbPath, filePath);
+      return { ok: true, path: filePath };
+    }
+    return { ok: false, message: "Cancelado por el usuario" };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("cambiarLogo", async () => {
+  if (!mainWindow) return { ok: false, message: "Ventana no disponible" };
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Seleccionar Logotipo de Empresa",
+      properties: ['openFile'],
+      filters: [{ name: 'Imágenes', extensions: ['png', 'ico', 'jpg', 'jpeg'] }]
+    });
+
+    if (canceled || filePaths.length === 0) return { ok: false, message: "Cancelado" };
+
+    const sourcePath = filePaths[0];
+    const destPath = join(app.getPath('userData'), 'custom-logo.png');
+    fs.copyFileSync(sourcePath, destPath);
+    mainWindow.setIcon(destPath);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
 });
 
 ipcMain.handle("reiniciarEstructuraExcel", async () => {
@@ -1736,5 +1817,3 @@ ipcMain.handle("checkRemoteUrl", async () => {
   const url = await checkAndRefreshNgrok();
   return { ok: !!url, url };
 });
-
-
