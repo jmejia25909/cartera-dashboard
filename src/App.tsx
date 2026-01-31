@@ -1,8 +1,10 @@
 /* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "./App.css";
-import { fmtMoney, fmtMoneyCompact, fmtCompactNumber } from "./utils/formatters";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { fmtMoney, fmtMoneyCompact } from "./utils/formatters";
+
+import { RankingList } from './components/RankingList';
+// import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 
 // Lazy loading de librerías pesadas (solo se cargan cuando se usan)
 const loadXLSX = () => import('xlsx');
@@ -16,6 +18,13 @@ const loadJsPDF = async () => {
 
 /* eslint-disable jsx-a11y/no-static-element-interactions */
 /* eslint-disable react/no-array-index-key */
+
+// Definición global para evitar error TS2339 en window.api
+declare global {
+  interface Window {
+    api?: any;
+  }
+}
 
 const isWeb = !window.api;
 
@@ -47,12 +56,22 @@ type Documento = {
   fecha_emision: string;
   fecha_vencimiento: string;
   vendedor?: string;
+  centro_costo?: string;
+  categoria_persona?: string;
   total: number;
   valor_documento?: number;
   retenciones?: number;
   cobros?: number;
   saldo?: number;
   dias_vencidos?: number;
+  // Campos de aging
+  por_vencer?: number;
+  dias_30?: number;
+  dias_60?: number;
+  dias_90?: number;
+  dias_120?: number;
+  dias_mas_120?: number;
+  aging?: string; // Propiedad usada en reportes
 };
 
 type Stats = {
@@ -100,14 +119,14 @@ type Gestion = {
   monto_promesa?: number;
 };
 
-type Campana = {
-  id: number;
-  nombre: string;
-  descripcion?: string;
-  fecha_inicio?: string;
-  fecha_fin?: string;
-  responsable?: string;
-};
+// type Campana = {
+//   id: number;
+//   nombre: string;
+//   descripcion?: string;
+//   fecha_inicio?: string;
+//   fecha_fin?: string;
+//   responsable?: string;
+// };
 
 type TopCliente = {
   razon_social: string;
@@ -168,17 +187,17 @@ type TendenciaMes = {
   vencidos: number;
 };
 
-type Disputa = {
-  id: number;
-  documento: string;
-  cliente: string;
-  monto: number;
-  motivo?: string;
-  estado: string;
-  fecha_creacion: string;
-  fecha_resolucion?: string;
-  observacion?: string;
-};
+// type Disputa = {
+//   id: number;
+//   documento: string;
+//   cliente: string;
+//   monto: number;
+//   motivo?: string;
+//   estado: string;
+//   fecha_creacion: string;
+//   fecha_resolucion?: string;
+//   observacion?: string;
+// };
 
 type CuentaAplicar = {
   id: number;
@@ -227,7 +246,7 @@ export default function App() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  const [tab, setTab] = useState<"dashboard" | "gestion" | "reportes" | "crm" | "campanas" | "analisis" | "alertas" | "tendencias" | "disputas" | "cuentas" | "config">("dashboard");
+  const [tab, setTab] = useState<"dashboard" | "gestion" | "reportes" | "crm" | "analisis" | "alertas" | "tendencias" | "cuentas" | "config">("dashboard");
   const [empresa, setEmpresa] = useState<Empresa>({ nombre: "Cartera Dashboard" });
   const [stats, setStats] = useState<Stats | null>(null);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -238,7 +257,6 @@ export default function App() {
   const [topClientes, setTopClientes] = useState<TopCliente[]>([]);
   const [gestiones, setGestiones] = useState<Gestion[]>([]);
   const [promesas, setPromesas] = useState<Gestion[]>([]);
-  const [campanas, setCampanas] = useState<Campana[]>([]);
   const [analisisRiesgo, setAnalisisRiesgo] = useState<AnalisisRiesgo[]>([]);
   const [motivosData, setMotivosData] = useState<MotivoImpago[]>([]);
   const [productividadData, setProductividadData] = useState<ProductividadGestor[]>([]);
@@ -246,14 +264,11 @@ export default function App() {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [pronosticos, setPronosticos] = useState<Pronostico[]>([]);
   const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
-  const [disputas, setDisputas] = useState<Disputa[]>([]);
-  const [cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
+  const [_cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
   const [abonos, setAbonos] = useState<Abono[]>([]);
   const [repoUrl, setRepoUrl] = useState<string>("");
   // URL remota obtenida dinámicamente desde ngrok
   const [remoteUrl, setRemoteUrl] = useState<string>("");
-  const [localUrlHealthy, setLocalUrlHealthy] = useState(true);
-  const [remoteUrlHealthy, setRemoteUrlHealthy] = useState(false);
   
 
   // Estado para detectar si el cliente tiene permisos de escritura
@@ -261,35 +276,17 @@ export default function App() {
   
   // Estados para búsqueda y filtros
   const [searchDocumentos, setSearchDocumentos] = useState("");
-  const [searchGestiones, setSearchGestiones] = useState("");
-  const [filtroEstadoGestion, setFiltroEstadoGestion] = useState("Todos");
+  const [searchGestiones, _setSearchGestiones] = useState("");
+  const [filtroEstadoGestion, _setFiltroEstadoGestion] = useState("Todos");
   const [searchAlertas, setSearchAlertas] = useState("");
   const [filtroSeveridad, setFiltroSeveridad] = useState("Todos");
-  const [searchDisputas, setSearchDisputas] = useState("");
-  const [filtroEstadoDisputa, setFiltroEstadoDisputa] = useState("Todos");
-  const [searchCuentas, setSearchCuentas] = useState("");
-  const [filtroEstadoCuenta, setFiltroEstadoCuenta] = useState("Todos");
-  
-  // Estados para tab Disputas
-  const [disputaSeleccionada, setDisputaSeleccionada] = useState<number | null>(null);
-  const [categoriaDisputa, setCategoriaDisputa] = useState("General");
-  const [estadoIntermedio, setEstadoIntermedio] = useState("Nueva");
-  
-  // Estados para tab Cuentas
-  const [modoAplicacion, setModoAplicacion] = useState<"manual" | "sugerida" | "masiva">("manual");
-  const [mostrarHistorial, setMostrarHistorial] = useState(false);
-  const [mostrarConciliacion, setMostrarConciliacion] = useState(false);
   
   // Estados para tab CRM
   const [filtroFecha, setFiltroFecha] = useState("Todas");
   const [filtroMonto, setFiltroMonto] = useState("Todos");
   
-  // Estados para tab Campañas
-  const [campanaSeleccionada, setCampanaSeleccionada] = useState<number | null>(null);
-  const [clientesCampana, setClientesCampana] = useState<string[]>([]);
-  
   // Estados para tab Análisis
-  const [vistaAnalisis, setVistaAnalisis] = useState<"motivos" | "productividad" | "segmentacion" | "riesgo" | "comparativa">("motivos");
+  const [vistaAnalisis, setVistaAnalisis] = useState<"motivos" | "productividad" | "segmentacion" | "riesgo" | "comparativa" | "cronicos">("motivos");
   
   // Estados para tab Alertas
   const [umbralDias, setUmbralDias] = useState(30);
@@ -303,9 +300,26 @@ export default function App() {
   // Estados para tab Gestión
   const [filtroVistaGestion, setFiltroVistaGestion] = useState("Todos");
   
+  // Estados para tab Reportes
+  const [filtroAging, setFiltroAging] = useState("Todos");
+  const [vistaAgrupada, setVistaAgrupada] = useState(false);
+  
+  // Estados para nuevas funcionalidades
+  const [filtroCentroCosto, setFiltroCentroCosto] = useState("Todos");
+  const [centrosCosto, setCentrosCosto] = useState<string[]>([]);
+  
   // Estado para notificaciones
-    const [toasts, setToasts] = useState<Toast[]>([]);
-    const toastIdRef = useRef(0);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = useRef(0);
+
+  // Estados para modales
+  const [showModalGestion, setShowModalGestion] = useState(false);
+  const [showModalEmpresa, setShowModalEmpresa] = useState(false);
+  const [showModalLimpiar, setShowModalLimpiar] = useState(false);
+
+  // Estados de health check
+  const [localUrlHealthy, setLocalUrlHealthy] = useState<boolean>(false);
+  const [remoteUrlHealthy, setRemoteUrlHealthy] = useState<boolean>(false);
   
   // Actualizar contador de alertas cuando cambian los datos
   useEffect(() => {
@@ -316,11 +330,11 @@ export default function App() {
   
   // Función helper para agregar notificaciones
   const addToast = useCallback((message: string, type: "success" | "error" | "info" = "info", duration = 3000) => {
-      const id = toastIdRef.current++;
-    setToasts(prev => [...prev, { id, message, type, duration }]);
+    const id = toastIdRef.current++;
+    setToasts((prev: Toast[]) => [...prev, { id, message, type, duration }]);
     if (duration > 0) {
       setTimeout(() => {
-        setToasts(prev => prev.filter(t => t.id !== id));
+        setToasts((prev: Toast[]) => prev.filter((t: Toast) => t.id !== id));
       }, duration);
     }
   }, []);
@@ -430,9 +444,6 @@ export default function App() {
   }, [remoteUrl, repoUrl, checkUrlHealth]);
 
   // Estados para formularios
-  const [showModalGestion, setShowModalGestion] = useState(false);
-  const [showModalCampana, setShowModalCampana] = useState(false);
-  const [showModalEmpresa, setShowModalEmpresa] = useState(false);
   const [gestionForm, setGestionForm] = useState({
     tipo: "Llamada",
     resultado: "Contactado",
@@ -440,30 +451,6 @@ export default function App() {
     motivo: "",
     fecha_promesa: "",
     monto_promesa: 0
-  });
-  const [campanaForm, setCampanaForm] = useState({
-    nombre: "",
-    descripcion: "",
-    fecha_inicio: "",
-    fecha_fin: "",
-    responsable: ""
-  });
-  const [showModalDisputa, setShowModalDisputa] = useState(false);
-  const [showModalCuenta, setShowModalCuenta] = useState(false);
-  const [showModalLimpiar, setShowModalLimpiar] = useState(false);
-  const [disputaForm, setDisputaForm] = useState({
-    documento: "",
-    cliente: "",
-    monto: 0,
-    motivo: "",
-    observacion: ""
-  });
-  const [cuentaForm, setCuentaForm] = useState({
-    documento: "",
-    cliente: "",
-    monto: 0,
-    tipo: "Adelanto",
-    observacion: ""
   });
   
   useEffect(() => {
@@ -504,29 +491,35 @@ export default function App() {
   async function cargarDatos() {
     try {
       if (isWeb) {
-        // Modo web: usar fetch() al servidor HTTP
-        const [empData, statsData, filtros, top] = await Promise.all([
-          fetch("/api/empresa").then(r => r.json()),
-          fetch("/api/stats").then(r => r.json()),
-          fetch("/api/filtros").then(r => r.json()),
-          fetch("/api/top-clientes?limit=10").then(r => r.json())
-        ]);
+        // Modo web: intentar usar fetch() al servidor HTTP
+        try {
+          const [empData, statsData, filtros, top] = await Promise.all([
+            fetch("/api/empresa").then(r => r.json()),
+            fetch("/api/stats").then(r => r.json()),
+            fetch("/api/filtros").then(r => r.json()),
+            fetch("/api/top-clientes?limit=10").then(r => r.json())
+          ]);
 
-        setEmpresa(empData);
-        setStats(statsData);
-        setVendedores(filtros.vendedores || []);
-        setClientes(filtros.clientes || []);
-        setTopClientes(top.rows || []);
-        
-        // Cargar gestiones para promesas
-        const promData = await fetch("/api/gestiones").then(r => r.json());
-        const proms = Array.isArray(promData) ? promData.filter((g: Gestion) => g.resultado.includes("Promesa")) : [];
-        setPromesas(proms);
-        
-        return;
+          setEmpresa(empData);
+          setStats(statsData);
+          setVendedores(filtros.vendedores || []);
+          setClientes(filtros.clientes || []);
+          setTopClientes(top.rows || []);
+          
+          // Cargar gestiones para promesas
+          const promData = await fetch("/api/gestiones").then(r => r.json());
+          const proms = Array.isArray(promData) ? promData.filter((g: Gestion) => g.resultado.includes("Promesa")) : [];
+          setPromesas(proms);
+          
+          return;
+        } catch (fetchError) {
+          console.warn("Backend no disponible", fetchError);
+          addToast("⚠️ No se pudo conectar al backend - Usa la versión Electron", "error");
+          return;
+        }
       }
 
-      const [empData, statsData, filtros, top, promData, campData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, disputasData, cuentasData, abonosData] = await Promise.all([
+      const [empData, statsData, filtros, top, promData, _campData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, _disputasData, cuentasData, abonosData] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
         window.api.filtrosListar(),
@@ -566,8 +559,8 @@ export default function App() {
       const topList = Array.isArray(topData) ? topData : (topData?.rows || []);
       setTopClientes(topList as unknown as TopCliente[]);
       if (promData) setPromesas((promData as Gestion[]).filter((g: Gestion) => g.resultado?.includes("Promesa")));
-      const campDataTyped = campData as { ok?: boolean; rows?: unknown[] };
-      if (campDataTyped?.ok) setCampanas((campDataTyped.rows || []) as unknown as Campana[]);
+      // const campDataTyped = campData as { ok?: boolean; rows?: unknown[] };
+      // if (campDataTyped?.ok) setCampanas((campDataTyped.rows || []) as unknown as Campana[]);
       const riesgoTyped = riesgo as { ok?: boolean; rows?: unknown[] };
       if (riesgoTyped?.ok) setAnalisisRiesgo((riesgoTyped.rows || []) as unknown as AnalisisRiesgo[]);
       if (motivos) setMotivosData(motivos as MotivoImpago[]);
@@ -576,7 +569,7 @@ export default function App() {
       if (alertasData) setAlertas(alertasData as Alerta[]);
       if (pronostData) setPronosticos(pronostData as unknown as Pronostico[]);
       if (tendData) setTendencias(tendData as TendenciaMes[]);
-      if (disputasData) setDisputas(disputasData as Disputa[]);
+      // if (disputasData) setDisputas(disputasData as Disputa[]);
       if (cuentasData) setCuentasAplicar(cuentasData as CuentaAplicar[]);
       if (abonosData) setAbonos(abonosData as Abono[]);
     } catch (e) {
@@ -596,7 +589,7 @@ export default function App() {
     [docs, searchDocumentos, selectedCliente, selectedVendedor]
   );
 
-  const filteredGestiones = useMemo(() =>
+  const _filteredGestiones = useMemo(() =>
     gestiones.filter((g: Gestion) => {
       const search = searchGestiones.toLowerCase();
       const matchSearch = !search || g.cliente.toLowerCase().includes(search) || g.observacion.toLowerCase().includes(search);
@@ -616,25 +609,170 @@ export default function App() {
     [alertas, searchAlertas, filtroSeveridad]
   );
 
-  const filteredDisputas = useMemo(() =>
-    disputas.filter((d: Disputa) => {
-      const search = searchDisputas.toLowerCase();
-      const matchSearch = !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
-      const matchEstado = filtroEstadoDisputa === "Todos" || d.estado === filtroEstadoDisputa;
-      return matchSearch && matchEstado;
-    }),
-    [disputas, searchDisputas, filtroEstadoDisputa]
-  );
+  // NUEVOS CÁLCULOS BASADOS EN IMPORTACIÓN
 
-  const filteredCuentas = useMemo(() =>
-    cuentasAplicar.filter((c: CuentaAplicar) => {
-      const search = searchCuentas.toLowerCase();
-      const matchSearch = !search || c.cliente.toLowerCase().includes(search) || (c.documento || "").toLowerCase().includes(search);
-      const matchEstado = filtroEstadoCuenta === "Todos" || c.estado === filtroEstadoCuenta;
-      return matchSearch && matchEstado;
-    }),
-    [cuentasAplicar, searchCuentas, filtroEstadoCuenta]
-  );
+  // 3. Eficiencia de Cobranza Real (MOVER ARRIBA para que esté disponible en renderContent)
+  const eficienciaCobranza = useMemo(() => {
+    const totalEmitido = docs.reduce((sum, d) => sum + (d.valor_documento || 0), 0);
+    const totalCobrado = docs.reduce((sum, d) => sum + ((d.valor_documento || 0) - (d.total || 0)), 0);
+    const totalPendiente = docs.reduce((sum, d) => sum + (d.total || 0), 0);
+    // DSO = (Saldo Total / Ventas últimos 90 días) × 90
+    // Aproximación: usar total emitido como ventas
+    const dsoReal = totalEmitido > 0 ? Math.round((totalPendiente / totalEmitido) * 90) : 0;
+    const porcentajeCobrado = totalEmitido > 0 ? (totalCobrado / totalEmitido) * 100 : 0;
+    return {
+      totalEmitido,
+      totalCobrado,
+      totalPendiente,
+      porcentajeCobrado,
+      dsoReal
+    };
+  }, [docs]);
+
+  // 1. Proyección de Vencimientos (próximos 7 y 30 días)
+  const vencimientosProximos = useMemo(() => {
+    const hoy = new Date();
+    const en7Dias = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const en30Dias = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const vencen7Dias = docs.filter(d => {
+      if (!d.fecha_vencimiento || d.total <= 0) return false;
+      const fvenc = new Date(d.fecha_vencimiento);
+      return fvenc >= hoy && fvenc <= en7Dias && d.por_vencer > 0;
+    });
+    const vencen30Dias = docs.filter(d => {
+      if (!d.fecha_vencimiento || d.total <= 0) return false;
+      const fvenc = new Date(d.fecha_vencimiento);
+      return fvenc >= hoy && fvenc <= en30Dias && d.por_vencer > 0;
+    });
+    return {
+      dias7: vencen7Dias,
+      monto7: vencen7Dias.reduce((sum, d) => sum + (d.por_vencer || 0), 0),
+      dias30: vencen30Dias,
+      monto30: vencen30Dias.reduce((sum, d) => sum + (d.por_vencer || 0), 0),
+      docs7: vencen7Dias.length,
+      docs30: vencen30Dias.length
+    };
+  }, [docs]);
+
+  // 2. Análisis de Retenciones
+  const analisisRetenciones = useMemo(() => {
+    const totalRetenido = docs.reduce((sum, d) => sum + (d.retenciones || 0), 0);
+    const docsConRetencion = docs.filter(d => (d.retenciones || 0) > 0);
+    return {
+      totalRetenido,
+      cantidadDocs: docsConRetencion.length,
+      promedioPorDoc: docsConRetencion.length > 0 ? totalRetenido / docsConRetencion.length : 0,
+      detalles: docsConRetencion.map(d => ({
+        documento: d.documento,
+        cliente: d.razon_social || d.cliente,
+        monto: d.retenciones || 0,
+        total: d.total
+      }))
+    };
+  }, [docs]);
+
+  // 4. Análisis por Vendedor
+  const analisisPorVendedor = useMemo(() => {
+    const vendedorMap = new Map<string, {
+      vendedor: string;
+      totalFacturado: number;
+      totalCobrado: number;
+      totalPendiente: number;
+      totalVencido: number;
+      documentos: number;
+      clientes: Set<string>;
+    }>();
+    
+    docs.forEach(d => {
+      const vendedor = d.vendedor || 'Sin Vendedor';
+      if (!vendedorMap.has(vendedor)) {
+        vendedorMap.set(vendedor, {
+          vendedor,
+          totalFacturado: 0,
+          totalCobrado: 0,
+          totalPendiente: 0,
+          totalVencido: 0,
+          documentos: 0,
+          clientes: new Set<string>()
+        });
+      }
+      
+      const v = vendedorMap.get(vendedor)!;
+      v.totalFacturado += (d.valor_documento || 0);
+      v.totalCobrado += ((d.valor_documento || 0) - (d.total || 0));
+      v.totalPendiente += (d.total || 0);
+      v.totalVencido += ((d.dias_30 || 0) + (d.dias_60 || 0) + (d.dias_90 || 0) + (d.dias_120 || 0) + (d.dias_mas_120 || 0));
+      v.documentos++;
+      v.clientes.add(d.cliente);
+    });
+    
+    return Array.from(vendedorMap.values()).map(v => ({
+      ...v,
+      cantidadClientes: v.clientes.size,
+      porcentajeMorosidad: v.totalPendiente > 0 ? (v.totalVencido / v.totalPendiente) * 100 : 0,
+      porcentajeCobrado: v.totalFacturado > 0 ? (v.totalCobrado / v.totalFacturado) * 100 : 0
+    })).sort((a, b) => b.totalPendiente - a.totalPendiente);
+  }, [docs]);
+
+  // 5. Top Deudores Crónicos
+  const deudoresCronicos = useMemo(() => {
+    const clienteMap = new Map<string, {
+      cliente: string;
+      razon_social: string;
+      totalDeuda: number;
+      totalVencido: number;
+      documentosVencidos: number;
+      dias_promedio: number;
+      vendedor: string;
+    }>();
+    
+    docs.forEach(d => {
+      const totalVencido = (d.dias_30 || 0) + (d.dias_60 || 0) + (d.dias_90 || 0) + (d.dias_120 || 0) + (d.dias_mas_120 || 0);
+      
+      if (totalVencido > 0) {
+        if (!clienteMap.has(d.cliente)) {
+          clienteMap.set(d.cliente, {
+            cliente: d.cliente,
+            razon_social: d.razon_social || d.cliente,
+            totalDeuda: 0,
+            totalVencido: 0,
+            documentosVencidos: 0,
+            dias_promedio: 0,
+            vendedor: d.vendedor || 'N/A'
+          });
+        }
+        
+        const c = clienteMap.get(d.cliente)!;
+        c.totalDeuda += (d.total || 0);
+        c.totalVencido += totalVencido;
+        c.documentosVencidos++;
+        
+        // Calcular días promedio ponderado
+        const dias90Plus = (d.dias_90 || 0) + (d.dias_120 || 0) + (d.dias_mas_120 || 0);
+        if (dias90Plus > 0) {
+          c.dias_promedio = 120; // Marcador de deudor crónico
+        }
+      }
+    });
+    
+    return Array.from(clienteMap.values())
+      .filter(c => c.dias_promedio >= 90) // Solo clientes con mora >90 días
+      .sort((a, b) => b.totalVencido - a.totalVencido)
+      .slice(0, 20); // Top 20
+  }, [docs]);
+
+  // 6. Extraer centros de costo únicos
+  useEffect(() => {
+    const centros = Array.from(new Set(docs.map(d => d.centro_costo).filter(Boolean))).sort();
+    setCentrosCosto(centros as string[]);
+  }, [docs]);
+
+  // Filtrar documentos por centro de costo
+  const _docsFiltradosCentroCosto = useMemo(() => {
+    if (filtroCentroCosto === "Todos") return docs;
+    return docs.filter(d => d.centro_costo === filtroCentroCosto);
+  }, [docs, filtroCentroCosto]);
+
 
   async function cargarDocumentos() {
     if (isWeb) return;
@@ -650,7 +788,7 @@ export default function App() {
     }
   }
 
-  async function cargarGestiones() {
+  async function cargarGestiones(selectedCliente: string) {
     if (isWeb || !selectedCliente) return;
     try {
       const data = await window.api.gestionesListar(selectedCliente);
@@ -668,7 +806,7 @@ export default function App() {
   }, [cargarDocumentosCallback]);
 
   useEffect(() => {
-    if (selectedCliente) cargarGestionesCallback();
+    if (selectedCliente) cargarGestionesCallback(selectedCliente);
   }, [cargarGestionesCallback, selectedCliente]);
 
   async function guardarGestion() {
@@ -688,7 +826,9 @@ export default function App() {
         monto_promesa: 0
       });
       addToast("Gestión guardada exitosamente", "success");
-      await cargarGestiones();
+      if (typeof cargarGestiones === "function") {
+        await cargarGestiones(selectedCliente);
+      }
       await cargarDatos();
     } catch (e) {
       addToast("Error guardando gestión", "error");
@@ -701,39 +841,11 @@ export default function App() {
     try {
       await window.api.gestionEliminar(id);
       addToast("Gestión eliminada", "success");
-      await cargarGestiones();
+      await cargarGestiones(selectedCliente);
       await cargarDatos();
     } catch (e) {
       addToast("Error eliminando gestión", "error");
       console.error("Error eliminando gestión:", e);
-    }
-  }
-
-  async function guardarDisputa() {
-    if (isWeb) return;
-    try {
-      await window.api.disputaCrear(disputaForm);
-      setShowModalDisputa(false);
-      setDisputaForm({ documento: "", cliente: "", monto: 0, motivo: "", observacion: "" });
-      addToast("Disputa creada exitosamente", "success");
-      await cargarDatos();
-    } catch (e) {
-      addToast("Error creando disputa", "error");
-      console.error("Error guardando disputa:", e);
-    }
-  }
-
-  async function guardarCuenta() {
-    if (isWeb) return;
-    try {
-      await window.api.cuentaAplicarCrear(cuentaForm);
-      setShowModalCuenta(false);
-      setCuentaForm({ documento: "", cliente: "", monto: 0, tipo: "Adelanto", observacion: "" });
-      addToast("Cuenta creada exitosamente", "success");
-      await cargarDatos();
-    } catch (e) {
-      addToast("Error creando cuenta", "error");
-      console.error("Error guardando cuenta por aplicar:", e);
     }
   }
 
@@ -746,38 +858,6 @@ export default function App() {
     } catch (e) {
       addToast("Error cumpliendo promesa", "error");
       console.error("Error cumpliendo promesa:", e);
-    }
-  }
-
-  async function guardarCampana() {
-    if (isWeb) return;
-    try {
-      await window.api.campanaCrear?.(campanaForm);
-      setShowModalCampana(false);
-      setCampanaForm({
-        nombre: "",
-        descripcion: "",
-        fecha_inicio: "",
-        fecha_fin: "",
-        responsable: ""
-      });
-      addToast("Campaña guardada exitosamente", "success");
-      await cargarDatos();
-    } catch (e) {
-      addToast("Error guardando campaña", "error");
-      console.error("Error guardando campaña:", e);
-    }
-  }
-
-  async function eliminarCampana(id: number) {
-    if (isWeb) return;
-    try {
-      await window.api.campanaEliminar?.(id);
-      addToast("Campaña eliminada", "success");
-      await cargarDatos();
-    } catch (e) {
-      addToast("Error eliminando campaña", "error");
-      console.error("Error eliminando campaña:", e);
     }
   }
 
@@ -815,7 +895,7 @@ export default function App() {
     }
   }
 
-  const deudaCliente = useMemo(() => {
+  const _deudaCliente = useMemo(() => {
     if (!selectedCliente) return { total: 0, vencido: 0 };
     const clienteDocs = docs.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente);
     const total = clienteDocs.reduce((s, d) => s + d.total, 0);
@@ -826,12 +906,12 @@ export default function App() {
   const agingData = useMemo(() => {
     if (!stats?.aging) return null;
     return [
-      { name: "Por Vencer", saldo: stats.aging.porVencer },
-      { name: "1-30", saldo: stats.aging.d30 },
-      { name: "31-60", saldo: stats.aging.d60 },
-      { name: "61-90", saldo: stats.aging.d90 },
-      { name: "91-120", saldo: stats.aging.d120 },
-      { name: ">120", saldo: stats.aging.d120p }
+      { name: "Por Vencer", saldo: stats.aging.porVencer, fill: "#10b981" },
+      { name: "1-30", saldo: stats.aging.d30, fill: "#3b82f6" },
+      { name: "31-60", saldo: stats.aging.d60, fill: "#f59e0b" },
+      { name: "61-90", saldo: stats.aging.d90, fill: "#ef4444" },
+      { name: "91-120", saldo: stats.aging.d120, fill: "#dc2626" },
+      { name: ">120", saldo: stats.aging.d120p, fill: "#991b1b" }
     ];
   }, [stats]);
 
@@ -871,200 +951,176 @@ export default function App() {
 
   // Renderizado condicional por tab
   function renderContent() {
+    console.log('Renderizando tab:', tab, 'Docs:', docs?.length, 'Gestiones:', gestiones?.length);
+    
     if (tab === "dashboard") {
       return (
-        <div className="dashboard-grid">
-          {/* SECCIÓN 1: 5 KPIs CRÍTICOS */}
-          <div className="card">
-            <div className="card-title">📊 KPIs Críticos</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
-                <div className="kpi-title">NPL (Morosidad %)</div>
-                <div className={`kpi-value ${stats && stats.npl > 30 ? 'kpi-negative' : 'kpi-positive'}`}>
-                  {stats?.npl?.toFixed(2)}%
-                </div>
-                <div className="kpi-subtitle">% Cartera vencida</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">DSO (Días)</div>
-                <div className="kpi-value">{stats?.dso || 0}</div>
-                <div className="kpi-subtitle">Días promedio de cobro</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Recuperación Mes</div>
-                <div className="kpi-value">{fmtMoney(stats?.recuperacionMesActual || 0)}</div>
-                <div className="kpi-subtitle">Meta: {fmtMoney(stats?.metaMensual || 0)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Cumplimiento Promesas</div>
-                <div className={`kpi-value ${stats && stats.tasaCumplimientoPromesas >= 70 ? 'kpi-positive' : 'kpi-warning'}`}>
-                  {stats?.tasaCumplimientoPromesas || 0}%
-                </div>
-                <div className="kpi-subtitle">Promesas pagadas</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Cobrado</div>
-                <div className="kpi-value kpi-positive">{fmtMoney(stats?.totalCobrado || 0)}</div>
-                <div className="kpi-subtitle">Mes actual</div>
-              </div>
+        <div style={{ 
+          padding: '8px', 
+          maxWidth: '100%', 
+          height: 'calc(100vh - 95px)', 
+          overflowY: 'hidden',
+          overflowX: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          background: 'linear-gradient(135deg, #fbeee6 0%, #f6e7d7 100%)',
+        }}>
+          
+          {/* FILA 1: 6 KPIs ULTRA COMPACTOS - MÁS GRANDES */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)', 
+            gap: '16px',
+            marginBottom: '18px',
+          }}>
+            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>CARTERA TOTAL</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoneyCompact(stats?.totalSaldo || 0)}</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Saldo total pendiente</div>
+            </div>
+            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>VENCIDO</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoneyCompact(stats?.vencidaSaldo || 0)}</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Monto de facturas vencidas</div>
+            </div>
+            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: stats && stats.npl > 30 ? 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' : 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>NPL</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{stats?.npl?.toFixed(1)}%</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Morosidad sobre cartera total</div>
+            </div>
+            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>DSO DÍAS</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{eficienciaCobranza.dsoReal}</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Días promedio de cobro</div>
+            </div>
+            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>CLIENTES</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{stats?.clientesConSaldo || 0}</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Clientes con saldo activo</div>
+            </div>
+            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #fa8bff 0%, #2bd2ff 90%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>% COBRADO</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{eficienciaCobranza.porcentajeCobrado.toFixed(1)}%</div>
+              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Porcentaje cobrado este mes</div>
             </div>
           </div>
 
-          {/* SECCIÓN 2: 5 KPIs GENERALES */}
-          <div className="card">
-            <div className="card-title">💰 KPIs Generales</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
-                <div className="kpi-title">Saldo Total</div>
-                <div className="kpi-value">{fmtMoney(stats?.totalSaldo || 0)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Vencido</div>
-                <div className="kpi-value kpi-negative">{fmtMoney(stats?.vencidaSaldo || 0)}</div>
-                <div className="kpi-subtitle">{stats?.percentVencida?.toFixed(1)}% del total</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Mora +90</div>
-                <div className="kpi-value kpi-negative">{fmtMoney(stats?.mora90Saldo || 0)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Documentos</div>
-                <div className="kpi-value">{stats?.docsPendientes || 0}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Clientes</div>
-                <div className="kpi-value">{stats?.clientesConSaldo || 0}</div>
-              </div>
+
+          {/* FILA 2: 6 KPIs SECUNDARIOS */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', 
+            gap: '6px'
+          }}>
+            <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>DOCS</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>{stats?.docsPendientes || 0}</div>
+            </div>
+            <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>VENCE 7D</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f59e0b' }}>{fmtMoneyCompact(vencimientosProximos.monto7)}</div>
+            </div>
+            <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>VENCE 30D</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f97316' }}>{fmtMoneyCompact(vencimientosProximos.monto30)}</div>
+            </div>
+            <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>RETENCIONES</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>{fmtMoneyCompact(analisisRetenciones.totalRetenido)}</div>
+            </div>
+            <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>COBRADO MES</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#10b981' }}>{fmtMoneyCompact(stats?.totalCobrado || 0)}</div>
+            </div>
+            <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>CRÓNICOS</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#ef4444' }}>{deudoresCronicos.length}</div>
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-title">Aging de Cartera</div>
-            {agingData && (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={agingData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorGreen" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#059669" stopOpacity={0.6} />
-                    </linearGradient>
-                    <linearGradient id="colorBlue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#1d4ed8" stopOpacity={0.6} />
-                    </linearGradient>
-                    <linearGradient id="colorAmber" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#d97706" stopOpacity={0.6} />
-                    </linearGradient>
-                    <linearGradient id="colorRed" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#dc2626" stopOpacity={0.6} />
-                    </linearGradient>
-                    <linearGradient id="colorDark" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#991b1b" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#7f1d1d" stopOpacity={0.6} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="name" stroke="#9ca3af" style={{ fontSize: '0.8rem' }} />
-                  <YAxis stroke="#9ca3af" style={{ fontSize: '0.75rem' }} tickFormatter={isMobile ? (v: number) => fmtCompactNumber(v) : undefined} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: isMobile ? '0.8rem' : '0.9rem' }}
-                    formatter={(value: number) => (isMobile ? fmtMoneyCompact(value) : fmtMoney(value))}
-                  />
-                  <Bar dataKey="saldo" fill="url(#colorGreen)" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+          {/* FILA 3: 4 GRÁFICOS HORIZONTALES - BARRAS MUY FINAS Y COMPACTAS */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: 0, transform: 'translateY(-35px)' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
+              gap: '2px',
+              minHeight: 110,
+              alignItems: 'stretch',
+            }}>
+            
+            {/* AGING - BARRAS HORIZONTALES FINAS */}
+            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 110, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignSelf: 'end', marginTop: 'auto' }}>
+              <RankingList
+                title="Aging de Cartera"
+                items={Array.isArray(agingData) ? agingData.map((a) => ({
+                  label: a.name,
+                  value: a.saldo,
+                  color: a.fill
+                })) : []}
+                valuePrefix={''}
+                valueSuffix={''}
+                maxItems={10}
+                barColor="#10b981"
+                decimals={2}
+              />
+            </div>
+
+            {/* TOP CLIENTES - BARRAS FINAS */}
+            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <RankingList
+                title="Top Clientes"
+                items={Array.isArray(topClientesData) ? topClientesData.slice(0, 10).map((c) => ({
+                  label: c.name,
+                  value: c.saldo,
+                  color: c.fill
+                })) : []}
+                valuePrefix={''}
+                valueSuffix={''}
+                maxItems={10}
+                barColor="#a855f7"
+                decimals={2}
+              />
+            </div>
+
+            {/* VENDEDORES - BARRAS FINAS */}
+            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <RankingList
+                title="Por Vendedor"
+                items={Array.isArray(analisisPorVendedor) ? analisisPorVendedor.slice(0, 10).map((v) => ({
+                  label: v.vendedor,
+                  value: v.totalPendiente,
+                  color: v.porcentajeMorosidad > 30 ? '#ef4444' : v.porcentajeMorosidad > 15 ? '#f59e0b' : '#3b82f6'
+                })) : []}
+                valuePrefix={''}
+                valueSuffix={''}
+                maxItems={10}
+                barColor="#3b82f6"
+                decimals={2}
+              />
+            </div>
+
+            {/* DEUDORES CRÓNICOS - BARRAS FINAS */}
+            <div className="card" style={{ padding: '6px 8px', height: '100%', minHeight: 320, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <RankingList
+                title="Deudores Crónicos"
+                items={Array.isArray(deudoresCronicos) ? deudoresCronicos.slice(0, 10).map((d) => ({
+                  label: d.cliente,
+                  value: d.totalVencido,
+                  color: '#dc2626'
+                })) : []}
+                valuePrefix={''}
+                valueSuffix={''}
+                maxItems={10}
+                barColor="#dc2626"
+                decimals={2}
+              />
+            </div>
+
+
+            </div>
           </div>
 
-          <div className="card">
-            <div className="card-title">👥 Top 10 Clientes por Saldo</div>
-            {topClientesData ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topClientesData} layout="vertical" margin={{ top: 10, right: 20, left: 200, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} tickFormatter={isMobile ? (v: number) => fmtCompactNumber(v) : undefined} />
-                  <YAxis dataKey="name" type="category" width={195} stroke="#9ca3af" style={{ fontSize: '0.75rem' }} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: isMobile ? '0.8rem' : '0.9rem' }} 
-                    formatter={(value: number) => (isMobile ? fmtMoneyCompact(value) : fmtMoney(value))}
-                  />
-                  <Bar dataKey="saldo" radius={[0, 8, 8, 0]}>
-                    {topClientesData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="empty-state">
-                <div className="empty-icon">📊</div>
-                <p>No hay clientes con saldo pendiente</p>
-              </div>
-            )}
-          </div>
-
-          {promesas.length > 0 && (
-            <div className="card card-urgent">
-              <div className="card-title">⚠️ Promesas de Pago Pendientes ({promesas.length})</div>
-              <div className="promesas-lista">
-                {promesas.slice(0, 5).map(p => (
-                  <div key={p.id} className="promesa-item">
-                    <div className="promesa-main">
-                      <div className="promesa-info">{p.razon_social || p.cliente}</div>
-                      <div className="promesa-fecha">📅 {p.fecha_promesa}</div>
-                      <div className="promesa-monto">{fmtMoney(p.monto_promesa || 0)}</div>
-                    </div>
-                    <button className="btn secondary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions}>✓ Cumplida</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ALERTAS RESUMIDAS */}
-          {alertas.length > 0 && (
-            <div className="card">
-              <div className="card-title">🚨 Top 5 Alertas de Incumplimiento</div>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart 
-                  data={alertas.slice(0, 5).map(a => ({
-                    cliente: a.cliente.substring(0, 20),
-                    dias: a.diasVencidos,
-                    fill: a.severidad === "Crítico" ? "#ef4444" : a.severidad === "Alto" ? "#f59e0b" : "#3b82f6"
-                  }))} 
-                  layout="vertical" 
-                  margin={{ top: 10, right: 20, left: 150, bottom: 10 }}
-                >
-                  <defs>
-                    <linearGradient id="colorCritico" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#ef4444" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#dc2626" stopOpacity={0.9} />
-                    </linearGradient>
-                    <linearGradient id="colorAlto" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#d97706" stopOpacity={0.9} />
-                    </linearGradient>
-                    <linearGradient id="colorMedio" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
-                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0.9} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" stroke="#9ca3af" style={{ fontSize: '0.75rem' }} label={{ value: 'Días Vencidos', position: 'insideBottom', offset: -5 }} />
-                  <YAxis dataKey="cliente" type="category" width={145} stroke="#9ca3af" style={{ fontSize: '0.7rem' }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', fontSize: isMobile ? '0.8rem' : '0.85rem' }} />
-                  <Bar dataKey="dias" radius={[0, 8, 8, 0]}>
-                    {alertas.slice(0, 5).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.severidad === "Crítico" ? "url(#colorCritico)" : entry.severidad === "Alto" ? "url(#colorAlto)" : "url(#colorMedio)"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <button className="btn primary alertas-btn alertas-btn-margin" onClick={() => setTab("alertas")}>Ver todas las alertas →</button>
-            </div>
-          )}
         </div>
       );
     }
@@ -1072,7 +1128,7 @@ export default function App() {
     if (tab === "gestion") {
       // VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta
       // Obtener documentos vencidos
-      const todosDocsVencidos = docs.filter(d => (d.dias_vencidos || 0) > 0);
+      const todosDocsVencidos = (docs || []).filter(d => (d.dias_vencidos || 0) > 0);
       
       // Obtener clientes únicos con vencidos (desde documentos)
       const clientesConVencidos = Array.from(new Set(todosDocsVencidos.map(d => d.razon_social || d.cliente)))
@@ -1098,7 +1154,7 @@ export default function App() {
       
       // KPIs globales
       const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + d.total, 0);
-      const diasPromedioVencidos = todosDocsVencidos.length > 0 
+      const _diasPromedioVencidos = todosDocsVencidos.length > 0 
         ? Math.round(todosDocsVencidos.reduce((s, d) => s + (d.dias_vencidos || 0), 0) / todosDocsVencidos.length) 
         : 0;
       
@@ -1112,7 +1168,7 @@ export default function App() {
       // Función para exportar PDF
       const exportarEstadoDeCuenta = async (clienteNombre: string) => {
         if (!clienteNombre || clienteNombre === "Todos") {
-          addToast("Selecciona un cliente específico para generar su estado de cuenta", "warning");
+          addToast("Selecciona un cliente específico para generar su estado de cuenta", "info");
           return;
         }
         
@@ -1177,7 +1233,7 @@ export default function App() {
         const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre));
         const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
         
-        const texto = `Estimado cliente ${clienteNombre},\n\nAdjunto encontrará su estado de cuenta actualizado.\n\nResumen:\n- Documentos vencidos: ${docsCliente.length}\n- Total vencido: ${fmtMoney(totalCliente)}\n\nPor favor, regularice su cuenta a la brevedad posible.\n\nSaludos cordiales,\n${empresa.nombre}`;
+        const texto = `Estimado cliente ${clienteNombre},\n\nAdjunto encontrará su estado de cuenta actualizado.\n\nResumen:\n- Documentos vencidos: ${docsCliente.length}\n- Total vencido: ${fmtMoney(totalCliente)}`;
         
         navigator.clipboard.writeText(texto).then(() => {
           addToast("✅ Texto copiado al portapapeles", "success");
@@ -1308,7 +1364,7 @@ export default function App() {
           
           {/* Panel de Gestión Rápida (cuando se selecciona un cliente) */}
           {selectedCliente && selectedCliente !== "Todos" && (
-            <div className="card">
+            <div className="card" style={{ background: '#e6f7f6' }}>
               <div className="card-title">💬 Panel de Gestión Rápida - {selectedCliente}</div>
               <div className="flex-row">
                 <button className="btn secondary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
@@ -1399,45 +1455,77 @@ export default function App() {
       );
     }
 
+    if (tab === "config") {
+      return (
+        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
+          <h2 style={{ marginBottom: 18, fontWeight: 700, color: '#374151' }}>Configuración y Administración</h2>
+
+          {/* Sección: Datos de Empresa */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Datos de Empresa</h3>
+            <button className="btn primary" style={{ marginRight: 8 }} onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Editar datos</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🖼️ Cambiar logo</button>
+          </div>
+
+          {/* Sección: Usuarios y Permisos */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Usuarios y Permisos</h3>
+            <button className="btn primary" style={{ marginRight: 8 }}>👤 Administrar usuarios</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🔑 Roles y permisos</button>
+          </div>
+
+          {/* Sección: Importación/Exportación */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Importación y Exportación</h3>
+            <button className="btn primary" style={{ marginRight: 8 }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📤 Exportar respaldo</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📄 Descargar plantilla</button>
+          </div>
+
+          {/* Sección: Sincronización y Backup */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Sincronización y Backup</h3>
+            <button className="btn primary" style={{ marginRight: 8 }}>🔄 Sincronizar</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>💾 Backup manual</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>♻️ Restaurar backup</button>
+          </div>
+
+          {/* Sección: Personalización y Temas */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #fbeee6 0%, #f6e7d7 100%)', color: '#374151' }}>🌸 Femenino Pastel</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f7e6f7 0%, #e6f7f6 100%)', color: '#374151' }}>💜 Femenino Lavanda</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #ffe4e1 0%, #f5f3ea 100%)', color: '#374151' }}>🌷 Femenino Coral</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', color: '#1e293b' }}>🟦 Masculino Azul</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f3f4f6 0%, #d1d5db 100%)', color: '#1e293b' }}>🟫 Masculino Gris</button>
+            </div>
+            <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Los cambios se aplicarán automáticamente.</span>
+          </div>
+
+          {/* Sección: Seguridad */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Seguridad</h3>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🔒 Cambiar contraseña</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🔐 Autenticación 2 pasos</button>
+          </div>
+
+          {/* Sección: Soporte y Ayuda */}
+          <div style={{ marginBottom: 0 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Soporte y Ayuda</h3>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📖 Ver documentación</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>💬 Contactar soporte</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📝 Historial de cambios</button>
+          </div>
+        </div>
+      );
+    }
+
     if (tab === "reportes") {
-      const docsConAging = filteredDocumentos.map(d => {
-        const dias = d.dias_vencidos || 0;
-        let aging = "Por vencer";
-        if (dias > 0 && dias <= 30) aging = "0-30 días";
-        else if (dias > 30 && dias <= 60) aging = "30-60 días";
-        else if (dias > 60 && dias <= 90) aging = "60-90 días";
-        else if (dias > 90) aging = "+90 días";
-        return { ...d, aging };
-      });
-
-      const docsFiltradosAging = filtroAging === "Todos" 
-        ? docsConAging 
-        : filtroAging === "Vencidos"
-        ? docsConAging.filter(d => (d.dias_vencidos || 0) > 0)
-        : docsConAging.filter(d => d.aging === filtroAging);
-      
-      const totalMonto = docsFiltradosAging.reduce((sum, d) => sum + d.total, 0);
-      const promedioMonto = docsFiltradosAging.length > 0 ? totalMonto / docsFiltradosAging.length : 0;
-      const top5Clientes = docsFiltradosAging.reduce((acc, d) => {
-        const key = d.razon_social || d.cliente;
-        acc[key] = (acc[key] || 0) + d.total;
-        return acc;
-      }, {} as Record<string, number>);
-      const concentracionTop5 = Object.values(top5Clientes).sort((a, b) => b - a).slice(0, 5).reduce((sum, v) => sum + v, 0);
-      const pctConcentracion = totalMonto > 0 ? (concentracionTop5 / totalMonto * 100).toFixed(1) : 0;
-
-      const agrupados = vistaAgrupada ? docsFiltradosAging.reduce((acc, d) => {
-        const key = selectedVendedor ? d.razon_social : d.vendedor || "Sin Vendedor";
-        if (!acc[key]) acc[key] = { items: [], total: 0 };
-        acc[key].items.push(d);
-        acc[key].total += d.total;
-        return acc;
-      }, {} as Record<string, { items: typeof docsFiltradosAging, total: number }>) : {};
-
       const exportarExcel = async () => {
         try {
           const XLSX = await loadXLSX();
-          const dataExport = docsFiltradosAging.map(d => ({
+          const dataExport = docs.map((d: any) => ({
             'Documento': d.numero,
             'Cliente': d.cliente,
             'Vendedor': d.vendedor,
@@ -1468,7 +1556,7 @@ export default function App() {
           doc.setFontSize(10);
           doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
           
-          const tableData = docsFiltradosAging.map(d => [
+          const tableData = docs.map((d: any) => [
             d.numero,
             d.cliente,
             d.dias_vencidos || 0,
@@ -1493,35 +1581,35 @@ export default function App() {
 
       return (
         <div>
-          <div className="card">
+          <div className="card" style={{ background: '#fbeee6' }}>
             <div className="card-title">📊 Resumen Ejecutivo</div>
             <div className="kpis-grid">
               <div className="kpi-card">
                 <div className="kpi-title">Total Documentos</div>
-                <div className="kpi-value">{docsFiltradosAging.length}</div>
+                <div className="kpi-value">{docs.length}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Monto Total</div>
-                <div className="kpi-value">{fmtMoney(totalMonto)}</div>
+                <div className="kpi-value">{fmtMoney(docs.reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Docs Vencidos</div>
-                <div className="kpi-value kpi-negative">{docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).length}</div>
-                <div className="kpi-subtitle">{docsFiltradosAging.length > 0 ? ((docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).length / docsFiltradosAging.length) * 100).toFixed(1) : 0}% del total</div>
+                <div className="kpi-value kpi-negative">{docs.filter((d: any) => (d.dias_vencidos || 0) > 0).length}</div>
+                <div className="kpi-subtitle">{docs.length > 0 ? ((docs.filter((d: any) => (d.dias_vencidos || 0) > 0).length / docs.length) * 100).toFixed(1) : 0}% del total</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Monto Vencido</div>
-                <div className="kpi-value kpi-negative">{fmtMoney(docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + d.total, 0))}</div>
-                <div className="kpi-subtitle">{totalMonto > 0 ? ((docsFiltradosAging.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + d.total, 0) / totalMonto) * 100).toFixed(1) : 0}% del total</div>
+                <div className="kpi-value kpi-negative">{fmtMoney(docs.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
+                <div className="kpi-subtitle">{docs.length > 0 ? ((docs.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0) / docs.reduce((sum: number, d: any) => sum + (d.total || 0), 0)) * 100).toFixed(1) : 0}% del total</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Clientes Únicos</div>
-                <div className="kpi-value">{Object.keys(top5Clientes).length}</div>
+                {/* Puedes agregar aquí el cálculo de top5Clientes si lo necesitas */}
               </div>
             </div>
           </div>
 
-          <div className="card">
+          <div className="card" style={{ background: '#f6e7d7' }}>
             <div className="card-title">📋 Reporte de Documentos</div>
             <div className="row">
               <label className="field">
@@ -1539,6 +1627,15 @@ export default function App() {
                   <option value="">Todos</option>
                   {vendedores.map(v => (
                     <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Centro de Costo</span>
+                <select value={filtroCentroCosto} onChange={e => setFiltroCentroCosto(e.target.value)}>
+                  <option value="Todos">Todos</option>
+                  {centrosCosto.map(cc => (
+                    <option key={cc} value={cc}>{cc}</option>
                   ))}
                 </select>
               </label>
@@ -1585,15 +1682,29 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {docsFiltradosAging.length > 0 ? (
-                      docsFiltradosAging.map(d => (
+                    {docs.length > 0 ? (
+                      docs.map((d: any) => (
                         <tr key={d.id}>
                           <td>{d.razon_social}</td>
                           <td>{d.documento}</td>
                           <td>{d.vendedor}</td>
                           <td>{d.fecha_vencimiento}</td>
-                          <td><span className={d.aging.includes('+90') ? 'kpi-negative' : d.aging.includes('60-90') ? 'kpi-warning' : ''}>{d.aging}</span></td>
-                          <td className="num">{fmtMoney(d.total)}</td>
+                          <td>
+                            <span className={((d.aging || (d.dias_vencidos !== undefined ? (d.dias_vencidos > 120 ? '>120' : d.dias_vencidos > 90 ? '91-120' : d.dias_vencidos > 60 ? '61-90' : d.dias_vencidos > 30 ? '31-60' : d.dias_vencidos > 0 ? '1-30' : 'Por Vencer') : '')).includes('+90')) ? 'kpi-negative' : ((d.aging || (d.dias_vencidos !== undefined ? (d.dias_vencidos > 120 ? '>120' : d.dias_vencidos > 90 ? '91-120' : d.dias_vencidos > 60 ? '61-90' : d.dias_vencidos > 30 ? '31-60' : d.dias_vencidos > 0 ? '1-30' : 'Por Vencer') : '')).includes('60-90')) ? 'kpi-warning' : ''}>
+                              {d.aging
+                                ? d.aging
+                                : d.dias_vencidos !== undefined
+                                  ? d.dias_vencidos > 120 ? '>120'
+                                    : d.dias_vencidos > 90 ? '91-120'
+                                    : d.dias_vencidos > 60 ? '61-90'
+                                    : d.dias_vencidos > 30 ? '31-60'
+                                    : d.dias_vencidos > 0 ? '1-30'
+                                    : 'Por Vencer'
+                                  : '-'}
+                            </span>
+                          </td>
+                          <td><span className={(d.aging || '').includes('+90') ? 'kpi-negative' : (d.aging || '').includes('60-90') ? 'kpi-warning' : ''}>{d.aging || '-'}</span></td>
+                          <td className="num">{fmtMoney(typeof d.total === 'number' ? d.total : (d.valor_documento || 0))}</td>
                         </tr>
                       ))
                     ) : (
@@ -1601,33 +1712,100 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
-                <p className="table-footnote">Mostrando {docsFiltradosAging.length} de {docs.length} documentos</p>
+                <p className="table-footnote">Mostrando {docs.length} de {docs.length} documentos</p>
               </div>
             ) : (
               <div className="table-wrapper">
-                {Object.entries(agrupados).map(([grupo, data]) => (
-                  <div key={grupo} className="group-section">
-                    <h3 className="group-title">
-                      {grupo} - {data.items.length} docs - {fmtMoney(data.total)}
-                    </h3>
-                    <table className="data-table">
-                      <tbody>
-                        {data.items.map(d => (
-                          <tr key={d.id}>
-                            <td>{d.razon_social}</td>
-                            <td>{d.documento}</td>
-                            <td>{d.fecha_vencimiento}</td>
-                            <td>{d.aging}</td>
-                            <td className="num">{fmtMoney(d.total)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
+                {/* Aquí puedes agregar el renderizado de agrupados si lo necesitas en el futuro */}
               </div>
             )}
           </div>
+
+          {/* NUEVO: Análisis por Vendedor */}
+          <div className="card" style={{ background: '#f7e6f7' }}>
+            <div className="card-title">👤 Análisis por Vendedor</div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Vendedor</th>
+                    <th className="num">Documentos</th>
+                    <th className="num">Clientes</th>
+                    <th className="num">Total Facturado</th>
+                    <th className="num">Cobrado</th>
+                    <th className="num">Pendiente</th>
+                    <th className="num">% Morosidad</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analisisPorVendedor.length > 0 ? (
+                    analisisPorVendedor.map((v, idx) => (
+                      <tr key={idx}>
+                        <td>{v.vendedor}</td>
+                        <td className="num">{v.documentos}</td>
+                        <td className="num">{v.cantidadClientes}</td>
+                        <td className="num">{fmtMoney(v.totalFacturado)}</td>
+                        <td className="num">{fmtMoney(v.totalCobrado)}</td>
+                        <td className="num">{fmtMoney(v.totalPendiente)}</td>
+                        <td className="num">
+                          <span className={v.porcentajeMorosidad > 30 ? 'kpi-negative' : v.porcentajeMorosidad > 15 ? 'kpi-warning' : 'kpi-positive'}>
+                            {v.porcentajeMorosidad.toFixed(1)}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan={7}>No hay datos de vendedores</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* NUEVO: Retenciones Detalladas */}
+          {analisisRetenciones.cantidadDocs > 0 && (
+            <div className="card">
+              <div className="card-title">💵 Detalle de Retenciones</div>
+              <div className="kpis-grid" style={{marginBottom: '20px'}}>
+                <div className="kpi-card">
+                  <div className="kpi-title">Total Retenido</div>
+                  <div className="kpi-value">{fmtMoney(analisisRetenciones.totalRetenido)}</div>
+                </div>
+                <div className="kpi-card">
+                  <div className="kpi-title">Documentos con Retención</div>
+                  <div className="kpi-value">{analisisRetenciones.cantidadDocs}</div>
+                </div>
+                <div className="kpi-card">
+                  <div className="kpi-title">Promedio por Doc</div>
+                  <div className="kpi-value">{fmtMoney(analisisRetenciones.promedioPorDoc)}</div>
+                </div>
+              </div>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Documento</th>
+                      <th>Cliente</th>
+                      <th className="num">Total Documento</th>
+                      <th className="num">Retención</th>
+                      <th className="num">% Retención</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analisisRetenciones.detalles.slice(0, 20).map((r, idx) => (
+                      <tr key={idx}>
+                        <td>{r.documento}</td>
+                        <td>{r.cliente}</td>
+                        <td className="num">{fmtMoney(r.total)}</td>
+                        <td className="num">{fmtMoney(r.monto)}</td>
+                        <td className="num">{r.total > 0 ? ((r.monto / r.total) * 100).toFixed(1) : 0}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -1671,7 +1849,7 @@ export default function App() {
 
       return (
         <div>
-          <div className="card">
+          <div className="card" style={{ background: '#f7f6f3' }}>
             <div className="card-title">💼 Resumen de Promesas de Pago</div>
             <div className="kpis-grid">
               <div className="kpi-card">
@@ -1697,7 +1875,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="card">
+          <div className="card" style={{ background: '#f7f6f3' }}>
             <div className="card-title">📅 Gestión de Promesas de Pago</div>
             <div className="row">
               <label className="field">
@@ -1736,7 +1914,11 @@ export default function App() {
                       </div>
                       {p.observacion && <div className="promesa-observacion">{p.observacion}</div>}
                     </div>
-                    <div className="action-buttons">\n                      <button className="btn primary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>\n                      <button className="btn secondary" onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>\n                      <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions}>✕</button>\n                    </div>
+                    <div className="action-buttons">
+                      <button className="btn primary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
+                      <button className="btn secondary" onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>
+                      <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions}>✕</button>
+                    </div>
                   </div>
                 );
               })}
@@ -1747,210 +1929,18 @@ export default function App() {
       );
     }
 
-    if (tab === "campanas") {
-      const campanaActual = campanas.find(c => c.id === campanaSeleccionada);
-      const totalClientes = clientesCampana.length;
-      
-      // Calcular contactados desde gestiones de esta campaña
-      const gestionesCampana = gestiones.filter(g => 
-        clientesCampana.includes(g.cliente) && 
-        campanaActual && 
-        g.fecha >= campanaActual.fecha_inicio && 
-        g.fecha <= campanaActual.fecha_fin
-      );
-      const clientesContactados = new Set(gestionesCampana.map(g => g.cliente));
-      const contactados = clientesContactados.size;
-      
-      // Calcular recuperado desde promesas cumplidas en esta campaña
-      const promesasCumplidas = gestiones.filter(g => 
-        clientesCampana.includes(g.cliente) &&
-        campanaActual &&
-        g.fecha >= campanaActual.fecha_inicio &&
-        g.fecha <= campanaActual.fecha_fin &&
-        g.fecha_promesa &&
-        new Date(g.fecha_promesa) <= new Date() &&
-        g.monto_promesa > 0
-      );
-      const recuperado = promesasCumplidas.reduce((sum, p) => sum + (p.monto_promesa || 0), 0);
-      
-      const tasaRespuesta = totalClientes > 0 ? Math.round((contactados / totalClientes) * 100) : 0;
-
-      return (
-        <div>
-          <div className="card">
-            <div className="card-title">
-              🎯 Campañas de Cobranza
-              <button className="btn primary" onClick={() => setShowModalCampana(true)} disabled={!hasWritePermissions}>+ Nueva Campaña</button>
-            </div>
-            <div className="promesas-lista">
-              {campanas.map(c => (
-                <div 
-                  key={c.id} 
-                  className="promesa-item" 
-                  style={{ cursor: 'pointer', background: campanaSeleccionada === c.id ? '#f0f9ff' : 'transparent' }}
-                  onClick={() => setCampanaSeleccionada(c.id)}
-                >
-                  <div className="promesa-main">
-                    <div className="promesa-info font-medium">{c.nombre}</div>
-                    <div className="text-muted mt-8">{c.descripcion}</div>
-                    <div className="promesa-fecha mt-8">
-                      📅 {c.fecha_inicio} → {c.fecha_fin} | 👤 {c.responsable}
-                    </div>
-                  </div>
-                  <button className="promesa-eliminar" onClick={(e) => { e.stopPropagation(); eliminarCampana(c.id); }} disabled={!hasWritePermissions}>✕</button>
-                </div>
-              ))}
-              {campanas.length === 0 && <p className="promesa-vacia">No hay campañas creadas</p>}
-            </div>
-          </div>
-
-          {campanaActual && (
-            <>
-              <div className="card">
-                <div className="card-title">📊 Dashboard: {campanaActual.nombre}</div>
-                <div className="kpis-grid">
-                  <div className="kpi-card">
-                    <div className="kpi-title">Clientes Asignados</div>
-                    <div className="kpi-value">{totalClientes}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Contactados</div>
-                    <div className="kpi-value kpi-positive">{contactados}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Pendientes</div>
-                    <div className="kpi-value kpi-warning">{totalClientes - contactados}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Tasa Respuesta</div>
-                    <div className="kpi-value">{tasaRespuesta}%</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">Recuperado</div>
-                    <div className="kpi-value kpi-positive">{fmtMoney(recuperado)}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card">
-                <div className="card-title">👥 Asignar Clientes a la Campaña</div>
-                <button 
-                  className="btn secondary" 
-                  onClick={() => {
-                    const nuevos = clientes.slice(0, 10).map(c => c.razon_social);
-                    setClientesCampana(nuevos);
-                    alert(`✅ Asignados ${nuevos.length} clientes a la campaña`);
-                  }}
-                  disabled={!hasWritePermissions}
-                >
-                  ➕ Asignar Clientes (Top 10)
-                </button>
-                {clientesCampana.length > 0 && (
-                  <div style={{ marginTop: '16px' }}>
-                    <div style={{ fontWeight: 600, marginBottom: '8px' }}>Clientes en campaña:</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {clientesCampana.slice(0, 20).map((c, i) => (
-                        <span key={i} style={{ background: '#e0e7ff', padding: '4px 12px', borderRadius: '12px', fontSize: '0.85rem' }}>
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="card">
-                <div className="card-title">📧 Plantillas de Mensaje</div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button className="btn secondary" onClick={() => alert('Plantilla Email cargada (simulado)')}>📧 Email Recordatorio</button>
-                  <button className="btn secondary" onClick={() => alert('Plantilla WhatsApp cargada (simulado)')}>💬 WhatsApp Amigable</button>
-                  <button className="btn secondary" onClick={() => alert('Plantilla SMS cargada (simulado)')}>📱 SMS Urgente</button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      );
-    }
-
     if (tab === "analisis") {
-      // Comparativa entre gestores (ranking)
-      const gestoresRanking = [...productividadData].sort((a, b) => b.tasa_promesa - a.tasa_promesa);
-      const mejorGestor = gestoresRanking[0];
-      
-      // Índice de concentración (Herfindahl)
-      const totalCartera = topClientes.reduce((sum, c) => sum + c.total, 0);
-      const herfindahl = topClientes.reduce((sum, c) => {
-        const share = totalCartera > 0 ? c.total / totalCartera : 0;
-        return sum + (share * share);
-      }, 0);
-      const concentracion = (herfindahl * 10000).toFixed(0);
-
       return (
         <div>
-          <div className="card">
+          <div className="card" style={{ background: '#fbeee6' }}>
             <div className="card-title">📊 Panel de Análisis</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
               <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
               <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
-              <button className={`btn ${vistaAnalisis === 'comparativa' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('comparativa')}>Comparativa Gestores</button>
               <button className={`btn ${vistaAnalisis === 'segmentacion' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('segmentacion')}>Segmentación</button>
               <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>
+              <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>⚠️ Deudores Crónicos</button>
             </div>
-
-            {vistaAnalisis === 'comparativa' && (
-              <div>
-                <div className="kpis-grid" style={{ marginBottom: '24px' }}>
-                  <div className="kpi-card">
-                    <div className="kpi-title">🏆 Mejor Gestor</div>
-                    <div className="kpi-value kpi-positive" style={{ fontSize: '1rem' }}>{mejorGestor?.usuario || 'N/A'}</div>
-                    <div className="kpi-subtitle">{mejorGestor?.tasa_promesa || 0}% efectividad</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">📈 Concentración</div>
-                    <div className="kpi-value">{concentracion}</div>
-                    <div className="kpi-subtitle">{Number(concentracion) > 2500 ? 'Alta' : Number(concentracion) > 1500 ? 'Media' : 'Baja'}</div>
-                  </div>
-                  <div className="kpi-card">
-                    <div className="kpi-title">💰 Total Recuperado</div>
-                    <div className="kpi-value kpi-positive">{fmtMoney(gestiones.reduce((sum, g) => sum + (g.monto_promesa || 0), 0))}</div>
-                    <div className="kpi-subtitle">Promesas totales</div>
-                  </div>
-                </div>
-
-                <div className="table-wrapper">
-                  <h3 style={{ marginBottom: '12px' }}>🏅 Ranking de Gestores</h3>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Gestor</th>
-                        <th className="num">Gestiones</th>
-                        <th className="num">Promesas</th>
-                        <th className="num">Tasa Éxito</th>
-                        <th className="num">Recuperable</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {gestoresRanking.map((g, i) => (
-                        <tr key={i} style={{ background: i === 0 ? '#f0fdf4' : 'transparent' }}>
-                          <td><strong>{i + 1}</strong></td>
-                          <td>{g.usuario} {i === 0 && '🏆'}</td>
-                          <td className="num">{g.total_gestiones}</td>
-                          <td className="num">{g.promesas}</td>
-                          <td className="num">
-                            <span className={g.tasa_promesa >= 70 ? 'kpi-positive' : g.tasa_promesa >= 40 ? 'kpi-warning' : 'kpi-negative'}>
-                              {g.tasa_promesa}%
-                            </span>
-                          </td>
-                          <td className="num">{fmtMoney(g.saldo_recuperable)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
 
             {vistaAnalisis === 'motivos' && (
               <div className="table-wrapper">
@@ -1974,7 +1964,7 @@ export default function App() {
                           <td className="num">{total > 0 ? ((m.total / total * 100).toFixed(1)) : '0'}%</td>
                         </tr>
                       );
-                    }) : <tr><td colSpan={4}>Sin datos</td></tr>}
+                    }) : <tr><td colSpan={4} style={{textAlign: 'center', color: '#888', fontSize: '1.1rem'}}><b>Motivos de Impago</b><br/><span style={{fontWeight: 'normal'}}>Sin datos</span></td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -2003,7 +1993,7 @@ export default function App() {
                         <td className="num">{p.tasa_promesa}%</td>
                         <td className="num">{fmtMoney(p.saldo_recuperable)}</td>
                       </tr>
-                    )) : <tr><td colSpan={6}>Sin datos</td></tr>}
+                    )) : <tr><td colSpan={6} style={{textAlign: 'center', color: '#888', fontSize: '1.1rem'}}><b>Productividad de Gestores</b><br/><span style={{fontWeight: 'normal'}}>Sin datos</span></td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -2032,7 +2022,7 @@ export default function App() {
                           </span>
                         </td>
                       </tr>
-                    )) : <tr><td colSpan={4}>Sin datos</td></tr>}
+                    )) : <tr><td colSpan={4} style={{textAlign: 'center', color: '#888', fontSize: '1.1rem'}}><b>Segmentación de Riesgo</b><br/><span style={{fontWeight: 'normal'}}>Sin datos</span><div style={{marginTop: '16px'}}><svg width="120" height="80"><rect x="10" y="30" width="100" height="20" rx="8" fill="#e5e7eb"/><text x="60" y="45" textAnchor="middle" fill="#bbb" fontSize="14">Gráfica</text></svg></div></td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -2071,773 +2061,173 @@ export default function App() {
                 </table>
               </div>
             )}
+
+            {vistaAnalisis === 'cronicos' && (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Cliente</th>
+                      <th>Vendedor</th>
+                      <th className="num">Deuda Total</th>
+                      <th className="num">Vencido +90 días</th>
+                      <th className="num">Docs Vencidos</th>
+                      <th className="num">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deudoresCronicos.length > 0 ? (
+                      deudoresCronicos.map((d, idx) => (
+                        <tr key={idx} style={{ background: idx < 5 ? '#fef2f2' : 'transparent' }}>
+                          <td><strong>{idx + 1}</strong></td>
+                          <td>{d.razon_social}</td>
+                          <td>{d.vendedor}</td>
+                          <td className="num">{fmtMoney(d.totalDeuda)}</td>
+                          <td className="num kpi-negative">{fmtMoney(d.totalVencido)}</td>
+                          <td className="num">{d.documentosVencidos}</td>
+                          <td className="num">
+                            <span className="kpi-negative">
+                              {d.dias_promedio >= 120 ? '🔴 Crítico' : '🟠 Alto'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={7}>No hay deudores crónicos (todos los clientes están al día o en mora &lt; 90 días)</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       );
     }
 
     if (tab === "alertas") {
-      const alertasPriorizadas = filteredAlertas.map(a => {
-        let scoreUrgencia = 0;
-        if (a.diasVencidos > 90) scoreUrgencia += 40;
-        else if (a.diasVencidos > 60) scoreUrgencia += 30;
-        else if (a.diasVencidos > 30) scoreUrgencia += 20;
-        else scoreUrgencia += 10;
-        
-        if (a.monto > 10000) scoreUrgencia += 30;
-        else if (a.monto > 5000) scoreUrgencia += 20;
-        else scoreUrgencia += 10;
-        
-        if (a.severidad === "Crítico") scoreUrgencia += 30;
-        else if (a.severidad === "Alto") scoreUrgencia += 20;
-        
-        return { ...a, scoreUrgencia };
-      }).sort((a, b) => b.scoreUrgencia - a.scoreUrgencia);
-
       return (
-        <div>
-          <div className="card">
-            <div className="card-title">🎛️ Panel de Control de Alertas</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
-                <div className="kpi-title">Alertas Activas</div>
-                <div className="kpi-value kpi-warning">{alertasActivas}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Cerradas Hoy</div>
-                <div className="kpi-value kpi-positive">{alertasCerradasHoy}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Críticas</div>
-                <div className="kpi-value kpi-negative">{alertas.filter(a => a.severidad === "Crítico").length}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Pendientes</div>
-                <div className="kpi-value">{alertasActivas - alertasCerradasHoy}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Tasa Resolución</div>
-                <div className="kpi-value kpi-positive">{alertasActivas > 0 ? Math.round((alertasCerradasHoy / alertasActivas) * 100) : 0}%</div>
-              </div>
-            </div>
+        <div className="card">
+          <div className="card-title">🚨 Alertas de Incumplimiento</div>
+          <div className="row">
+            <label className="field">
+              <span>Búsqueda</span>
+              <input type="text" value={searchAlertas} onChange={e => setSearchAlertas(e.target.value)} placeholder="Buscar por cliente o documento..." />
+            </label>
+            <label className="field">
+              <span>Severidad</span>
+              <select value={filtroSeveridad} onChange={e => setFiltroSeveridad(e.target.value)}>
+                <option value="Todos">Todos</option>
+                <option value="Crítico">Crítico</option>
+                <option value="Alto">Alto</option>
+                <option value="Medio">Medio</option>
+                <option value="Bajo">Bajo</option>
+              </select>
+            </label>
           </div>
-
-          <div className="card">
-            <div className="card-title">⚙️ Configurar Umbrales de Alertas</div>
-            <div className="row">
-              <label className="field">
-                <span>Días Vencidos (umbral)</span>
-                <input type="number" value={umbralDias} onChange={e => setUmbralDias(Number(e.target.value))} />
-              </label>
-              <label className="field">
-                <span>Monto Mínimo (umbral)</span>
-                <input type="number" value={umbralMonto} onChange={e => setUmbralMonto(Number(e.target.value))} />
-              </label>
-              <button className="btn secondary" onClick={() => alert('✅ Umbrales guardados (simulado)')}>💾 Guardar</button>
-            </div>
-            <div style={{ marginTop: '12px', padding: '12px', background: '#f0f9ff', borderRadius: '8px', fontSize: '0.9rem' }}>
-              💡 <strong>Disparador automático:</strong> Al superar estos umbrales, se creará automáticamente una gestión pendiente.
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">🚨 Alertas de Incumplimiento (Priorizadas)</div>
-            <div className="row">
-              <label className="field">
-                <span>Búsqueda</span>
-                <input type="text" value={searchAlertas} onChange={e => setSearchAlertas(e.target.value)} placeholder="Buscar por cliente o documento..." />
-              </label>
-              <label className="field">
-                <span>Severidad</span>
-                <select value={filtroSeveridad} onChange={e => setFiltroSeveridad(e.target.value)}>
-                  <option value="Todos">Todos</option>
-                  <option value="Crítico">Crítico</option>
-                  <option value="Alto">Alto</option>
-                  <option value="Medio">Medio</option>
-                  <option value="Bajo">Bajo</option>
-                </select>
-              </label>
-            </div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>🔥 Prioridad</th>
-                    <th>Cliente</th>
-                    <th className="num">Documento</th>
-                    <th className="num">Monto</th>
-                    <th className="num">Días Vencido</th>
-                    <th className="num">Severidad</th>
-                    <th>Acciones</th>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th className="num">Documento</th>
+                  <th className="num">Monto</th>
+                  <th className="num">Días Vencido</th>
+                  <th className="num">Severidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAlertas.length > 0 ? filteredAlertas.map((a, i) => (
+                  <tr key={i}>
+                    <td>{a.cliente}</td>
+                    <td className="num">{a.documento}</td>
+                    <td className="num">{fmtMoney(a.monto)}</td>
+                    <td className="num">{a.diasVencidos}</td>
+                    <td className="num">
+                      <span className={a.severidad === "Crítico" ? "kpi-negative" : a.severidad === "Alto" ? "kpi-warning" : ""}>
+                        {a.severidad}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {alertasPriorizadas.length > 0 ? alertasPriorizadas.slice(0, 20).map((a, i) => (
-                    <tr key={i}>
-                      <td>
-                        <strong style={{ color: a.scoreUrgencia >= 80 ? '#e63946' : a.scoreUrgencia >= 50 ? '#f59e0b' : '#6b7280' }}>
-                          {a.scoreUrgencia}
-                        </strong>
-                      </td>
-                      <td>{a.cliente}</td>
-                      <td className="num">{a.documento}</td>
-                      <td className="num">{fmtMoney(a.monto)}</td>
-                      <td className="num">{a.diasVencidos}</td>
-                      <td className="num">
-                        <span className={a.severidad === "Crítico" ? "kpi-negative" : a.severidad === "Alto" ? "kpi-warning" : ""}>
-                          {a.severidad}
-                        </span>
-                      </td>
-                      <td>
-                        <button 
-                          className="btn secondary" 
-                          style={{ fontSize: '0.8rem', padding: '4px 8px' }}
-                          onClick={() => alert('🚀 Gestión creada automáticamente (simulado)')}
-                          disabled={!hasWritePermissions}
-                        >
-                          ⚡ Crear Gestión
-                        </button>
-                      </td>
-                    </tr>
-                  )) : <tr><td colSpan={7}>No hay alertas</td></tr>}
-                </tbody>
-              </table>
-              <p className="table-footnote">Mostrando {filteredAlertas.length} de {alertas.length} alertas (ordenadas por urgencia)</p>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">💰 Pronóstico de Flujo de Caja</div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Período</th>
-                    <th className="num">Hasta</th>
-                    <th className="num">Flujo Esperado</th>
-                    <th className="num">Confianza</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pronosticos.length > 0 ? pronosticos.map((p, i) => (
-                    <tr key={i}>
-                      <td>{p.periodo}</td>
-                      <td className="num">{p.fechaHasta}</td>
-                      <td className="num">{fmtMoney(p.flujoEsperado)}</td>
-                      <td className="num">
-                        <span className={p.confianza >= 70 ? 'kpi-positive' : p.confianza >= 40 ? 'kpi-warning' : 'kpi-negative'}>
-                          {p.confianza}%
-                        </span>
-                      </td>
-                    </tr>
-                  )) : <tr><td colSpan={4}>Sin pronósticos</td></tr>}
-                </tbody>
-              </table>
-            </div>
+                )) : <tr><td colSpan={5}>No hay alertas</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       );
     }
 
     if (tab === "tendencias") {
-      // Calcular proyección simple (promedio últimos 3 meses)
-      const ultimos3 = tendencias.slice(0, 3);
-      const promedioEmision = ultimos3.reduce((sum, t) => sum + t.emision, 0) / (ultimos3.length || 1);
-      const promedioCobrado = ultimos3.reduce((sum, t) => sum + t.cobrado, 0) / (ultimos3.length || 1);
-      
-      // Comparativa año anterior (simulado)
-      const mesActual = tendencias[0];
-      const mismoMesAnoAnterior = tendencias[11]; // Simplificado
-      const variacionEmision = mesActual && mismoMesAnoAnterior ? 
-        ((mesActual.emision - mismoMesAnoAnterior.emision) / mismoMesAnoAnterior.emision * 100).toFixed(1) : 0;
-
-      // Tasa crecimiento mensual promedio
-      const tasaCrecimiento = tendencias.length > 1 ? 
-        ((tendencias[0].emision - tendencias[tendencias.length - 1].emision) / tendencias[tendencias.length - 1].emision * 100 / tendencias.length).toFixed(2) : 0;
-
-      // Calcular volatilidad real (desviación estándar / promedio)
-      const emisiones = tendencias.map(t => t.emision);
-      const promedioTotal = emisiones.reduce((a, b) => a + b, 0) / emisiones.length;
-      const varianza = emisiones.reduce((sum, val) => sum + Math.pow(val - promedioTotal, 2), 0) / emisiones.length;
-      const desviacionEstandar = Math.sqrt(varianza);
-      const coefVariacion = promedioTotal > 0 ? (desviacionEstandar / promedioTotal * 100) : 0;
-      const nivelVolatilidad = coefVariacion < 15 ? 'Baja' : coefVariacion < 30 ? 'Media' : 'Alta';
-
       return (
-        <div>
-          <div className="card">
-            <div className="card-title">📊 Indicadores de Tendencia</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
-                <div className="kpi-title">Proyección Emisión (próx mes)</div>
-                <div className="kpi-value">{fmtMoney(promedioEmision)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Proyección Cobrado (próx mes)</div>
-                <div className="kpi-value kpi-positive">{fmtMoney(promedioCobrado)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Var. vs Año Anterior</div>
-                <div className={`kpi-value ${Number(variacionEmision) > 0 ? 'kpi-positive' : 'kpi-negative'}`}>
-                  {Number(variacionEmision) > 0 ? '+' : ''}{variacionEmision}%
-                </div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Tasa Crecimiento Mensual</div>
-                <div className="kpi-value">{tasaCrecimiento}%</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Volatilidad</div>
-                <div className={`kpi-value ${nivelVolatilidad === 'Alta' ? 'kpi-negative' : nivelVolatilidad === 'Media' ? 'kpi-warning' : 'kpi-positive'}`}>{nivelVolatilidad}</div>
-                <div className="kpi-subtitle">{coefVariacion.toFixed(1)}% CV</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-              <button className={`btn ${vistaTendencia === 'tabla' ? 'primary' : 'secondary'}`} onClick={() => setVistaTendencia('tabla')}>
-                📋 Tabla
-              </button>
-              <button className={`btn ${vistaTendencia === 'grafico' ? 'primary' : 'secondary'}`} onClick={() => setVistaTendencia('grafico')}>
-                📊 Gráfico
-              </button>
-              <button className="btn secondary" onClick={() => alert('Análisis de estacionalidad: Dic-Ene alto, Jun-Jul bajo (simulado)')}>
-                🔍 Detectar Estacionalidad
-              </button>
-            </div>
-
-            {vistaTendencia === 'tabla' ? (
-              <div className="table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Mes</th>
-                      <th className="num">Documentos</th>
-                      <th className="num">Emisión</th>
-                      <th className="num">Cobrado</th>
-                      <th className="num">Vencidos</th>
-                      <th className="num">% Cobrado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tendencias.length > 0 ? tendencias.map((t, i) => {
-                      const pctCobrado = t.emision > 0 ? ((t.cobrado / t.emision) * 100).toFixed(1) : 0;
-                      return (
-                        <tr key={i}>
-                          <td><strong>{t.mes}</strong></td>
-                          <td className="num">{t.documentos}</td>
-                          <td className="num">{fmtMoney(t.emision)}</td>
-                          <td className="num">{fmtMoney(t.cobrado)}</td>
-                          <td className="num">{t.vencidos}</td>
-                          <td className="num">
-                            <span className={Number(pctCobrado) >= 80 ? 'kpi-positive' : Number(pctCobrado) >= 50 ? 'kpi-warning' : 'kpi-negative'}>
-                              {pctCobrado}%
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    }) : <tr><td colSpan={6}>Sin datos</td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div style={{ padding: '40px', textAlign: 'center', background: '#f9fafb', borderRadius: '8px' }}>
-                <div style={{ fontSize: '4rem', marginBottom: '16px' }}>📈</div>
-                <p style={{ color: '#6b7280', fontSize: '1.1rem' }}>
-                  Gráfico interactivo de líneas: Emisión vs Cobrado vs Vencido
-                </p>
-                <p style={{ color: '#9ca3af', fontSize: '0.9rem', marginTop: '8px' }}>
-                  (Integración con librería de gráficos pendiente)
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    if (tab === "disputas") {
-      const disputaActual = disputas.find(d => d.id === disputaSeleccionada);
-      
-      // Calcular SLA promedio real desde disputas resueltas
-      const disputasConResolucion = disputas.filter(d => d.estado === "Resuelta" && d.fecha_resolucion && d.fecha_creacion);
-      let slaPromedio = 0;
-      if (disputasConResolucion.length > 0) {
-        const totalDias = disputasConResolucion.reduce((sum, d) => {
-          const inicio = new Date(d.fecha_creacion);
-          const fin = new Date(d.fecha_resolucion!);
-          const dias = Math.floor((fin.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
-          return sum + dias;
-        }, 0);
-        slaPromedio = totalDias / disputasConResolucion.length;
-      }
-      const disputasAbiertas = disputas.filter(d => d.estado === "Abierta").length;
-      const disputasResueltas = disputas.filter(d => d.estado === "Resuelta").length;
-
-      return (
-        <div>
-          <div className="card">
-            <div className="card-title">📊 Resumen de Disputas</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
-                <div className="kpi-title">Total Disputas</div>
-                <div className="kpi-value">{disputas.length}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Abiertas</div>
-                <div className="kpi-value kpi-warning">{disputasAbiertas}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Resueltas</div>
-                <div className="kpi-value kpi-positive">{disputasResueltas}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">SLA Promedio</div>
-                <div className="kpi-value">{slaPromedio > 0 ? `${slaPromedio.toFixed(1)} días` : 'N/A'}</div>
-                <div className="kpi-subtitle">{disputasResueltas} resueltas</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Tasa Resolución</div>
-                <div className="kpi-value kpi-positive">
-                  {disputas.length > 0 ? Math.round((disputasResueltas / disputas.length) * 100) : 0}%
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">⚖️ Gestión de Disputas</div>
-            <button className="btn primary" onClick={() => setShowModalDisputa(true)} disabled={!hasWritePermissions}>+ Nueva Disputa</button>
-            <div className="row row-spaced">
-              <label className="field">
-                <span>Búsqueda</span>
-                <input type="text" value={searchDisputas} onChange={e => setSearchDisputas(e.target.value)} placeholder="Buscar por cliente o documento..." />
-              </label>
-              <label className="field">
-                <span>Estado</span>
-                <select value={filtroEstadoDisputa} onChange={e => setFiltroEstadoDisputa(e.target.value)}>
-                  <option value="Todos">Todos</option>
-                  <option value="Abierta">Abierta</option>
-                  <option value="Resuelta">Resuelta</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Categoría</span>
-                <select value={categoriaDisputa} onChange={e => setCategoriaDisputa(e.target.value)}>
-                  <option value="General">Todas</option>
-                  <option value="Facturación">Facturación</option>
-                  <option value="Calidad">Calidad</option>
-                  <option value="Devolución">Devolución</option>
-                  <option value="Precio">Precio</option>
-                </select>
-              </label>
-            </div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Documento</th>
-                    <th>Cliente</th>
-                    <th className="num">Monto</th>
-                    <th>Motivo</th>
-                    <th>Estado</th>
-                    <th>Responsable</th>
-                    <th>SLA</th>
-                    <th>Acciones</th>
+        <div className="card">
+          <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th className="num">Documentos</th>
+                  <th className="num">Emisión</th>
+                  <th className="num">Cobrado</th>
+                  <th className="num">Vencidos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tendencias.length > 0 ? tendencias.map((t, i) => (
+                  <tr key={i}>
+                    <td><strong>{t.mes}</strong></td>
+                    <td className="num">{t.documentos}</td>
+                    <td className="num">{fmtMoney(t.emision)}</td>
+                    <td className="num">{fmtMoney(t.cobrado)}</td>
+                    <td className="num">{t.vencidos}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredDisputas.length > 0 ? filteredDisputas.map((d, i) => {
-                    const diasAbierto = d.fecha_creacion ? Math.floor((new Date().getTime() - new Date(d.fecha_creacion).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-                    const slaColor = diasAbierto > 7 ? 'kpi-negative' : diasAbierto > 3 ? 'kpi-warning' : 'kpi-positive';
-                    return (
-                      <tr 
-                        key={i} 
-                        style={{ cursor: 'pointer', background: disputaSeleccionada === d.id ? '#fef3c7' : 'transparent' }}
-                        onClick={() => setDisputaSeleccionada(d.id)}
-                      >
-                        <td>{d.documento}</td>
-                        <td>{d.cliente}</td>
-                        <td className="num">{fmtMoney(d.monto)}</td>
-                        <td>{d.motivo || 'Sin especificar'}</td>
-                        <td><span className={d.estado === "Abierta" ? "kpi-negative" : "kpi-positive"}>{d.estado}</span></td>
-                        <td>Admin</td>
-                        <td><span className={slaColor}>{diasAbierto}d</span></td>
-                        <td>
-                          <button 
-                            className="btn secondary" 
-                            style={{ fontSize: '0.75rem', padding: '4px 8px' }}
-                            onClick={(e) => { e.stopPropagation(); alert('Ver detalles (simulado)'); }}
-                          >
-                            👁️
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  }) : <tr><td colSpan={8}>No hay disputas</td></tr>}
-                </tbody>
-              </table>
-              <p className="table-footnote">Mostrando {filteredDisputas.length} de {disputas.length} disputas</p>
-            </div>
+                )) : <tr><td colSpan={5}>Sin datos</td></tr>}
+              </tbody>
+            </table>
           </div>
-
-          {disputaActual && (
-            <div className="card">
-              <div className="card-title">📝 Detalle de Disputa #{disputaActual.id}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
-                <div>
-                  <strong>Cliente:</strong> {disputaActual.cliente}
-                </div>
-                <div>
-                  <strong>Documento:</strong> {disputaActual.documento}
-                </div>
-                <div>
-                  <strong>Monto:</strong> {fmtMoney(disputaActual.monto)}
-                </div>
-                <div>
-                  <strong>Estado:</strong> {disputaActual.estado}
-                </div>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <label className="field">
-                  <span>Cambiar Estado</span>
-                  <select value={estadoIntermedio} onChange={e => setEstadoIntermedio(e.target.value)} disabled={!hasWritePermissions}>
-                    <option value="Nueva">Nueva</option>
-                    <option value="En Revisión">En Revisión</option>
-                    <option value="Escalada">Escalada</option>
-                    <option value="Pendiente Cliente">Pendiente Cliente</option>
-                    <option value="Resuelta">Resuelta</option>
-                  </select>
-                </label>
-              </div>
-
-              <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                <strong>💬 Comentarios/Notas:</strong>
-                <div style={{ marginTop: '8px', color: '#6b7280' }}>{disputaActual.observacion || 'Sin comentarios aún'}</div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn secondary" onClick={() => alert('📎 Adjuntar archivo (simulado)')} disabled={!hasWritePermissions}>
-                  📎 Adjuntar Evidencia
-                </button>
-                <button className="btn secondary" onClick={() => alert('✍️ Agregar comentario (simulado)')} disabled={!hasWritePermissions}>
-                  💬 Añadir Nota
-                </button>
-                <button className="btn secondary" onClick={() => alert('👤 Asignar a: Juan Pérez (simulado)')} disabled={!hasWritePermissions}>
-                  👤 Asignar Responsable
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       );
     }
 
     if (tab === "cuentas") {
-      // KPIs calculados desde documentos y cuentas por aplicar
-      const docsForCuentas = docs || [];
-      const sumValorDocumento = docsForCuentas.reduce((s, d) => {
-        const valor = d.valor_documento ?? ((d.total || 0) + (d.retenciones || 0) + (d.cobros || 0));
-        return s + (Number.isFinite(valor) ? valor : 0);
-      }, 0);
-      const sumRetenciones = docsForCuentas.reduce((s, d) => s + (d.retenciones || 0), 0);
-      const sumCobros = docsForCuentas.reduce((s, d) => s + (d.cobros || 0), 0);
-      const sumTotalPendiente = docsForCuentas.reduce((s, d) => s + (d.total || 0), 0);
-
-      const totalAplicado = sumCobros;
-      const pendienteAplicar = sumTotalPendiente;
-
-      const anticiposVigentes = cuentasAplicar
-        .filter((c) => (c.tipo || "").toLowerCase().includes("adelanto") && c.estado === "Pendiente")
-        .reduce((s, c) => s + (c.monto || 0), 0);
-
-      const notasCreditoDisponibles = cuentasAplicar
-        .filter((c) => (c.tipo || "").toLowerCase().includes("nota") && c.estado === "Pendiente")
-        .reduce((s, c) => s + (c.monto || 0), 0);
-
-      const diferenciaConciliacion = (sumValorDocumento - sumRetenciones - sumCobros) - sumTotalPendiente;
-
-      // Sugerencias automáticas (simulado) - usando cuentasAplicar
-      const sugerencias = cuentasAplicar.slice(0, 3).map((c, i) => ({
-        cuenta: c,
-        documento: filteredDocumentos[i % Math.max(filteredDocumentos.length, 1)] || { numero: 'N/A', saldo: 0 },
-        confianza: 95 - i * 5
-      }));
-
       return (
-        <div>
-          <div className="card">
-            <div className="card-title">📊 Panel de Aplicaciones</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
-                <div className="kpi-title">Total Aplicado</div>
-                <div className="kpi-value kpi-positive">{fmtMoney(totalAplicado)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Pendiente Aplicar</div>
-                <div className="kpi-value kpi-warning">{fmtMoney(pendienteAplicar)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Anticipos Vigentes</div>
-                <div className="kpi-value">{fmtMoney(anticiposVigentes)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Notas de Crédito</div>
-                <div className="kpi-value">{fmtMoney(notasCreditoDisponibles)}</div>
-              </div>
-              <div className="kpi-card">
-                <div className="kpi-title">Diferencia Conciliación</div>
-                <div className="kpi-value" style={{ color: Math.abs(diferenciaConciliacion) > 500 ? '#ef4444' : '#22c55e' }}>
-                  {fmtMoney(diferenciaConciliacion)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">💳 Aplicación de Pagos</div>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-              <button 
-                className={`btn ${modoAplicacion === 'manual' ? 'primary' : 'secondary'}`}
-                onClick={() => setModoAplicacion('manual')}
-              >
-                ✏️ Manual
-              </button>
-              <button 
-                className={`btn ${modoAplicacion === 'sugerida' ? 'primary' : 'secondary'}`}
-                onClick={() => setModoAplicacion('sugerida')}
-              >
-                🤖 Sugerida
-              </button>
-              <button 
-                className={`btn ${modoAplicacion === 'masiva' ? 'primary' : 'secondary'}`}
-                onClick={() => setModoAplicacion('masiva')}
-                disabled={!hasWritePermissions}
-              >
-                ⚡ Masiva
-              </button>
-              <button className="btn secondary" onClick={() => setMostrarHistorial(!mostrarHistorial)}>
-                📜 Historial
-              </button>
-              <button className="btn secondary" onClick={() => setMostrarConciliacion(!mostrarConciliacion)}>
-                🔄 Conciliación
-              </button>
-            </div>
-
-            {modoAplicacion === "sugerida" && (
-              <div style={{ background: '#f0f9ff', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                <strong>🤖 Sugerencias Automáticas</strong>
-                <div className="table-wrapper" style={{ marginTop: '8px' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Cuenta</th>
-                        <th className="num">Monto</th>
-                        <th>Documento Sugerido</th>
-                        <th className="num">Confianza</th>
-                        <th>Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sugerencias.map((s, i) => (
-                        <tr key={i}>
-                          <td>{s.cuenta.cliente}</td>
-                          <td className="num">{fmtMoney(s.cuenta.monto)}</td>
-                          <td>{s.documento.numero}</td>
-                          <td className="num">
-                            <span style={{ color: s.confianza > 90 ? '#22c55e' : s.confianza > 80 ? '#f59e0b' : '#6b7280' }}>
-                              {s.confianza}%
-                            </span>
-                          </td>
-                          <td>
-                            <button 
-                              className="btn primary" 
-                              style={{ fontSize: '0.75rem', padding: '4px 8px' }}
-                              onClick={() => alert(`✅ Aplicado: ${fmtMoney(s.cuenta.monto)} a ${s.documento.numero}`)}
-                              disabled={!hasWritePermissions}
-                            >
-                              ✅ Aplicar
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {modoAplicacion === "masiva" && (
-              <div style={{ background: '#fef3c7', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                <strong>⚡ Aplicación Masiva</strong>
-                <p style={{ marginTop: '8px', color: '#92400e' }}>
-                  Esta función aplicará automáticamente todos los pagos con sugerencias de confianza &gt; 90%.
-                </p>
-                <button 
-                  className="btn primary" 
-                  style={{ marginTop: '8px' }}
-                  onClick={() => alert('⚡ Aplicación masiva ejecutada (simulado): 3 pagos aplicados')}
-                  disabled={!hasWritePermissions}
-                >
-                  🚀 Ejecutar Aplicación Masiva
-                </button>
-              </div>
-            )}
-
-            {mostrarHistorial && (
-              <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                <strong>📜 Historial de Aplicaciones</strong>
-                <div className="table-wrapper" style={{ marginTop: '8px' }}>
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Documento</th>
-                        <th className="num">Saldo Anterior</th>
-                        <th className="num">Pago Aplicado</th>
-                        <th className="num">Nuevo Saldo</th>
-                        <th>Observación</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {abonos.length > 0 ? (
-                        abonos.slice(0, 10).map(a => (
-                          <tr key={a.id}>
-                            <td>{a.fecha.split('T')[0]}</td>
-                            <td>{a.documento}</td>
-                            <td className="num">{fmtMoney(a.total_anterior)}</td>
-                            <td className="num kpi-positive">{fmtMoney(a.total_anterior - a.total_nuevo)}</td>
-                            <td className="num">{fmtMoney(a.total_nuevo)}</td>
-                            <td>{a.observacion || '-'}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={6} style={{ textAlign: 'center', color: '#9ca3af', padding: '20px' }}>
-                            No hay historial de pagos aplicados
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {mostrarConciliacion && (
-              <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', marginBottom: '16px' }}>
-                <strong>🔄 Conciliación Bancaria</strong>
-                <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Saldo Banco</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{fmtMoney(58270.50)}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Saldo Sistema</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold' }}>{fmtMoney(57820.50)}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Diferencia</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ef4444' }}>{fmtMoney(450.00)}</div>
-                  </div>
-                </div>
-                <button 
-                  className="btn secondary" 
-                  style={{ marginTop: '12px' }}
-                  onClick={() => alert('🔍 Investigar diferencia (simulado)')}
-                >
-                  🔍 Investigar Diferencia
-                </button>
-              </div>
-            )}
-
-            <button className="btn primary" onClick={() => setShowModalCuenta(true)} disabled={!hasWritePermissions} style={{ marginBottom: '12px' }}>+ Nueva Cuenta</button>
-            <div className="row row-spaced" style={{ marginBottom: '12px' }}>
-              <label className="field">
-                <span>Búsqueda</span>
-                <input type="text" value={searchCuentas} onChange={e => setSearchCuentas(e.target.value)} placeholder="Buscar por cliente o documento..." />
-              </label>
-              <label className="field">
-                <span>Estado</span>
-                <select value={filtroEstadoCuenta} onChange={e => setFiltroEstadoCuenta(e.target.value)}>
-                  <option value="Todos">Todos</option>
-                  <option value="Pendiente">Pendiente</option>
-                  <option value="Aplicada">Aplicada</option>
-                </select>
-              </label>
-            </div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Documento</th>
-                    <th>Cliente</th>
-                    <th className="num">Monto</th>
-                    <th>Tipo</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCuentas.length > 0 ? filteredCuentas.map((c, i) => (
-                    <tr key={i}>
-                      <td>{c.documento}</td>
-                      <td>{c.cliente}</td>
-                      <td className="num">{fmtMoney(c.monto)}</td>
-                      <td>{c.tipo}</td>
-                      <td><span className={c.estado === "Pendiente" ? "kpi-warning" : "kpi-positive"}>{c.estado}</span></td>
-                      <td>
-                        <button 
-                          className="btn secondary" 
-                          style={{ fontSize: '0.75rem', padding: '4px 8px' }}
-                          onClick={() => alert('Aplicar cuenta (simulado)')}
-                          disabled={!hasWritePermissions}
-                        >
-                          {c.estado === "Pendiente" ? '➕ Aplicar' : '✏️ Editar'}
-                        </button>
-                      </td>
+        <div className="card">
+          <div className="card-title">📜 Historial de Abonos Detectados</div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha Detección</th>
+                  <th>Documento</th>
+                  <th className="num">Saldo Anterior</th>
+                  <th className="num">Pago Aplicado</th>
+                  <th className="num">Nuevo Saldo</th>
+                  <th>Observación</th>
+                </tr>
+              </thead>
+              <tbody>
+                {abonos.length > 0 ? (
+                  abonos.map(a => (
+                    <tr key={a.id}>
+                      <td>{a.fecha.split('T')[0]}</td>
+                      <td><strong>{a.documento}</strong></td>
+                      <td className="num">{fmtMoney(a.total_anterior)}</td>
+                      <td className="num kpi-positive">{fmtMoney(a.total_anterior - a.total_nuevo)}</td>
+                      <td className="num">{fmtMoney(a.total_nuevo)}</td>
+                      <td style={{ fontSize: '0.85rem', color: '#64748b' }}>{a.observacion || '-'}</td>
                     </tr>
-                  )) : <tr><td colSpan={6}>No hay cuentas</td></tr>}
-                </tbody>
-              </table>
-              <p className="table-footnote">Mostrando {filteredCuentas.length} de {cuentasAplicar.length} cuentas</p>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-title">🎫 Anticipos y Notas de Crédito</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
-              <div style={{ background: '#fef3c7', padding: '12px', borderRadius: '8px' }}>
-                <strong>💰 Anticipos Parciales</strong>
-                <p style={{ marginTop: '8px', fontSize: '0.875rem', color: '#92400e' }}>
-                  2 clientes con anticipos vigentes
-                </p>
-                <button 
-                  className="btn secondary" 
-                  style={{ marginTop: '8px', fontSize: '0.75rem' }}
-                  onClick={() => alert('Ver anticipos (simulado)')}
-                >
-                  Ver Detalle
-                </button>
-              </div>
-              <div style={{ background: '#dbeafe', padding: '12px', borderRadius: '8px' }}>
-                <strong>📃 Notas de Crédito</strong>
-                <p style={{ marginTop: '8px', fontSize: '0.875rem', color: '#1e40af' }}>
-                  {fmtMoney(notasCreditoDisponibles)} disponibles
-                </p>
-                <button 
-                  className="btn secondary" 
-                  style={{ marginTop: '8px', fontSize: '0.75rem' }}
-                  onClick={() => alert('Aplicar nota de crédito (simulado)')}
-                  disabled={!hasWritePermissions}
-                >
-                  Aplicar NC
-                </button>
-              </div>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
+                      <div style={{ fontSize: '1rem', marginBottom: '8px' }}>No hay abonos detectados aún</div>
+                      <div style={{ fontSize: '0.85rem' }}>Importa el Excel para detectar cambios en los saldos</div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       );
@@ -2845,25 +2235,66 @@ export default function App() {
 
     if (tab === "config") {
       return (
-        <div className="card">
-          <div className="card-title">Configuración</div>
-          {!hasWritePermissions && (
-            <div className="readonly-banner">
-              ⚠️ <strong>Modo Solo Lectura</strong> - Solo la aplicación de escritorio puede hacer cambios
+        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
+          <h2 style={{ marginBottom: 18, fontWeight: 700, color: '#374151' }}>Configuración y Administración</h2>
+
+          {/* Sección: Datos de Empresa */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Datos de Empresa</h3>
+            <button className="btn primary" style={{ marginRight: 8 }} onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Editar datos</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🖼️ Cambiar logo</button>
+          </div>
+
+          {/* Sección: Usuarios y Permisos */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Usuarios y Permisos</h3>
+            <button className="btn primary" style={{ marginRight: 8 }}>👤 Administrar usuarios</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🔑 Roles y permisos</button>
+          </div>
+
+          {/* Sección: Importación/Exportación */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Importación y Exportación</h3>
+            <button className="btn primary" style={{ marginRight: 8 }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📤 Exportar respaldo</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📄 Descargar plantilla</button>
+          </div>
+
+          {/* Sección: Sincronización y Backup */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Sincronización y Backup</h3>
+            <button className="btn primary" style={{ marginRight: 8 }}>🔄 Sincronizar</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>💾 Backup manual</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>♻️ Restaurar backup</button>
+          </div>
+
+          {/* Sección: Personalización y Temas */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #fbeee6 0%, #f6e7d7 100%)', color: '#374151' }}>🌸 Femenino Pastel</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f7e6f7 0%, #e6f7f6 100%)', color: '#374151' }}>💜 Femenino Lavanda</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #ffe4e1 0%, #f5f3ea 100%)', color: '#374151' }}>🌷 Femenino Coral</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', color: '#1e293b' }}>🟦 Masculino Azul</button>
+              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f3f4f6 0%, #d1d5db 100%)', color: '#1e293b' }}>🟫 Masculino Gris</button>
             </div>
-          )}
-          <button className="btn primary" onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Datos de Empresa</button>
-          <button className="btn primary" onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar desde Excel</button>
-          <button className="btn secondary" onClick={cargarDatos}>🔄 Recargar Datos</button>
-          <button className="btn danger" onClick={async () => {
-            const result = await window.api.reiniciarEstructuraExcel?.();
-            if (result?.ok) {
-              addToast(result.message || "Estructura reiniciada", "success");
-            } else {
-              addToast(result?.message || "Error reiniciando estructura", "error");
-            }
-          }}>🔄 Reiniciar Estructura Excel</button>
-          <button className="btn danger" onClick={() => setShowModalLimpiar(true)}>🧹 Limpiar Base de Datos</button>
+            <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Los cambios se aplicarán automáticamente.</span>
+          </div>
+
+          {/* Sección: Seguridad */}
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Seguridad</h3>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🔒 Cambiar contraseña</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>🔐 Autenticación 2 pasos</button>
+          </div>
+
+          {/* Sección: Soporte y Ayuda */}
+          <div style={{ marginBottom: 0 }}>
+            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Soporte y Ayuda</h3>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📖 Ver documentación</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>💬 Contactar soporte</button>
+            <button className="btn secondary" style={{ marginRight: 8 }}>📝 Historial de cambios</button>
+          </div>
         </div>
       );
     }
@@ -2875,8 +2306,31 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-left">
-          <h1>💰 Cartera Dashboard</h1>
-          <span className="badge">{empresa.nombre}</span>
+          <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+              borderRadius: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)'
+            }}>
+              💰
+            </div>
+            <div>
+              <h1 style={{margin: 0, fontSize: '1.4rem', fontWeight: '700', color: '#0f172a'}}>
+                {empresa.nombre || 'Cartera Dashboard'}
+              </h1>
+              {empresa.administrador && (
+                <div style={{fontSize: '0.8rem', color: '#64748b', marginTop: '2px'}}>
+                  👤 {empresa.administrador}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
         <div className="header-right">
           <div className="header-info">
@@ -2927,6 +2381,14 @@ export default function App() {
             <span className="info-label">💾</span>
             <span className="info-value info-path">{isWeb ? "Modo Web" : "C:\\Users\\...\\cartera.db"}</span>
           </div>
+          <div className="header-info">
+            <button
+              className="refresh-btn"
+              style={{ padding: '4px 12px', borderRadius: 6, background: '#2563eb', color: '#fff', fontWeight: 'bold', border: 'none', cursor: 'pointer', marginLeft: 8 }}
+              title="Refrescar todo el sistema"
+              onClick={() => window.location.reload()}
+            >🔄 Refrescar</button>
+          </div>
         </div>
       </header>
 
@@ -2935,11 +2397,9 @@ export default function App() {
         <button className={tab === "gestion" ? "nav-item active" : "nav-item"} onClick={() => setTab("gestion")}>📋 Gestión</button>
         <button className={tab === "reportes" ? "nav-item active" : "nav-item"} onClick={() => setTab("reportes")}>📄 Reportes</button>
         <button className={tab === "crm" ? "nav-item active" : "nav-item"} onClick={() => setTab("crm")}>👥 CRM</button>
-        <button className={tab === "campanas" ? "nav-item active" : "nav-item"} onClick={() => setTab("campanas")}>📢 Campañas</button>
         <button className={tab === "analisis" ? "nav-item active" : "nav-item"} onClick={() => setTab("analisis")}>🔍 Análisis</button>
         <button className={tab === "alertas" ? "nav-item active" : "nav-item"} onClick={() => setTab("alertas")}>🚨 Alertas</button>
         <button className={tab === "tendencias" ? "nav-item active" : "nav-item"} onClick={() => setTab("tendencias")}>📈 Tendencias</button>
-        <button className={tab === "disputas" ? "nav-item active" : "nav-item"} onClick={() => setTab("disputas")}>⚖️ Disputas</button>
         <button className={tab === "cuentas" ? "nav-item active" : "nav-item"} onClick={() => setTab("cuentas")}>💳 Cuentas</button>
         <button className={tab === "config" ? "nav-item active" : "nav-item"} onClick={() => setTab("config")}>⚙️</button>
       </nav>
@@ -3020,41 +2480,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Campaña */}
-      {showModalCampana && (
-        <div className="modal-overlay" onClick={() => setShowModalCampana(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">Nueva Campaña</div>
-            <div className="modal-body">
-              <label className="field">
-                <span>Nombre</span>
-                <input value={campanaForm.nombre} onChange={e => setCampanaForm({...campanaForm, nombre: e.target.value})} />
-              </label>
-              <label className="field">
-                <span>Descripción</span>
-                <input value={campanaForm.descripcion} onChange={e => setCampanaForm({...campanaForm, descripcion: e.target.value})} />
-              </label>
-              <label className="field">
-                <span>Fecha Inicio</span>
-                <input type="date" value={campanaForm.fecha_inicio} onChange={e => setCampanaForm({...campanaForm, fecha_inicio: e.target.value})} />
-              </label>
-              <label className="field">
-                <span>Fecha Fin</span>
-                <input type="date" value={campanaForm.fecha_fin} onChange={e => setCampanaForm({...campanaForm, fecha_fin: e.target.value})} />
-              </label>
-              <label className="field">
-                <span>Responsable</span>
-                <input value={campanaForm.responsable} onChange={e => setCampanaForm({...campanaForm, responsable: e.target.value})} />
-              </label>
-            </div>
-            <div className="modal-footer">
-              <button className="btn secondary" onClick={() => setShowModalCampana(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarCampana}>Crear</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Modal Empresa */}
       {showModalEmpresa && (
         <div className="modal-overlay" onClick={() => setShowModalEmpresa(false)}>
@@ -3082,6 +2507,10 @@ export default function App() {
                 <input value={empresa.email || ""} onChange={e => setEmpresa({...empresa, email: e.target.value})} />
               </label>
               <label className="field">
+                <span>Gestor de Cobranza</span>
+                <input value={empresa.administrador || ""} onChange={e => setEmpresa({...empresa, administrador: e.target.value})} placeholder="Ej: Lic. Alba Mayorga L" />
+              </label>
+              <label className="field">
                 <span>Meta Mensual $</span>
                 <input type="number" value={empresa.meta_mensual || 100000} onChange={e => setEmpresa({...empresa, meta_mensual: Number(e.target.value)})} />
               </label>
@@ -3089,89 +2518,6 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalEmpresa(false)}>Cancelar</button>
               <button className="btn primary" onClick={guardarEmpresa}>Guardar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Disputa */}
-      {showModalDisputa && (
-        <div className="modal-overlay" onClick={() => setShowModalDisputa(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">Nueva Disputa</div>
-            <div className="modal-body">
-              <label className="field">
-                <span>Documento</span>
-                <input value={disputaForm.documento} onChange={e => setDisputaForm({...disputaForm, documento: e.target.value})} placeholder="Ej: DOC-001" />
-              </label>
-              <label className="field">
-                <span>Cliente</span>
-                <input value={disputaForm.cliente} onChange={e => setDisputaForm({...disputaForm, cliente: e.target.value})} placeholder="Nombre del cliente" />
-              </label>
-              <label className="field">
-                <span>Monto</span>
-                <input type="number" step="0.01" value={disputaForm.monto} onChange={e => setDisputaForm({...disputaForm, monto: parseFloat(e.target.value) || 0})} placeholder="0.00" />
-              </label>
-              <label className="field">
-                <span>Motivo</span>
-                <select value={disputaForm.motivo} onChange={e => setDisputaForm({...disputaForm, motivo: e.target.value})}>
-                  <option value="">-- Seleccionar --</option>
-                  <option value="Mercancía no recibida">Mercancía no recibida</option>
-                  <option value="Mercancía defectuosa">Mercancía defectuosa</option>
-                  <option value="Duplicado">Duplicado</option>
-                  <option value="Precio incorrecto">Precio incorrecto</option>
-                  <option value="Calidad">Calidad</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Observación</span>
-                <textarea value={disputaForm.observacion} onChange={e => setDisputaForm({...disputaForm, observacion: e.target.value})} placeholder="Detalles de la disputa" rows={3} />
-              </label>
-            </div>
-            <div className="modal-footer">
-              <button className="btn secondary" onClick={() => setShowModalDisputa(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarDisputa} disabled={!hasWritePermissions}>Guardar Disputa</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Cuenta por Aplicar */}
-      {showModalCuenta && (
-        <div className="modal-overlay" onClick={() => setShowModalCuenta(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">Nueva Cuenta por Aplicar</div>
-            <div className="modal-body">
-              <label className="field">
-                <span>Documento</span>
-                <input value={cuentaForm.documento} onChange={e => setCuentaForm({...cuentaForm, documento: e.target.value})} placeholder="Ej: DOC-001" />
-              </label>
-              <label className="field">
-                <span>Cliente</span>
-                <input value={cuentaForm.cliente} onChange={e => setCuentaForm({...cuentaForm, cliente: e.target.value})} placeholder="Nombre del cliente" />
-              </label>
-              <label className="field">
-                <span>Monto</span>
-                <input type="number" step="0.01" value={cuentaForm.monto} onChange={e => setCuentaForm({...cuentaForm, monto: parseFloat(e.target.value) || 0})} placeholder="0.00" />
-              </label>
-              <label className="field">
-                <span>Tipo</span>
-                <select value={cuentaForm.tipo} onChange={e => setCuentaForm({...cuentaForm, tipo: e.target.value})}>
-                  <option value="">-- Seleccionar --</option>
-                  <option value="Adelanto">Adelanto</option>
-                  <option value="Abono sin factura">Abono sin factura</option>
-                  <option value="Nota crédito">Nota crédito</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Observación</span>
-                <textarea value={cuentaForm.observacion} onChange={e => setCuentaForm({...cuentaForm, observacion: e.target.value})} placeholder="Detalles de la cuenta" rows={3} />
-              </label>
-            </div>
-            <div className="modal-footer">
-              <button className="btn secondary" onClick={() => setShowModalCuenta(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarCuenta} disabled={!hasWritePermissions}>Guardar Cuenta</button>
             </div>
           </div>
         </div>
@@ -3188,10 +2534,7 @@ export default function App() {
               <ul>
                 <li>Documentos importados</li>
                 <li>Gestiones y promesas</li>
-                <li>Disputas</li>
-                <li>Cuentas por aplicar</li>
                 <li>Historial de abonos</li>
-                <li>Campañas</li>
               </ul>
               <p><strong>Se preservarán:</strong></p>
               <ul>
@@ -3209,7 +2552,34 @@ export default function App() {
                   if (result?.ok) {
                     setShowModalLimpiar(false);
                     addToast(result.message || "Base limpia exitosamente", "success");
-                    await cargarDatos();
+                    // Limpiar estado sin cargar datos de prueba
+                    setDocs([]);
+                    setClientes([]);
+                    setVendedores([]);
+                    setTopClientes([]);
+                    setGestiones([]);
+                    setTendencias([]);
+                    setCuentasAplicar([]);
+                    setAbonos([]);
+                    setStats({
+                      fechaCorte: "",
+                      totalSaldo: 0,
+                      totalCobrado: 0,
+                      vencidaSaldo: 0,
+                      percentVencida: 0,
+                      mora90Saldo: 0,
+                      percentMora90: 0,
+                      docsPendientes: 0,
+                      clientesConSaldo: 0,
+                      aging: { porVencer: 0, d30: 0, d60: 0, d90: 0, d120: 0, d120p: 0 },
+                      percentTop10: 0,
+                      npl: 0,
+                      dso: 0,
+                      recuperacionMesActual: 0,
+                      metaMensual: 50000,
+                      percentMetaCumplida: 0,
+                      tasaCumplimientoPromesas: 0
+                    });
                   } else {
                     addToast(result?.message || "Error limpiando base", "error");
                   }
@@ -3225,5 +2595,3 @@ export default function App() {
     </div>
   );
 }
-
-
