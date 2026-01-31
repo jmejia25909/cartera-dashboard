@@ -241,6 +241,76 @@ type Abono = {
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  // Temas disponibles
+  const themes = {
+    pastel: {
+      '--primary': '#FFB7B2', // rosa pastel
+      '--primary-dark': '#FFDAC1', // melón pastel
+      '--primary-light': '#FFD6E0', // rosado claro
+      '--accent': '#FFDAC1',
+      '--text': '#4B2E83', // morado profundo
+      '--card': '#FFFFFF',
+      '--border': '#FFD6E0',
+      '--bg-gradient': 'linear-gradient(135deg, #FFB7B2 0%, #FFD6E0 100%)',
+    },
+    lavanda: {
+      '--primary': '#B39DDB', // lavanda
+      '--primary-dark': '#4527A0', // violeta oscuro
+      '--primary-light': '#E1BEE7', // violeta claro
+      '--accent': '#CE93D8',
+      '--text': '#4527A0',
+      '--card': '#FFFFFF',
+      '--border': '#E1BEE7',
+      '--bg-gradient': 'linear-gradient(135deg, #B39DDB 0%, #E1BEE7 100%)',
+    },
+    coral: {
+      '--primary': '#FF6F61', // coral
+      '--primary-dark': '#6D4C41', // marrón oscuro
+      '--primary-light': '#FFB88C', // naranja suave
+      '--accent': '#FFD180',
+      '--text': '#6D4C41',
+      '--card': '#FFFFFF',
+      '--border': '#FFB88C',
+      '--bg-gradient': 'linear-gradient(135deg, #FF6F61 0%, #FFB88C 100%)',
+    },
+    azul: {
+      '--primary': '#1976D2', // azul fuerte
+      '--primary-dark': '#0D1B2A', // azul oscuro
+      '--primary-light': '#64B5F6', // azul claro
+      '--accent': '#00B8D4',
+      '--text': '#0D1B2A',
+      '--card': '#FFFFFF',
+      '--border': '#64B5F6',
+      '--bg-gradient': 'linear-gradient(135deg, #1976D2 0%, #64B5F6 100%)',
+    },
+    gris: {
+      '--primary': '#607D8B', // gris azulado
+      '--primary-dark': '#263238', // gris oscuro
+      '--primary-light': '#B0BEC5', // gris claro
+      '--accent': '#FFD54F', // amarillo cálido
+      '--text': '#263238',
+      '--card': '#FFFFFF',
+      '--border': '#B0BEC5',
+      '--bg-gradient': 'linear-gradient(135deg, #607D8B 0%, #B0BEC5 100%)',
+    },
+  };
+  // Leer tema guardado en localStorage al iniciar
+  const getInitialTheme = () => {
+    const saved = window.localStorage.getItem('app_theme');
+    return saved && ['pastel','lavanda','coral','azul','gris'].includes(saved) ? saved : 'pastel';
+  };
+  const [theme, setTheme] = useState(getInitialTheme());
+  const [pendingTheme, setPendingTheme] = useState(getInitialTheme());
+
+  // Aplica el tema al root
+  useEffect(() => {
+    const root = document.documentElement;
+    const vars = themes[theme];
+    Object.entries(vars).forEach(([key, value]) => {
+      root.style.setProperty(key, value);
+    });
+    window.localStorage.setItem('app_theme', theme);
+  }, [theme]);
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', onResize);
@@ -976,12 +1046,12 @@ export default function App() {
           }}>
             <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>CARTERA TOTAL</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoneyCompact(stats?.totalSaldo || 0)}</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoney(stats?.totalSaldo || 0)}</div>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Saldo total pendiente</div>
             </div>
             <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>VENCIDO</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoneyCompact(stats?.vencidaSaldo || 0)}</div>
+              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoney(stats?.vencidaSaldo || 0)}</div>
               <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Monto de facturas vencidas</div>
             </div>
             <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: stats && stats.npl > 30 ? 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' : 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -1027,11 +1097,11 @@ export default function App() {
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>RETENCIONES</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>{fmtMoneyCompact(analisisRetenciones.totalRetenido)}</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600' }}>{fmtMoney(analisisRetenciones.totalRetenido)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>COBRADO MES</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#10b981' }}>{fmtMoneyCompact(stats?.totalCobrado || 0)}</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#10b981' }}>{fmtMoney(stats?.totalCobrado || 0)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.52rem', color: '#6b7280', marginBottom: '1px' }}>CRÓNICOS</div>
@@ -1321,32 +1391,36 @@ export default function App() {
                 </thead>
                 <tbody>
                   {clientesConVencidos.length > 0 ? (
-                    clientesConVencidos.slice(0, 50).map(cliente => {
-                      const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
-                      const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
-                      const maxDias = Math.max(...docsCliente.map(d => d.dias_vencidos || 0));
-                      const ultimaGestion = gestiones.filter(g => g.cliente === cliente || g.razon_social === cliente).sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-                      
-                      // Indicador visual por días
-                      const colorIndicador = maxDias > 90 ? '#ef4444' : maxDias > 60 ? '#f59e0b' : '#10b981';
-                      
-                      return (
-                        <tr key={cliente} style={{borderLeft: `4px solid ${colorIndicador}`}}>
-                          <td style={{textAlign: 'center'}}>
-                            <input type="checkbox" />
-                          </td>
-                          <td><strong>{cliente}</strong></td>
-                          <td className="num" style={{color: colorIndicador, fontWeight: 'bold'}}>{fmtMoney(totalCliente)}</td>
-                          <td>{ultimaGestion ? ultimaGestion.fecha.split('T')[0] : '-'}</td>
-                          <td style={{textAlign: 'center'}}>{ultimaGestion && ultimaGestion.tipo.includes('Email') ? '✓' : 'X'}</td>
-                          <td>
-                            <button className="btn secondary" style={{fontSize: '0.75rem', padding: '4px 8px'}} onClick={() => exportarEstadoDeCuenta(cliente)}>
-                              📄 PDF
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    clientesConVencidos
+                      .map(cliente => {
+                        const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
+                        const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+                        return { cliente, docsCliente, totalCliente };
+                      })
+                      .sort((a, b) => b.totalCliente - a.totalCliente)
+                      .slice(0, 50)
+                      .map(({ cliente, docsCliente, totalCliente }) => {
+                        const maxDias = Math.max(...docsCliente.map(d => d.dias_vencidos || 0));
+                        const ultimaGestion = gestiones.filter(g => g.cliente === cliente || g.razon_social === cliente).sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+                        // Indicador visual por días
+                        const colorIndicador = maxDias > 90 ? '#ef4444' : maxDias > 60 ? '#f59e0b' : '#10b981';
+                        return (
+                          <tr key={cliente} style={{borderLeft: `4px solid ${colorIndicador}`}}>
+                            <td style={{textAlign: 'center'}}>
+                              <input type="checkbox" />
+                            </td>
+                            <td><strong>{cliente}</strong></td>
+                            <td className="num" style={{color: colorIndicador, fontWeight: 'bold'}}>{fmtMoney(totalCliente)}</td>
+                            <td>{ultimaGestion ? ultimaGestion.fecha.split('T')[0] : '-'}</td>
+                            <td style={{textAlign: 'center'}}>{ultimaGestion && ultimaGestion.tipo.includes('Email') ? '✓' : 'X'}</td>
+                            <td>
+                              <button className="btn secondary" style={{fontSize: '0.75rem', padding: '4px 8px'}} onClick={() => exportarEstadoDeCuenta(cliente)}>
+                                📄 PDF
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                   ) : (
                     <tr>
                       <td colSpan={6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
@@ -1457,65 +1531,66 @@ export default function App() {
 
     if (tab === "config") {
       return (
-        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: '#fff', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
-          <h2 style={{ marginBottom: 18, fontWeight: 700, color: '#374151' }}>Configuración y Administración</h2>
+        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: 'var(--card)', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
+          <h2 style={{ marginBottom: 18, fontWeight: 700, color: 'var(--text)' }}>Configuración y Administración</h2>
 
           {/* Sección: Datos de Empresa */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Datos de Empresa</h3>
-            <button className="btn primary" style={{ marginRight: 8 }} onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Editar datos</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🖼️ Cambiar logo</button>
+            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Datos de Empresa</h3>
+            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }} onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Editar datos</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🖼️ Cambiar logo</button>
           </div>
 
           {/* Sección: Usuarios y Permisos */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Usuarios y Permisos</h3>
-            <button className="btn primary" style={{ marginRight: 8 }}>👤 Administrar usuarios</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🔑 Roles y permisos</button>
+            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Usuarios y Permisos</h3>
+            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }}>👤 Administrar usuarios</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔑 Roles y permisos</button>
           </div>
 
           {/* Sección: Importación/Exportación */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Importación y Exportación</h3>
-            <button className="btn primary" style={{ marginRight: 8 }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📤 Exportar respaldo</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📄 Descargar plantilla</button>
+            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Importación y Exportación</h3>
+            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📤 Exportar respaldo</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📄 Descargar plantilla</button>
           </div>
 
           {/* Sección: Sincronización y Backup */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Sincronización y Backup</h3>
-            <button className="btn primary" style={{ marginRight: 8 }}>🔄 Sincronizar</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>💾 Backup manual</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>♻️ Restaurar backup</button>
+            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Sincronización y Backup</h3>
+            <button className="btn primary" style={{ marginRight: 8, background: 'var(--primary)', color: 'var(--card)' }}>🔄 Sincronizar</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>💾 Backup manual</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>♻️ Restaurar backup</button>
           </div>
 
           {/* Sección: Personalización y Temas */}
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #fbeee6 0%, #f6e7d7 100%)', color: '#374151' }}>🌸 Femenino Pastel</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f7e6f7 0%, #e6f7f6 100%)', color: '#374151' }}>💜 Femenino Lavanda</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #ffe4e1 0%, #f5f3ea 100%)', color: '#374151' }}>🌷 Femenino Coral</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', color: '#1e293b' }}>🟦 Masculino Azul</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f3f4f6 0%, #d1d5db 100%)', color: '#1e293b' }}>🟫 Masculino Gris</button>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
+              <button className={`btn theme${pendingTheme === 'pastel' ? ' selected' : ''}`} style={{ background: themes.pastel['--bg-gradient'], color: themes.pastel['--text'], border: pendingTheme === 'pastel' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('pastel')}>🌸 Femenino Pastel</button>
+              <button className={`btn theme${pendingTheme === 'lavanda' ? ' selected' : ''}`} style={{ background: themes.lavanda['--bg-gradient'], color: themes.lavanda['--text'], border: pendingTheme === 'lavanda' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('lavanda')}>💜 Femenino Lavanda</button>
+              <button className={`btn theme${pendingTheme === 'coral' ? ' selected' : ''}`} style={{ background: themes.coral['--bg-gradient'], color: themes.coral['--text'], border: pendingTheme === 'coral' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('coral')}>🌷 Femenino Coral</button>
+              <button className={`btn theme${pendingTheme === 'azul' ? ' selected' : ''}`} style={{ background: themes.azul['--bg-gradient'], color: themes.azul['--text'], border: pendingTheme === 'azul' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('azul')}>🟦 Masculino Azul</button>
+              <button className={`btn theme${pendingTheme === 'gris' ? ' selected' : ''}`} style={{ background: themes.gris['--bg-gradient'], color: themes.gris['--text'], border: pendingTheme === 'gris' ? '2px solid #2563eb' : 'none' }} onClick={() => setPendingTheme('gris')}>🟫 Masculino Gris</button>
+              <button className="btn primary" style={{ marginLeft: 16, minWidth: 90 }} onClick={() => setTheme(pendingTheme)} disabled={theme === pendingTheme}>Aplicar</button>
             </div>
-            <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Los cambios se aplicarán automáticamente.</span>
+            <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Presiona "Aplicar" para ver los cambios.</span>
           </div>
 
           {/* Sección: Seguridad */}
           <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Seguridad</h3>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🔒 Cambiar contraseña</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🔐 Autenticación 2 pasos</button>
+            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Seguridad</h3>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔒 Cambiar contraseña</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔐 Autenticación 2 pasos</button>
           </div>
 
           {/* Sección: Soporte y Ayuda */}
           <div style={{ marginBottom: 0 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Soporte y Ayuda</h3>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📖 Ver documentación</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>💬 Contactar soporte</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📝 Historial de cambios</button>
+            <h3 style={{ color: 'var(--primary)', marginBottom: 8 }}>Soporte y Ayuda</h3>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📖 Ver documentación</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>💬 Contactar soporte</button>
+            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📝 Historial de cambios</button>
           </div>
         </div>
       );
@@ -2272,11 +2347,11 @@ export default function App() {
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
             <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #fbeee6 0%, #f6e7d7 100%)', color: '#374151' }}>🌸 Femenino Pastel</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f7e6f7 0%, #e6f7f6 100%)', color: '#374151' }}>💜 Femenino Lavanda</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #ffe4e1 0%, #f5f3ea 100%)', color: '#374151' }}>🌷 Femenino Coral</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', color: '#1e293b' }}>🟦 Masculino Azul</button>
-              <button className="btn theme" style={{ background: 'linear-gradient(135deg, #f3f4f6 0%, #d1d5db 100%)', color: '#1e293b' }}>🟫 Masculino Gris</button>
+              <button className={`btn theme${theme === 'pastel' ? ' selected' : ''}`} style={{ background: themes.pastel['--bg-gradient'], color: themes.pastel['--text'], border: theme === 'pastel' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('pastel')}>🌸 Femenino Pastel</button>
+              <button className={`btn theme${theme === 'lavanda' ? ' selected' : ''}`} style={{ background: themes.lavanda['--bg-gradient'], color: themes.lavanda['--text'], border: theme === 'lavanda' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('lavanda')}>💜 Femenino Lavanda</button>
+              <button className={`btn theme${theme === 'coral' ? ' selected' : ''}`} style={{ background: themes.coral['--bg-gradient'], color: themes.coral['--text'], border: theme === 'coral' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('coral')}>🌷 Femenino Coral</button>
+              <button className={`btn theme${theme === 'azul' ? ' selected' : ''}`} style={{ background: themes.azul['--bg-gradient'], color: themes.azul['--text'], border: theme === 'azul' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('azul')}>🟦 Masculino Azul</button>
+              <button className={`btn theme${theme === 'gris' ? ' selected' : ''}`} style={{ background: themes.gris['--bg-gradient'], color: themes.gris['--text'], border: theme === 'gris' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('gris')}>🟫 Masculino Gris</button>
             </div>
             <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Los cambios se aplicarán automáticamente.</span>
           </div>

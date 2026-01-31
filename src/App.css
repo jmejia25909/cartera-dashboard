@@ -1,3 +1,15 @@
+/* Menú de tabs sticky */
+.nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 101;
+  background: var(--card);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  display: flex;
+  gap: 8px;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
 /* ==========================================
    SISTEMA DE DISEÑO - VARIABLES Y BASE
    ========================================== */
