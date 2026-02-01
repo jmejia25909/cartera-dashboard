@@ -43,6 +43,7 @@ type Empresa = {
   administrador?: string;
   meta_mensual?: number;
   tema?: string;
+  logo?: string;
 };
 
 type Documento = {
@@ -937,7 +938,11 @@ export default function App() {
     }
     try {
       const result = await window.api.cambiarLogo();
-      if (result.ok) addToast("Logotipo actualizado correctamente", "success");
+      if (result.ok) {
+        addToast("Logotipo actualizado correctamente", "success");
+        // Actualizar estado local inmediatamente
+        setEmpresa(prev => ({ ...prev, logo: result.logo }));
+      }
       else if (result.message !== "Cancelado") addToast("Error: " + result.message, "error");
     } catch (e) {
       console.error(e);
@@ -2528,15 +2533,20 @@ export default function App() {
             <div style={{
               width: '42px',
               height: '42px',
-              background: 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
+              background: empresa.logo ? 'transparent' : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
               borderRadius: '10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: '20px',
-              boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)'
+              boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)',
+              overflow: 'hidden'
             }}>
-              💰
+              {empresa.logo ? (
+                <img src={empresa.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                '💰'
+              )}
             </div>
             <div>
               <h1 style={{margin: 0, fontSize: '1.4rem', fontWeight: '700', color: 'var(--text-main)'}}>
@@ -2731,7 +2741,7 @@ export default function App() {
               </label>
               <label className="field">
                 <span>Meta Mensual $</span>
-                <input type="number" value={empresa.meta_mensual || 100000} onChange={e => setEmpresa({...empresa, meta_mensual: Number(e.target.value)})} />
+                <input type="number" value={empresa.meta_mensual ?? ''} onChange={e => setEmpresa({...empresa, meta_mensual: Number(e.target.value)})} />
               </label>
             </div>
             <div className="modal-footer">

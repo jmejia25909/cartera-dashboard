@@ -1334,6 +1334,7 @@ ipcMain.handle("empresaGuardar", async (_evt, data) => {
     SET nombre = @nombre, direccion = @direccion, telefono = @telefono, 
         email = @email, ruc = @ruc, administrador = @administrador, 
         iva_percent = @iva_percent,
+        meta_mensual = @meta_mensual,
         tema = @tema
     WHERE id = 1
   `);
@@ -1361,21 +1362,29 @@ ipcMain.handle("exportarBackup", async () => {
 });
 
 ipcMain.handle("cambiarLogo", async () => {
-  if (!mainWindow) return { ok: false, message: "Ventana no disponible" };
+  if (!mainWindow) return { ok: false, message: "Ventana no encontrada" };
+  
   try {
-    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-      title: "Seleccionar Logotipo de Empresa",
-      properties: ['openFile'],
-      filters: [{ name: 'Imágenes', extensions: ['png', 'ico', 'jpg', 'jpeg'] }]
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Seleccionar Logotipo",
+      properties: ["openFile"],
+      filters: [
+        { name: "Imágenes", extensions: ["png", "jpg", "jpeg", "svg", "webp"] },
+      ],
     });
 
-    if (canceled || filePaths.length === 0) return { ok: false, message: "Cancelado" };
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, message: "Cancelado" };
+    }
 
-    const sourcePath = filePaths[0];
-    const destPath = join(app.getPath('userData'), 'custom-logo.png');
-    fs.copyFileSync(sourcePath, destPath);
-    mainWindow.setIcon(destPath);
-    return { ok: true };
+    const filePath = result.filePaths[0];
+    const imageBuffer = fs.readFileSync(filePath);
+    const ext = extname(filePath).toLowerCase();
+    const mimeType = ext === '.svg' ? 'svg+xml' : (ext === '.jpg' || ext === '.jpeg') ? 'jpeg' : ext.slice(1);
+    const base64Image = `data:image/${mimeType};base64,${imageBuffer.toString("base64")}`;
+
+    db.prepare("UPDATE empresa SET logo = @logo WHERE id = 1").run({ logo: base64Image });
+    return { ok: true, logo: base64Image };
   } catch (e: any) {
     return { ok: false, message: e.message };
   }
