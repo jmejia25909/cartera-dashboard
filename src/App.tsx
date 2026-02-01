@@ -286,15 +286,6 @@ export default function App() {
   // Estados para tab Análisis
   const [vistaAnalisis, setVistaAnalisis] = useState<"motivos" | "productividad" | "segmentacion" | "riesgo" | "comparativa" | "cronicos">("motivos");
   
-  // Estados para tab Alertas
-  const [umbralDias, setUmbralDias] = useState(30);
-  const [umbralMonto, setUmbralMonto] = useState(1000);
-  const [alertasActivas, setAlertasActivas] = useState(0);
-  const [alertasCerradasHoy, setAlertasCerradasHoy] = useState(0);
-  
-  // Estados para tab Tendencias
-  const [vistaTendencia, setVistaTendencia] = useState<"tabla" | "grafico">("tabla");
-  
   // Estados para tab Gestión
   const [filtroVistaGestion, setFiltroVistaGestion] = useState("Todos");
   
@@ -318,13 +309,6 @@ export default function App() {
   // Estados de health check
   const [localUrlHealthy, setLocalUrlHealthy] = useState<boolean>(false);
   const [remoteUrlHealthy, setRemoteUrlHealthy] = useState<boolean>(false);
-  
-  // Actualizar contador de alertas cuando cambian los datos
-  useEffect(() => {
-    setAlertasActivas(alertas.length);
-    // Alertas cerradas: requiere tabla de historial de alertas - por ahora 0
-    setAlertasCerradasHoy(0);
-  }, [alertas.length]);
   
   // Función helper para agregar notificaciones
   const addToast = useCallback((message: string, type: "success" | "error" | "info" = "info", duration = 3000) => {
@@ -570,7 +554,6 @@ export default function App() {
       if (productividad) setProductividadData(productividad as ProductividadGestor[]);
       if (segmento) setSegmentacionRiesgo(segmento as unknown as SegmentacionRiesgo[]);
       if (alertasData) setAlertas(alertasData as Alerta[]);
-      if (pronostData) setPronosticos(pronostData as unknown as Pronostico[]);
       if (tendData) setTendencias(tendData as TendenciaMes[]);
       if (abonosData) setAbonos(abonosData as Abono[]);
     } catch (e) {

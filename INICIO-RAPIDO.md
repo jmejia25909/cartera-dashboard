@@ -100,5 +100,5 @@ cartera-dashboard/
 
 ---
 
-**Última actualización:** 28 de enero de 2026  
+**Última actualización:** 1 de febrero de 2026  
 **Estado:** ✅ Funcional en navegador | ⚠️ Electron en desarrollo

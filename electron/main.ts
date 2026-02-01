@@ -1193,12 +1193,6 @@ app.whenReady().then(async () => {
   // INICIAR SERVIDOR WEB
   startWebServer();
 
-  // Cargar icono personalizado si existe
-  const customIconPath = join(app.getPath('userData'), 'custom-logo.png');
-  if (fs.existsSync(customIconPath)) {
-    // Se aplicará cuando se cree la ventana
-  }
-
   await createWindow();
 
   // ngrok deshabilitado (requiere cuenta verificada con authtoken)
