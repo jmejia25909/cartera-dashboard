@@ -4,7 +4,6 @@ import "./App.css";
 import { fmtMoney, fmtMoneyCompact } from "./utils/formatters";
 
 import { RankingList } from './components/RankingList';
-// import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 
 // Lazy loading de librerías pesadas (solo se cargan cuando se usan)
 const loadXLSX = () => import('xlsx');
@@ -17,7 +16,6 @@ const loadJsPDF = async () => {
 };
 
 /* eslint-disable jsx-a11y/no-static-element-interactions */
-/* eslint-disable react/no-array-index-key */
 
 // Definición global para evitar error TS2339 en window.api
 declare global {
@@ -128,15 +126,6 @@ type Gestion = {
   monto_promesa?: number;
 };
 
-// type Campana = {
-//   id: number;
-//   nombre: string;
-//   descripcion?: string;
-//   fecha_inicio?: string;
-//   fecha_fin?: string;
-//   responsable?: string;
-// };
-
 type TopCliente = {
   razon_social: string;
   total: number;
@@ -196,18 +185,6 @@ type TendenciaMes = {
   vencidos: number;
 };
 
-// type Disputa = {
-//   id: number;
-//   documento: string;
-//   cliente: string;
-//   monto: number;
-//   motivo?: string;
-//   estado: string;
-//   fecha_creacion: string;
-//   fecha_resolucion?: string;
-//   observacion?: string;
-// };
-
 type CuentaAplicar = {
   id: number;
   documento?: string;
@@ -229,24 +206,6 @@ type Abono = {
   fecha: string;
   observacion?: string;
 };
-
-// Componente memoizado para gráficos (evita re-renders innecesarios)
-// Usar cuando sea necesario optimizar gráficos pesados
-// const MemoizedBarChart = memo(({ data, dataKey, fill }: { data: any[], dataKey: string, fill: string }) => (
-//   <ResponsiveContainer width="100%" height={300}>
-//     <BarChart data={data}>
-//       <CartesianGrid strokeDasharray="3 3" />
-//       <XAxis dataKey="name" />
-//       <YAxis />
-//       <Tooltip />
-//       <Bar dataKey={dataKey}>
-//         {data.map((_entry, index) => (
-//           <Cell key={`cell-${index}`} fill={fill} />
-//         ))}
-//       </Bar>
-//     </BarChart>
-//   </ResponsiveContainer>
-// ));
 
 export default function App() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -273,6 +232,20 @@ export default function App() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Configuración de Pestañas (Menú)
+  const tabsConfig = [
+    { id: "dashboard", label: "Dashboard", icon: "📊" },
+    { id: "gestion", label: "Gestión", icon: "📋" },
+    { id: "reportes", label: "Reportes", icon: "📄" },
+    { id: "crm", label: "CRM", icon: "👥" },
+    { id: "analisis", label: "Análisis", icon: "🔍" },
+    { id: "alertas", label: "Alertas", icon: "🚨" },
+    { id: "tendencias", label: "Tendencias", icon: "📈" },
+    { id: "cuentas", label: "Cuentas", icon: "💳" },
+    { id: "config", label: "Configuración", icon: "⚙️" },
+  ];
+
   const [tab, setTab] = useState<"dashboard" | "gestion" | "reportes" | "crm" | "analisis" | "alertas" | "tendencias" | "cuentas" | "config">("dashboard");
   const [empresa, setEmpresa] = useState<Empresa>({ nombre: "Cartera Dashboard" });
   const [stats, setStats] = useState<Stats | null>(null);
@@ -291,7 +264,6 @@ export default function App() {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [pronosticos, setPronosticos] = useState<Pronostico[]>([]);
   const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
-  const [_cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
   const [abonos, setAbonos] = useState<Abono[]>([]);
   const [repoUrl, setRepoUrl] = useState<string>("");
   // URL remota obtenida dinámicamente desde ngrok
@@ -303,8 +275,6 @@ export default function App() {
   
   // Estados para búsqueda y filtros
   const [searchDocumentos, setSearchDocumentos] = useState("");
-  const [searchGestiones, _setSearchGestiones] = useState("");
-  const [filtroEstadoGestion, _setFiltroEstadoGestion] = useState("Todos");
   const [searchAlertas, setSearchAlertas] = useState("");
   const [filtroSeveridad, setFiltroSeveridad] = useState("Todos");
   
@@ -546,7 +516,7 @@ export default function App() {
         }
       }
 
-      const [empData, statsData, filtros, top, promData, _campData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, _disputasData, cuentasData, abonosData] = await Promise.all([
+      const [empData, statsData, filtros, top, promData, , riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, , , abonosData] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
         window.api.filtrosListar(),
@@ -593,8 +563,6 @@ export default function App() {
       const topList = Array.isArray(topData) ? topData : (topData?.rows || []);
       setTopClientes(topList as unknown as TopCliente[]);
       if (promData) setPromesas((promData as Gestion[]).filter((g: Gestion) => g.resultado?.includes("Promesa")));
-      // const campDataTyped = campData as { ok?: boolean; rows?: unknown[] };
-      // if (campDataTyped?.ok) setCampanas((campDataTyped.rows || []) as unknown as Campana[]);
       const riesgoTyped = riesgo as { ok?: boolean; rows?: unknown[] };
       if (riesgoTyped?.ok) setAnalisisRiesgo((riesgoTyped.rows || []) as unknown as AnalisisRiesgo[]);
       if (motivos) setMotivosData(motivos as MotivoImpago[]);
@@ -603,8 +571,6 @@ export default function App() {
       if (alertasData) setAlertas(alertasData as Alerta[]);
       if (pronostData) setPronosticos(pronostData as unknown as Pronostico[]);
       if (tendData) setTendencias(tendData as TendenciaMes[]);
-      // if (disputasData) setDisputas(disputasData as Disputa[]);
-      if (cuentasData) setCuentasAplicar(cuentasData as CuentaAplicar[]);
       if (abonosData) setAbonos(abonosData as Abono[]);
     } catch (e) {
       console.error("Error cargando datos:", e);
@@ -615,23 +581,48 @@ export default function App() {
   const filteredDocumentos = useMemo(() => 
     docs.filter((d: Documento) => {
       const search = searchDocumentos.toLowerCase();
-      const matchSearch = !search || d.cliente.toLowerCase().includes(search) || d.documento.toLowerCase().includes(search);
+      const matchSearch = !search || (d.cliente || "").toLowerCase().includes(search) || (d.documento || "").toLowerCase().includes(search);
       const matchCliente = !selectedCliente || d.razon_social === selectedCliente || d.cliente === selectedCliente;
       const matchVendedor = !selectedVendedor || d.vendedor === selectedVendedor;
-      return matchSearch && matchCliente && matchVendedor;
+      
+      const matchCentro = filtroCentroCosto === "Todos" || d.centro_costo === filtroCentroCosto;
+      
+      let matchAging = true;
+      if (filtroAging !== "Todos") {
+         const dias = d.dias_vencidos || 0;
+         if (filtroAging === "Vencidos") matchAging = dias > 0;
+         else if (filtroAging === "Por vencer") matchAging = dias <= 0;
+         else if (filtroAging === "30") matchAging = dias > 0 && dias <= 30;
+         else if (filtroAging === "60") matchAging = dias > 30 && dias <= 60;
+         else if (filtroAging === "90") matchAging = dias > 60 && dias <= 90;
+         else if (filtroAging === "120") matchAging = dias > 90 && dias <= 120;
+         else if (filtroAging === "+120") matchAging = dias > 120;
+      }
+
+      return matchSearch && matchCliente && matchVendedor && matchCentro && matchAging;
     }),
-    [docs, searchDocumentos, selectedCliente, selectedVendedor]
+    [docs, searchDocumentos, selectedCliente, selectedVendedor, filtroCentroCosto, filtroAging]
   );
 
-  const _filteredGestiones = useMemo(() =>
-    gestiones.filter((g: Gestion) => {
-      const search = searchGestiones.toLowerCase();
-      const matchSearch = !search || g.cliente.toLowerCase().includes(search) || g.observacion.toLowerCase().includes(search);
-      const matchEstado = filtroEstadoGestion === "Todos" || (g.resultado?.includes(filtroEstadoGestion) || false);
-      return matchSearch && matchEstado;
-    }),
-    [gestiones, searchGestiones, filtroEstadoGestion]
-  );
+  // Datos derivados para Gestión (Memoizados para rendimiento)
+  const todosDocsVencidos = useMemo(() => (docs || []).filter(d => (d.dias_vencidos || 0) > 0), [docs]);
+  
+  const clientesConVencidos = useMemo(() => Array.from(new Set(todosDocsVencidos.map(d => d.razon_social || d.cliente)))
+    .filter(c => c && c.trim() !== "")
+    .sort(), [todosDocsVencidos]);
+
+  // Paginación para Reportes
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
+  
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredDocumentos]);
+
+  const paginatedDocs = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredDocumentos.slice(start, start + itemsPerPage);
+  }, [filteredDocumentos, currentPage]);
 
   const filteredAlertas = useMemo(() =>
     alertas.filter((a: Alerta) => {
@@ -735,7 +726,10 @@ export default function App() {
       v.totalFacturado += (d.valor_documento || 0);
       v.totalCobrado += ((d.valor_documento || 0) - (d.total || 0));
       v.totalPendiente += (d.total || 0);
-      v.totalVencido += ((d.dias_30 || 0) + (d.dias_60 || 0) + (d.dias_90 || 0) + (d.dias_120 || 0) + (d.dias_mas_120 || 0));
+      
+      if ((d.dias_vencidos || 0) > 0) {
+        v.totalVencido += (d.total || 0);
+      }
       v.documentos++;
       v.clientes.add(d.cliente);
     });
@@ -761,9 +755,9 @@ export default function App() {
     }>();
     
     docs.forEach(d => {
-      const totalVencido = (d.dias_30 || 0) + (d.dias_60 || 0) + (d.dias_90 || 0) + (d.dias_120 || 0) + (d.dias_mas_120 || 0);
+      const dias = d.dias_vencidos || 0;
       
-      if (totalVencido > 0) {
+      if (dias > 0) {
         if (!clienteMap.has(d.cliente)) {
           clienteMap.set(d.cliente, {
             cliente: d.cliente,
@@ -778,13 +772,12 @@ export default function App() {
         
         const c = clienteMap.get(d.cliente)!;
         c.totalDeuda += (d.total || 0);
-        c.totalVencido += totalVencido;
+        c.totalVencido += (d.total || 0);
         c.documentosVencidos++;
         
         // Calcular días promedio ponderado
-        const dias90Plus = (d.dias_90 || 0) + (d.dias_120 || 0) + (d.dias_mas_120 || 0);
-        if (dias90Plus > 0) {
-          c.dias_promedio = 120; // Marcador de deudor crónico
+        if (dias > 90) {
+          c.dias_promedio = Math.max(c.dias_promedio, dias);
         }
       }
     });
@@ -801,14 +794,7 @@ export default function App() {
     setCentrosCosto(centros as string[]);
   }, [docs]);
 
-  // Filtrar documentos por centro de costo
-  const _docsFiltradosCentroCosto = useMemo(() => {
-    if (filtroCentroCosto === "Todos") return docs;
-    return docs.filter(d => d.centro_costo === filtroCentroCosto);
-  }, [docs, filtroCentroCosto]);
-
-
-  async function cargarDocumentos() {
+  const cargarDocumentos = useCallback(async () => {
     if (isWeb) return;
     try {
       const result = await window.api.documentosListar({
@@ -820,9 +806,9 @@ export default function App() {
     } catch (e) {
       console.error("Error cargando documentos:", e);
     }
-  }
+  }, [selectedCliente, selectedVendedor]);
 
-  async function cargarGestiones(selectedCliente: string) {
+  const cargarGestiones = useCallback(async (selectedCliente: string) => {
     if (isWeb || !selectedCliente) return;
     try {
       const data = await window.api.gestionesListar(selectedCliente);
@@ -830,18 +816,15 @@ export default function App() {
     } catch (e) {
       console.error("Error cargando gestiones:", e);
     }
-  }
-
-  const cargarDocumentosCallback = useCallback(cargarDocumentos, [selectedCliente, selectedVendedor]);
-  const cargarGestionesCallback = useCallback(cargarGestiones, [selectedCliente]);
+  }, []);
 
   useEffect(() => {
-    cargarDocumentosCallback();
-  }, [cargarDocumentosCallback]);
+    cargarDocumentos();
+  }, [cargarDocumentos]);
 
   useEffect(() => {
-    if (selectedCliente) cargarGestionesCallback(selectedCliente);
-  }, [cargarGestionesCallback, selectedCliente]);
+    if (selectedCliente) cargarGestiones(selectedCliente);
+  }, [cargarGestiones, selectedCliente]);
 
   async function guardarGestion() {
     if (isWeb || !selectedCliente) return;
@@ -961,14 +944,6 @@ export default function App() {
     }
   }
 
-  const _deudaCliente = useMemo(() => {
-    if (!selectedCliente) return { total: 0, vencido: 0 };
-    const clienteDocs = docs.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente);
-    const total = clienteDocs.reduce((s, d) => s + d.total, 0);
-    const vencido = clienteDocs.filter(d => new Date(d.fecha_vencimiento) < new Date()).reduce((s, d) => s + d.total, 0);
-    return { total, vencido };
-  }, [docs, selectedCliente]);
-
   const agingData = useMemo(() => {
     if (!stats?.aging) return null;
     // Calcular acumulado para >240 días (sumando todos los rangos posteriores)
@@ -1024,13 +999,18 @@ export default function App() {
 
   // Renderizado condicional por tab
   function renderContent() {
-    console.log('Renderizando tab:', tab, 'Docs:', docs?.length, 'Gestiones:', gestiones?.length);
-    
+    const gridTwoCol = {
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+      gap: '16px',
+      alignItems: 'stretch'
+    };
+
     if (tab === "dashboard") {
       return (
         <div style={{ 
           width: '100%', 
-          height: '100%', 
+          height: '100%',
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -1041,38 +1021,38 @@ export default function App() {
           <div style={{ 
             flex: '0 0 auto',
             display: 'grid', 
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)', 
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
             gap: '12px',
           }}>
-            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>CARTERA TOTAL</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoney(stats?.totalSaldo || 0)}</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Saldo total pendiente</div>
+            <div className="card" style={{ padding: '12px 8px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 'clamp(0.6rem, 0.8vw, 0.75rem)', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500, whiteSpace: 'nowrap' }}>CARTERA TOTAL</div>
+              <div style={{ fontSize: 'clamp(1rem, 1.6vw, 1.5rem)', fontWeight: 'bold', color: '#fff', marginBottom: '2px', whiteSpace: 'nowrap' }}>{fmtMoney(stats?.totalSaldo || 0)}</div>
+              <div style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Saldo total pendiente</div>
             </div>
-            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>VENCIDO</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{fmtMoney(stats?.vencidaSaldo || 0)}</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Monto de facturas vencidas</div>
+            <div className="card" style={{ padding: '12px 8px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 'clamp(0.6rem, 0.8vw, 0.75rem)', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500, whiteSpace: 'nowrap' }}>VENCIDO</div>
+              <div style={{ fontSize: 'clamp(1rem, 1.6vw, 1.5rem)', fontWeight: 'bold', color: '#fff', marginBottom: '2px', whiteSpace: 'nowrap' }}>{fmtMoney(stats?.vencidaSaldo || 0)}</div>
+              <div style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Monto de facturas vencidas</div>
             </div>
-            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: stats && stats.npl > 30 ? 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' : 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>NPL</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{stats?.npl?.toFixed(1)}%</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Morosidad sobre cartera total</div>
+            <div className="card" style={{ padding: '12px 8px', minHeight: 90, textAlign: 'center', background: stats && stats.npl > 30 ? 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' : 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 'clamp(0.6rem, 0.8vw, 0.75rem)', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500, whiteSpace: 'nowrap' }}>NPL</div>
+              <div style={{ fontSize: 'clamp(1rem, 1.6vw, 1.5rem)', fontWeight: 'bold', color: '#fff', marginBottom: '2px', whiteSpace: 'nowrap' }}>{stats?.npl?.toFixed(1)}%</div>
+              <div style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Morosidad sobre cartera total</div>
             </div>
-            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>DSO DÍAS</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{eficienciaCobranza.dsoReal}</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Días promedio de cobro</div>
+            <div className="card" style={{ padding: '12px 8px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 'clamp(0.6rem, 0.8vw, 0.75rem)', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500, whiteSpace: 'nowrap' }}>DSO DÍAS</div>
+              <div style={{ fontSize: 'clamp(1rem, 1.6vw, 1.5rem)', fontWeight: 'bold', color: '#fff', marginBottom: '2px', whiteSpace: 'nowrap' }}>{eficienciaCobranza.dsoReal}</div>
+              <div style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Días promedio de cobro</div>
             </div>
-            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>CLIENTES</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{stats?.clientesConSaldo || 0}</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Clientes con saldo activo</div>
+            <div className="card" style={{ padding: '12px 8px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 'clamp(0.6rem, 0.8vw, 0.75rem)', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500, whiteSpace: 'nowrap' }}>CLIENTES</div>
+              <div style={{ fontSize: 'clamp(1rem, 1.6vw, 1.5rem)', fontWeight: 'bold', color: '#fff', marginBottom: '2px', whiteSpace: 'nowrap' }}>{stats?.clientesConSaldo || 0}</div>
+              <div style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Clientes con saldo activo</div>
             </div>
-            <div className="card" style={{ padding: '18px 12px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #fa8bff 0%, #2bd2ff 90%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500 }}>% COBRADO</div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 'bold', color: '#fff', marginBottom: '2px' }}>{eficienciaCobranza.porcentajeCobrado.toFixed(1)}%</div>
-              <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.7)' }}>Porcentaje cobrado este mes</div>
+            <div className="card" style={{ padding: '12px 8px', minHeight: 90, textAlign: 'center', background: 'linear-gradient(135deg, #fa8bff 0%, #2bd2ff 90%)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{ fontSize: 'clamp(0.6rem, 0.8vw, 0.75rem)', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', fontWeight: 500, whiteSpace: 'nowrap' }}>% COBRADO</div>
+              <div style={{ fontSize: 'clamp(1rem, 1.6vw, 1.5rem)', fontWeight: 'bold', color: '#fff', marginBottom: '2px', whiteSpace: 'nowrap' }}>{eficienciaCobranza.porcentajeCobrado.toFixed(1)}%</div>
+              <div style={{ fontSize: 'clamp(0.55rem, 0.7vw, 0.7rem)', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Porcentaje cobrado este mes</div>
             </div>
           </div>
 
@@ -1081,7 +1061,7 @@ export default function App() {
           <div style={{ 
             flex: '0 0 auto',
             display: 'grid', 
-            gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
             gap: '12px'
           }}>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
@@ -1114,7 +1094,7 @@ export default function App() {
           <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{
               display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
               gap: '12px',
               height: '100%',
               alignItems: 'stretch',
@@ -1198,13 +1178,6 @@ export default function App() {
 
     if (tab === "gestion") {
       // VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta
-      // Obtener documentos vencidos
-      const todosDocsVencidos = (docs || []).filter(d => (d.dias_vencidos || 0) > 0);
-      
-      // Obtener clientes únicos con vencidos (desde documentos)
-      const clientesConVencidos = Array.from(new Set(todosDocsVencidos.map(d => d.razon_social || d.cliente)))
-        .filter(c => c && c.trim() !== "")
-        .sort();
       
       // Datos del cliente seleccionado
       const docsVencidosCliente = selectedCliente && selectedCliente !== "Todos"
@@ -1217,17 +1190,12 @@ export default function App() {
       const filteredGestiones = selectedCliente && selectedCliente !== "Todos"
         ? gestiones.filter(g => {
             const matchCliente = g.cliente === selectedCliente || g.razon_social === selectedCliente;
-            const matchBusqueda = !searchGestiones || (g.observacion || "").toLowerCase().includes(searchGestiones.toLowerCase());
-            const matchEstado = filtroEstadoGestion === "Todos" || g.resultado.includes(filtroEstadoGestion);
-            return matchCliente && matchBusqueda && matchEstado;
+            return matchCliente;
           }).sort((a, b) => b.fecha.localeCompare(a.fecha))
         : [];
       
       // KPIs globales
       const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + d.total, 0);
-      const _diasPromedioVencidos = todosDocsVencidos.length > 0 
-        ? Math.round(todosDocsVencidos.reduce((s, d) => s + (d.dias_vencidos || 0), 0) / todosDocsVencidos.length) 
-        : 0;
       
       // Calcular gestiones de hoy
       const hoy = new Date().toISOString().split('T')[0];
@@ -1314,24 +1282,25 @@ export default function App() {
       };
 
       return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={gridTwoCol}>
           {/* KPIs de Gestión */}
-          <div className="card">
+          <div className="card" style={{ marginBottom: 0 }}>
             <div className="card-title">📊 KPIs de Gestión</div>
-            <div className="kpis-grid">
-              <div className="kpi-card">
+            <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center' }}>
                 <div className="kpi-title">Clientes con Vencidos</div>
                 <div className="kpi-value">{clientesConVencidos.length}</div>
               </div>
-              <div className="kpi-card">
+              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center' }}>
                 <div className="kpi-title">Total por Gestionar</div>
                 <div className="kpi-value kpi-negative">{fmtMoney(totalVencidoSistema)}</div>
               </div>
-              <div className="kpi-card">
+              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center' }}>
                 <div className="kpi-title">Contactados Hoy</div>
                 <div className="kpi-value">{gestionesHoy}</div>
               </div>
-              <div className="kpi-card">
+              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center' }}>
                 <div className="kpi-title">PDFs Generados</div>
                 <div className="kpi-value">{pdfsGenerados}</div>
               </div>
@@ -1339,7 +1308,7 @@ export default function App() {
           </div>
           
           {/* Filtros y Acciones */}
-          <div className="card">
+          <div className="card" style={{ marginBottom: 0 }}>
             <div className="card-title">🔍 Filtros y Acciones</div>
             <div className="row">
               <label className="field">
@@ -1374,6 +1343,7 @@ export default function App() {
               </button>
             </div>
           </div>
+          </div>
           
           {/* Tabla Checklist de Gestión */}
           <div className="card">
@@ -1386,7 +1356,7 @@ export default function App() {
                     <th>Cliente</th>
                     <th className="num">Vencido $</th>
                     <th>📞 Llamada</th>
-                    <th>📧 Email</th>
+                    <th className="text-center">📧 Email</th>
                     <th>🎯 Estado</th>
                   </tr>
                 </thead>
@@ -1456,9 +1426,17 @@ export default function App() {
                 </button>
               </div>
               
+              {/* Contenedor dividido para Documentos y Gestiones */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: isMobile || docsVencidosCliente.length === 0 ? '1fr' : '1fr 1fr', 
+                gap: '20px',
+                marginTop: '16px',
+                alignItems: 'start'
+              }}>
               {/* Documentos Vencidos del Cliente */}
               {docsVencidosCliente.length > 0 && (
-                <div style={{marginTop: '16px'}}>
+                <div>
                   <h4 style={{margin: '16px 0 8px 0', color: 'var(--text-main)'}}>📄 Documentos Vencidos ({docsVencidosCliente.length})</h4>
                   <div className="table-wrapper">
                     <table className="data-table">
@@ -1496,7 +1474,7 @@ export default function App() {
               )}
               
               {/* Timeline de Gestiones */}
-              <div style={{marginTop: '24px'}}>
+              <div>
                 <h4 style={{margin: '16px 0 8px 0', color: 'var(--text-main)'}}>📋 Historial de Gestiones</h4>
                 <div className="promesas-lista">
                   {filteredGestiones.length > 0 ? (
@@ -1524,6 +1502,7 @@ export default function App() {
                   )}
                 </div>
               </div>
+              </div>
             </div>
           )}
         </div>
@@ -1532,6 +1511,7 @@ export default function App() {
 
     if (tab === "config") {
       return (
+        <div>
         <div className="config-container">
           <h2 style={{ marginBottom: 10, fontWeight: 800, color: 'var(--text-main)', fontSize: '1.8rem' }}>Configuración</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>Administra las preferencias generales y el sistema</p>
@@ -1539,7 +1519,7 @@ export default function App() {
           <div className="config-grid">
             
             {/* TARJETA 1: PERSONALIZACIÓN (FULL WIDTH) */}
-            <div className="config-card full-width" style={{background: 'linear-gradient(to right, var(--bg-surface), var(--bg-main))'}}>
+            <div className="config-card" style={{background: 'linear-gradient(to right, var(--bg-surface), var(--bg-main))'}}>
               <div className="config-header">
                 <div className="config-icon-box">🎨</div>
                 <div className="config-title">
@@ -1690,6 +1670,7 @@ export default function App() {
 
           </div>
         </div>
+        </div>
       );
     }
 
@@ -1697,17 +1678,29 @@ export default function App() {
       const exportarExcel = async () => {
         try {
           const XLSX = await loadXLSX();
-          const dataExport = docs.map((d: any) => ({
-            'Documento': d.numero,
+          const dataExport = docs.map((d: any) => {
+            // Calcular aging si no existe
+            let aging = d.aging;
+            if (!aging) {
+               const dias = d.dias_vencidos || 0;
+               if (dias <= 0) aging = 'Por Vencer';
+               else if (dias <= 30) aging = '30';
+               else if (dias <= 60) aging = '60';
+               else if (dias <= 90) aging = '90';
+               else if (dias <= 120) aging = '120';
+               else aging = '+120';
+            }
+            return {
+            'Documento': d.numero || d.documento,
             'Cliente': d.cliente,
             'Vendedor': d.vendedor,
             'Emisión': d.fecha_emision,
             'Vencimiento': d.fecha_vencimiento,
             'Días Vencidos': d.dias_vencidos || 0,
-            'Aging': d.aging,
+            'Aging': aging,
             'Monto Total': d.total,
             'Saldo': d.saldo
-          }));
+          }});
           
           const ws = XLSX.utils.json_to_sheet(dataExport);
           const wb = XLSX.utils.book_new();
@@ -1728,13 +1721,24 @@ export default function App() {
           doc.setFontSize(10);
           doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
           
-          const tableData = docs.map((d: any) => [
-            d.numero,
+          const tableData = docs.map((d: any) => {
+            let aging = d.aging;
+            if (!aging) {
+               const dias = d.dias_vencidos || 0;
+               if (dias <= 0) aging = 'Por Vencer';
+               else if (dias <= 30) aging = '30';
+               else if (dias <= 60) aging = '60';
+               else if (dias <= 90) aging = '90';
+               else if (dias <= 120) aging = '120';
+               else aging = '+120';
+            }
+            return [
+            d.numero || d.documento,
             d.cliente,
             d.dias_vencidos || 0,
-            d.aging,
+            aging,
             fmtMoney(d.total)
-          ]);
+          ]});
           
           autoTable(doc, {
             head: [['Documento', 'Cliente', 'Días Venc.', 'Aging', 'Saldo']],
@@ -1752,10 +1756,10 @@ export default function App() {
       };
 
       return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="card">
             <div className="card-title">📊 Resumen Ejecutivo</div>
-            <div className="kpis-grid">
+            <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
               <div className="kpi-card">
                 <div className="kpi-title">Total Documentos</div>
                 <div className="kpi-value">{docs.length}</div>
@@ -1901,8 +1905,9 @@ export default function App() {
             )}
           </div>
 
+          <div style={analisisRetenciones.cantidadDocs > 0 ? gridTwoCol : {}}>
           {/* NUEVO: Análisis por Vendedor */}
-          <div className="card">
+          <div className="card" style={{ marginBottom: 0 }}>
             <div className="card-title">👤 Análisis por Vendedor</div>
             <div className="table-wrapper">
               <table className="data-table">
@@ -1944,9 +1949,9 @@ export default function App() {
 
           {/* NUEVO: Retenciones Detalladas */}
           {analisisRetenciones.cantidadDocs > 0 && (
-            <div className="card">
+            <div className="card" style={{ marginBottom: 0 }}>
               <div className="card-title">💵 Detalle de Retenciones</div>
-              <div className="kpis-grid" style={{marginBottom: '20px'}}>
+              <div className="kpis-grid" style={{marginBottom: '20px', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))'}}>
                 <div className="kpi-card">
                   <div className="kpi-title">Total Retenido</div>
                   <div className="kpi-value">{fmtMoney(analisisRetenciones.totalRetenido)}</div>
@@ -1986,6 +1991,7 @@ export default function App() {
               </div>
             </div>
           )}
+          </div>
         </div>
       );
     }
@@ -2028,10 +2034,11 @@ export default function App() {
       }).length;
 
       return (
-        <div>
-          <div className="card">
-            <div className="card-title">💼 Resumen de Promesas de Pago</div>
-            <div className="kpis-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={gridTwoCol}>
+          <div className="card" style={{ marginBottom: 0 }}>
+            <div className="card-title">💼 Resumen</div>
+            <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
               <div className="kpi-card">
                 <div className="kpi-title">Total Promesas</div>
                 <div className="kpi-value">{totalPromesas}</div>
@@ -2055,9 +2062,9 @@ export default function App() {
             </div>
           </div>
 
-          <div className="card">
-            <div className="card-title">📅 Gestión de Promesas de Pago</div>
-            <div className="row">
+          <div className="card" style={{ marginBottom: 0 }}>
+            <div className="card-title">🔍 Filtros</div>
+            <div className="row" style={{ marginTop: '10px' }}>
               <label className="field">
                 <span>Filtrar por Fecha</span>
                 <select value={filtroFecha} onChange={e => setFiltroFecha(e.target.value)}>
@@ -2077,32 +2084,57 @@ export default function App() {
                 </select>
               </label>
             </div>
+          </div>
+          </div>
 
-            <div className="promesas-lista">
-              {promesasFiltradas.map(p => {
-                const semaforo = getSemaforo(p.fecha_promesa);
-                return (
-                  <div key={p.id} className="promesa-item" style={{ borderLeft: `4px solid ${semaforo.color}` }}>
-                    <div className="promesa-main">
-                      <div className="flex-between">
-                        <div className="promesa-info">{p.razon_social || p.cliente}</div>
-                        <span className="status-label" style={{color: semaforo.color}}>{semaforo.label}</span>
-                      </div>
-                      <div className="flex-row" style={{ marginTop: '8px' }}>
-                        <div className="promesa-fecha">📅 {p.fecha_promesa}</div>
-                        <div className="promesa-monto">{fmtMoney(p.monto_promesa || 0)}</div>
-                      </div>
-                      {p.observacion && <div className="promesa-observacion">{p.observacion}</div>}
-                    </div>
-                    <div className="action-buttons">
-                      <button className="btn primary" onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
-                      <button className="btn secondary" onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>
-                      <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions}>✕</button>
-                    </div>
-                  </div>
-                );
-              })}
-              {promesasFiltradas.length === 0 && <p className="promesa-vacia">No hay promesas de pago {filtroFecha !== 'Todas' ? `para: ${filtroFecha}` : 'pendientes'}</p>}
+          <div className="card">
+            <div className="card-title">📅 Gestión de Promesas de Pago</div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Fecha Promesa</th>
+                    <th className="num">Monto</th>
+                    <th>Estado</th>
+                    <th>Observación</th>
+                    <th style={{textAlign: 'center'}}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promesasFiltradas.length > 0 ? (
+                    promesasFiltradas.map(p => {
+                      const semaforo = getSemaforo(p.fecha_promesa);
+                      return (
+                        <tr key={p.id} style={{ borderLeft: `4px solid ${semaforo.color}` }}>
+                          <td><strong>{p.razon_social || p.cliente}</strong></td>
+                          <td>{p.fecha_promesa}</td>
+                          <td className="num" style={{ fontWeight: 'bold' }}>{fmtMoney(p.monto_promesa || 0)}</td>
+                          <td>
+                            <span className="status-label" style={{ color: semaforo.color, background: 'var(--bg-nav)', padding: '2px 8px', borderRadius: '4px' }}>
+                              {semaforo.label}
+                            </span>
+                          </td>
+                          <td style={{ maxWidth: '300px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{p.observacion || '-'}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <div className="action-buttons" style={{ justifyContent: 'center' }}>
+                              <button className="btn primary" style={{ padding: '4px 8px' }} onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
+                              <button className="btn secondary" style={{ padding: '4px 8px' }} onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>
+                              <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions} title="Eliminar">✕</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                        No hay promesas de pago {filtroFecha !== 'Todas' ? `para: ${filtroFecha}` : 'pendientes'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -2111,7 +2143,7 @@ export default function App() {
 
     if (tab === "analisis") {
       return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="card">
             <div className="card-title">📊 Panel de Análisis</div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
@@ -2253,7 +2285,7 @@ export default function App() {
                       <th className="num">Deuda Total</th>
                       <th className="num">Vencido +90 días</th>
                       <th className="num">Docs Vencidos</th>
-                      <th className="num">Estado</th>
+                      <th>Estado</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2266,7 +2298,7 @@ export default function App() {
                           <td className="num">{fmtMoney(d.totalDeuda)}</td>
                           <td className="num kpi-negative">{fmtMoney(d.totalVencido)}</td>
                           <td className="num">{d.documentosVencidos}</td>
-                          <td className="num">
+                          <td>
                             <span className="kpi-negative">
                               {d.dias_promedio >= 120 ? '🔴 Crítico' : '🟠 Alto'}
                             </span>
@@ -2287,7 +2319,8 @@ export default function App() {
 
     if (tab === "alertas") {
       return (
-        <div className="card">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">🚨 Alertas de Incumplimiento</div>
           <div className="row">
             <label className="field">
@@ -2310,20 +2343,20 @@ export default function App() {
               <thead>
                 <tr>
                   <th>Cliente</th>
-                  <th className="num">Documento</th>
+                  <th>Documento</th>
                   <th className="num">Monto</th>
                   <th className="num">Días Vencido</th>
-                  <th className="num">Severidad</th>
+                  <th>Severidad</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredAlertas.length > 0 ? filteredAlertas.map((a, i) => (
                   <tr key={i}>
                     <td>{a.cliente}</td>
-                    <td className="num">{a.documento}</td>
+                    <td>{a.documento}</td>
                     <td className="num">{fmtMoney(a.monto)}</td>
                     <td className="num">{a.diasVencidos}</td>
-                    <td className="num">
+                    <td>
                       <span className={a.severidad === "Crítico" ? "kpi-negative" : a.severidad === "Alto" ? "kpi-warning" : ""}>
                         {a.severidad}
                       </span>
@@ -2334,12 +2367,14 @@ export default function App() {
             </table>
           </div>
         </div>
+        </div>
       );
     }
 
     if (tab === "tendencias") {
       return (
-        <div className="card">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
           <div className="table-wrapper">
             <table className="data-table">
@@ -2366,12 +2401,14 @@ export default function App() {
             </table>
           </div>
         </div>
+        </div>
       );
     }
 
     if (tab === "cuentas") {
       return (
-        <div className="card">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">📜 Historial de Abonos Detectados</div>
           <div className="table-wrapper">
             <table className="data-table">
@@ -2409,6 +2446,7 @@ export default function App() {
               </tbody>
             </table>
           </div>
+        </div>
         </div>
       );
     }
@@ -2573,18 +2611,19 @@ export default function App() {
       </header>
 
       <nav className="nav-bar">
-        <button className={tab === "dashboard" ? "nav-item active" : "nav-item"} onClick={() => setTab("dashboard")}>📊 Dashboard</button>
-        <button className={tab === "gestion" ? "nav-item active" : "nav-item"} onClick={() => setTab("gestion")}>📋 Gestión</button>
-        <button className={tab === "reportes" ? "nav-item active" : "nav-item"} onClick={() => setTab("reportes")}>📄 Reportes</button>
-        <button className={tab === "crm" ? "nav-item active" : "nav-item"} onClick={() => setTab("crm")}>👥 CRM</button>
-        <button className={tab === "analisis" ? "nav-item active" : "nav-item"} onClick={() => setTab("analisis")}>🔍 Análisis</button>
-        <button className={tab === "alertas" ? "nav-item active" : "nav-item"} onClick={() => setTab("alertas")}>🚨 Alertas</button>
-        <button className={tab === "tendencias" ? "nav-item active" : "nav-item"} onClick={() => setTab("tendencias")}>📈 Tendencias</button>
-        <button className={tab === "cuentas" ? "nav-item active" : "nav-item"} onClick={() => setTab("cuentas")}>💳 Cuentas</button>
-        <button className={tab === "config" ? "nav-item active" : "nav-item"} onClick={() => setTab("config")}>⚙️</button>
+        {tabsConfig.map(t => (
+          <button 
+            key={t.id} 
+            className={`nav-item ${tab === t.id ? 'active' : ''}`}
+            onClick={() => setTab(t.id as any)}
+          >
+            <span>{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
       </nav>
 
-      <main className="content">
+      <main className="content" style={{ overflowX: 'hidden', overflowY: tab === 'dashboard' ? 'hidden' : 'auto' }}>
         {renderContent()}
       </main>
 
@@ -2637,7 +2676,7 @@ export default function App() {
               </label>
               <label className="field">
                 <span>Observación</span>
-                <input value={gestionForm.observacion} onChange={e => setGestionForm({...gestionForm, observacion: e.target.value})} />
+                <textarea value={gestionForm.observacion} onChange={e => setGestionForm({...gestionForm, observacion: e.target.value})} rows={3} placeholder="Detalles de la gestión..." />
               </label>
               {gestionForm.resultado === "Promesa de Pago" && (
                 <>
@@ -2676,7 +2715,7 @@ export default function App() {
               </label>
               <label className="field">
                 <span>Dirección</span>
-                <input value={empresa.direccion || ""} onChange={e => setEmpresa({...empresa, direccion: e.target.value})} />
+                <textarea value={empresa.direccion || ""} onChange={e => setEmpresa({...empresa, direccion: e.target.value})} rows={2} />
               </label>
               <label className="field">
                 <span>Teléfono</span>
