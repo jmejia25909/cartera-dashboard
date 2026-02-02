@@ -127,41 +127,43 @@ type Gestion = {
   monto_promesa?: number;
 };
 
-type TopCliente = {
-  razon_social: string;
-  total: number;
-};
+// ...existing code...
 
-type AnalisisRiesgo = {
-  razon_social: string;
-  total_deuda: number;
-  deuda_vencida: number;
-  max_dias_mora: number;
-  score: number;
-};
+  type MotivoImpago = {
+    label: string;
+    count: number;
+    total: number;
+  };
 
-type MotivoImpago = {
-  label: string;
-  count: number;
-  total: number;
-};
+  type AnalisisRiesgo = {
+    razon_social: string;
+    total_deuda: number;
+    deuda_vencida: number;
+    max_dias_mora: number;
+    score: number;
+  };
 
-type ProductividadGestor = {
-  usuario: string;
-  total_gestiones: number;
-  promesas: number;
-  pagos: number;
-  tasa_promesa: number;
-  saldo_recuperable: number;
-};
+  type ProductividadGestor = {
+    usuario: string;
+    total_gestiones: number;
+    promesas: number;
+    pagos: number;
+    tasa_promesa: number;
+    saldo_recuperable: number;
+  };
 
-type SegmentacionRiesgo = {
-  id: number;
-  nombre: string;
-  saldo: number;
-  documentos: number;
-  riesgo: string;
-};
+  type SegmentacionRiesgo = {
+    nombre: string;
+    saldo: number;
+    documentos: number;
+    riesgo: string;
+  };
+
+  type TopCliente = {
+    cliente: string;
+    razon_social?: string;
+    total: number;
+  };
 
 type Alerta = {
   cliente: string;
@@ -171,12 +173,6 @@ type Alerta = {
   severidad: string;
 };
 
-type Pronostico = {
-  periodo: string;
-  fechaHasta: string;
-  flujoEsperado: number;
-  confianza: number;
-};
 
 type TendenciaMes = {
   mes: string;
@@ -209,6 +205,7 @@ type Abono = {
 };
 
 export default function App() {
+      // Eliminado: cuentasAplicar no se usa
     // Filtros de fecha para el reporte de gestión general
     const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
     const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
@@ -253,7 +250,6 @@ export default function App() {
   const [productividadData, setProductividadData] = useState<ProductividadGestor[]>([]);
   const [segmentacionRiesgo, setSegmentacionRiesgo] = useState<SegmentacionRiesgo[]>([]);
   const [alertas, setAlertas] = useState<Alerta[]>([]);
-  const [pronosticos, setPronosticos] = useState<Pronostico[]>([]);
   const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
   const [abonos, setAbonos] = useState<Abono[]>([]);
   const [allGestiones, setAllGestiones] = useState<Gestion[]>([]);
@@ -305,8 +301,6 @@ export default function App() {
 
   // Estados para búsqueda y filtros
   const [searchDocumentos, setSearchDocumentos] = useState("");
-  const [searchAlertas, setSearchAlertas] = useState("");
-  const [filtroSeveridad, setFiltroSeveridad] = useState("Todos");
   
   // Estados para tab CRM
   const [filtroFecha, setFiltroFecha] = useState("Todas");
@@ -346,7 +340,7 @@ export default function App() {
   // 4. filteredGestiones
   const filteredGestiones = useMemo(() => {
     const lista = Array.isArray(allGestiones) ? allGestiones : [];
-    const sortFn = (a, b) => {
+    const sortFn = (a: { fecha?: string }, b: { fecha?: string }) => {
       const dateA = a?.fecha ? new Date(a.fecha).getTime() : 0;
       const dateB = b?.fecha ? new Date(b.fecha).getTime() : 0;
       return dateB - dateA;
@@ -388,7 +382,11 @@ export default function App() {
     // Mover clientesConVencidos arriba para evitar ReferenceError
     const clientesConVencidos = useMemo(() => Array.from(new Set(todosDocsVencidos.map(d => d?.razon_social || d?.cliente)))
      .filter(c => c && c.trim() !== "")
-     .sort(), [todosDocsVencidos]);
+     .sort((a, b) => {
+       const totalA = todosDocsVencidos.filter(d => d.razon_social === a || d.cliente === a).reduce((s, d) => s + d.total, 0);
+       const totalB = todosDocsVencidos.filter(d => d.razon_social === b || d.cliente === b).reduce((s, d) => s + d.total, 0);
+       return totalB - totalA;
+     }), [todosDocsVencidos]);
 
     const clientesUnicos = useMemo(() => {
      let lista = clientesConVencidos;
@@ -422,6 +420,10 @@ export default function App() {
   const [filtroCentroCosto, setFiltroCentroCosto] = useState("Todos");
   const [centrosCosto, setCentrosCosto] = useState<string[]>([]);
   
+  // Estados para Alertas
+  const [searchAlertas, setSearchAlertas] = useState("");
+  const [filtroSeveridad, setFiltroSeveridad] = useState("Todos");
+
   // Estado para notificaciones
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
@@ -631,7 +633,7 @@ export default function App() {
         }
       }
 
-      const [empData, statsData, filtros, top, promData, , riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, , cuentasAplicarData, abonosData, gestionesRecientes] = await Promise.all([
+      const [empData, statsData, filtros, top, promData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, cuentasAplicarData, abonosData, gestionesRecientes] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
         window.api.filtrosListar(),
@@ -732,20 +734,9 @@ export default function App() {
   // Datos derivados para Gestión (Memoizados para rendimiento)
 
   // Paginación para Reportes
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
-  
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredDocumentos]);
+  // Eliminado: paginatedDocumentos y paginación no se usan
 
-  const paginatedDocs = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredDocumentos.slice(start, start + itemsPerPage);
-  }, [filteredDocumentos, currentPage]);
-
-  const filteredAlertas = useMemo(() =>
-    alertas.filter((a: Alerta) => {
+  const filteredAlertas = useMemo(() => alertas.filter((a: Alerta) => {
       const search = searchAlertas.toLowerCase();
       const matchSearch = !search || a.cliente.toLowerCase().includes(search) || a.documento.toLowerCase().includes(search);
       const matchSeveridad = filtroSeveridad === "Todos" || a.severidad === filtroSeveridad;
@@ -1353,7 +1344,6 @@ export default function App() {
           const { jsPDF, autoTable } = await loadJsPDF();
           const doc = new jsPDF();
           const pageWidth = doc.internal.pageSize.getWidth();
-          const pageHeight = doc.internal.pageSize.getHeight();
           const margin = 15;
           
           // --- CABECERA MODERNA ---
@@ -1454,93 +1444,32 @@ export default function App() {
           autoTable(doc, {
             head: [['Documento', 'Emisión', 'Vencimiento', 'Estado', 'Saldo']],
             body: tableData,
-            startY: startYKpi + 32,
-            theme: 'grid',
-            styles: { fontSize: 9, cellPadding: 5, textColor: [51, 65, 85], lineColor: [226, 232, 240], lineWidth: 0.1 },
-            headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', lineWidth: 0 },
-            columnStyles: {
-              0: { fontStyle: 'bold' },
-              3: { halign: 'center' },
-              4: { halign: 'right', fontStyle: 'bold' }
-            },
-            alternateRowStyles: { fillColor: [255, 255, 255] },
-            didParseCell: function(data: any) {
-              if (data.section === 'body' && data.column.index === 3) {
-                if (data.cell.raw === 'Vigente') data.cell.styles.textColor = [22, 163, 74];
-                else data.cell.styles.textColor = [220, 38, 38];
-              }
-            },
-            foot: [[
-              { content: 'TOTAL GENERAL', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
-              { content: fmtMoney(totalDeuda), styles: { halign: 'right', fontStyle: 'bold', fillColor: [241, 245, 249] } }
-            ]]
+            startY: startYKpi + 32
           });
           
-          // --- FOOTER ---
-          const pageCount = (doc as any).internal.getNumberOfPages();
-          for(let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            const footerY = pageHeight - 10;
-            doc.setDrawColor(226, 232, 240);
-            doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
-            doc.setFontSize(8);
-            doc.setTextColor(148, 163, 184);
-            // Puedes poner aquí un mensaje personalizado si lo deseas
-            doc.text(`Página ${i} de ${pageCount}`, pageWidth - margin, footerY, { align: 'right' });
-          }
-          
-          const fechaArchivo = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-          const nombreArchivo = `Estado_Cuenta_${clienteNombre.replace(/[^a-z0-9]/gi, '_').toUpperCase()}_${fechaArchivo}.pdf`;
-          doc.save(nombreArchivo);
-          addToast("✅ Estado de Cuenta moderno generado", "success");
-
-          // Registrar gestión automática de PDF
-          registrarGestion({
-            cliente: clienteNombre,
-            tipo: "PDF",
-            resultado: "Generado",
-            observacion: "Estado de cuenta generado y descargado",
-          });
-
-        } catch (error) {
-          addToast("❌ Error al generar Estado de Cuenta", "error");
-          console.error(error);
+          doc.save(`Estado_Cuenta_${clienteNombre.replace(/[^a-z0-9]/gi, '_')}.pdf`);
+          addToast("Estado de cuenta generado", "success");
+        } catch (e) {
+          console.error(e);
+          addToast("Error generando PDF", "error");
         }
       };
-      
-      // Función para copiar texto de email
-      // Función para abrir el cliente de correo con el cuerpo prellenado
-      const enviarEmail = async (clienteNombre: string) => {
-        const empresaNombre = empresa?.nombre || "[Nombre de tu Empresa]";
+
+      const enviarEmail = (clienteNombre: string) => {
+        const empresaNombre = empresa?.nombre || "[Nombre Empresa]";
         const fechaHoy = new Date().toLocaleDateString();
         const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre));
         const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
         
-        const asunto = encodeURIComponent(`RECORDATORIO DE PAGO - ${empresaNombre}`);
-        
+        const asunto = `Estado de Cuenta - ${empresaNombre}`;
         const lineas = [
-          `Estimados señores de ${clienteNombre}:`,
-          ``,
-          `Reciban un cordial saludo.`,
-          ``,
-          `Por medio de la presente, hacemos entrega de su Estado de Cuenta con corte al ${fechaHoy}.`,
-          ``,
-          `Hemos identificado saldos pendientes que ya han superado su fecha de vencimiento. A continuación, presentamos el resumen de su cartera a la fecha:`,
-          ``,
-          ` Total Vencido: ${fmtMoney(totalCliente)}`,
-          ``,
-          `Adjunto a este correo encontrará el desglose detallado de el/los documento(s) pendiente(s), donde podrá verificar las fechas de emisión y los días de mora acumulados.`,
-          ``,
-          `Le solicitamos de la manera más atenta proceder con el pago urgente de estos valores. En caso de que el pago ya haya sido gestionado, por favor envíenos el comprobante correspondiente para actualizar su estado de cuenta de inmediato.`,
-          ``,
-          `Quedo a su entera disposición para cualquier aclaración o consulta adicional.`,
-          ``,
-          `Atentamente,`,
-          ``,
-          `Departamento de Cobranzas ${empresaNombre}`,
-          `Lic. Alba Mayorga L.`
+          `Estimado cliente *${clienteNombre}*,`,
+          '',
+          `Adjunto el estado de cuenta al ${fechaHoy}.`,
+          `Total Vencido: ${fmtMoney(totalCliente)}`,
+          '',
+          'Saludos cordiales.'
         ];
-
         const cuerpo = encodeURIComponent(lineas.join('\r\n'));
         window.open(`mailto:?subject=${asunto}&body=${cuerpo}`, '_blank');
 
@@ -1592,20 +1521,21 @@ export default function App() {
           const gestionesPorCliente = {};
           gestionesFiltradas.forEach(g => {
             const key = g.razon_social || g.cliente;
-            if (!gestionesPorCliente[key]) {
-              gestionesPorCliente[key] = [];
+            if (!(key in gestionesPorCliente)) {
+              (gestionesPorCliente as Record<string, any[]>)[key] = [];
             }
-            gestionesPorCliente[key].push(g);
+            (gestionesPorCliente as Record<string, any[]>)[key].push(g);
           });
 
           // Construir filas: una por cliente, concatenando gestiones
           const tableData = Object.entries(gestionesPorCliente).map(([cliente, gestiones]) => {
             // Concatenar fechas, tipos, resultados, observaciones y promesas
-            const fechas = gestiones.map(g => g.fecha.replace('T', ' ').substring(0, 16)).join('\n');
-            const tipos = gestiones.map(g => g.tipo).join('\n');
-            const resultados = gestiones.map(g => g.resultado).join('\n');
-            const observaciones = gestiones.map(g => g.observacion || '-').join('\n');
-            const promesas = gestiones.map(g => g.monto_promesa ? fmtMoney(g.monto_promesa) : '-').join('\n');
+            const gestionesArr = gestiones as any[];
+            const fechas = gestionesArr.map((g: any) => g.fecha.replace('T', ' ').substring(0, 16)).join('\n');
+            const tipos = gestionesArr.map((g: any) => g.tipo).join('\n');
+            const resultados = gestionesArr.map((g: any) => g.resultado).join('\n');
+            const observaciones = gestionesArr.map((g: any) => g.observacion || '-').join('\n');
+            const promesas = gestionesArr.map((g: any) => g.monto_promesa ? fmtMoney(g.monto_promesa) : '-').join('\n');
             return [cliente, fechas, tipos, resultados, observaciones, promesas];
           });
 
@@ -1668,7 +1598,17 @@ export default function App() {
             <div className="row">
               <label className="field">
                 <span>Cliente</span>
-                <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
+                <select
+                  value={selectedCliente}
+                  onChange={e => {
+                    const value = e.target.value;
+                    if (value === 'Todos') {
+                      setSelectedCliente('');
+                    } else {
+                      setSelectedCliente(value);
+                    }
+                  }}
+                >
                   <option value="Todos">Todos</option>
                   {clientes.map(c => (
                     <option key={c.cliente || c.razon_social} value={c.cliente || c.razon_social}>
@@ -1676,9 +1616,6 @@ export default function App() {
                     </option>
                   ))}
                 </select>
-
-                {/* Forzar reset de selectedCliente al poner Todos */}
-                {selectedCliente === 'Todos' && setTimeout(() => setSelectedCliente(''), 0)}
               </label>
               <label className="field">
                 <span>Estado</span>
@@ -1755,7 +1692,7 @@ export default function App() {
                               background: isSelected ? 'rgba(168, 85, 247, 0.10)' : undefined
                             }}
                           >
-                            <td style={{textAlign: 'center'}}>
+                            <td style={{textAlign: 'center', minWidth: 40}}>
                               <input
                                 type="checkbox"
                                 checked={clientesGestionados.includes(cliente)}
@@ -1768,10 +1705,10 @@ export default function App() {
                                 }}
                               />
                             </td>
-                            <td>
+                            <td style={{maxWidth: 220, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
                               <a href="#" style={{fontWeight: 700, color: '#7c3aed'}} onClick={(e) => { e.preventDefault(); setSelectedCliente(cliente); }}>{cliente}</a>
                             </td>
-                            <td className="num">{fmtMoney(totalCliente)}</td>
+                            <td className="num" style={{minWidth: 100, textAlign: 'right', fontWeight: 600}}>{fmtMoney(totalCliente)}</td>
                             <td className="text-center">
                               {lastCall ? <><span style={{color:'#10b981'}}>✓</span> <span style={{fontSize:'0.8em',color:'#888'}}>{lastCall.fecha ? lastCall.fecha.replace('T',' ').substring(0,16) : ''}</span></> : '•'}
                             </td>
@@ -1820,27 +1757,24 @@ export default function App() {
                     const fechaHoy = new Date().toLocaleDateString();
                     const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === selectedCliente || d.cliente === selectedCliente));
                     const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
-                    
                     const lineas = [
-                    `Hola *${selectedCliente}*,`,
-                    '',
-                    `Te saluda el Departamento de Cobranzas de *${empresaNombre}*.`,
-                    '',
-                    `*Recordatorio de Pago* al ${fechaHoy}`,
-                    `*Total Vencido:* ${fmtMoney(totalCliente)}`,
-                    '',
-                    `Adjunto el detalle en PDF para tu revisión.`,
-                    '',
-                    `Por favor, ayúdanos con la confirmación del pago a la brevedad posible. Si ya fue realizado, envíanos el comprobante por este medio.`,
-                    '',
-                    `Cualquier duda, quedo atenta.`,
-                    '',
-                    `¡Saludos!`
-                  ];
-                    
+                      `Hola *${selectedCliente}*,`,
+                      '',
+                      `Te saluda el Departamento de Cobranzas de *${empresaNombre}*.`,
+                      '',
+                      `*Recordatorio de Pago* al ${fechaHoy}`,
+                      `*Total Vencido:* ${fmtMoney(totalCliente)}`,
+                      '',
+                      `Adjunto el detalle en PDF para tu revisión.`,
+                      '',
+                      `Por favor, ayúdanos con la confirmación del pago a la brevedad posible. Si ya fue realizado, envíanos el comprobante por este medio.`,
+                      '',
+                      `Cualquier duda, quedo atenta.`,
+                      '',
+                      `¡Saludos!`
+                    ];
                     const mensaje = encodeURIComponent(lineas.join('\n'));
                     window.open(`https://wa.me/?text=${mensaje}`, '_blank');
-
                     // Registrar gestión automática de WhatsApp
                     registrarGestion({
                       cliente: selectedCliente,
@@ -1860,18 +1794,9 @@ export default function App() {
                   📄 Generar PDF
                 </button>
               </div>
-              
-              {/* Contenedor dividido para Documentos y Gestiones */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: isMobile || docsVencidosCliente.length === 0 ? '1fr' : '1fr 1fr', 
-                gap: '20px',
-                marginTop: '16px',
-                alignItems: 'start'
-              }}>
               {/* Documentos Vencidos del Cliente */}
               {docsVencidosCliente.length > 0 && (
-                <div>
+                <div style={{marginTop: '16px'}}>
                   <h4 style={{margin: '16px 0 8px 0', color: 'var(--text-main)'}}>📄 Documentos Vencidos ({docsVencidosCliente.length})</h4>
                   <div className="table-wrapper">
                     <table className="data-table">
@@ -1907,51 +1832,61 @@ export default function App() {
                   </div>
                 </div>
               )}
-              
-              {/* Timeline de Gestiones */}
-              <div>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 8px 0'}}>
-                  <h4 style={{margin: 0, color: 'var(--text-main)'}}>📋 Historial de Gestiones</h4>
-                  <button className="btn secondary" style={{fontSize: '0.75rem', padding: '4px 8px'}} onClick={exportarReporteGestion}>
-                    📄 Reporte PDF
-                  </button>
-                </div>
-                <div className="table-wrapper">
-                  <table className="data-table" style={{fontSize: '0.85rem'}}>
-                    <thead>
-                      <tr>
-                        <th>Fecha</th>
-                        <th>Tipo</th>
-                        <th>Resultado</th>
-                        <th>Observación</th>
-                        <th style={{width: '30px'}}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                  {filteredGestiones.length > 0 ? (
-                    filteredGestiones.slice(0, 10).map(g => {
-                      return (
-                        <tr key={g.id}>
-                          <td>{g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-'}</td>
-                          <td>{g.tipo}</td>
-                          <td>{g.resultado}</td>
-                          <td style={{maxWidth: '150px', whiteSpace: 'normal'}}>{g.observacion}</td>
-                          <td>
-                            <button className="promesa-eliminar" style={{position: 'static', transform: 'none', marginLeft: 0}} onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr><td colSpan={5} style={{textAlign: 'center', color: '#9ca3af', padding: '12px'}}>Sin gestiones registradas</td></tr>
-                  )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              </div>
             </div>
           )}
+
+          {/* Historial de Gestiones SIEMPRE ABAJO */}
+          <div className="card">
+            <div className="card-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e5e7eb', paddingBottom: 8, marginBottom: 12}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+                <span style={{fontSize: '1.5rem'}}>📋</span>
+                <span style={{fontWeight: 700, fontSize: '1.15rem', color: '#374151'}}>
+                  Historial de Gestiones {selectedCliente && selectedCliente !== "Todos" ? `- ${selectedCliente}` : "(General)"}
+                </span>
+              </div>
+              <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+                {/* Filtros de fecha si quieres */}
+                <button className="btn primary" style={{fontSize: '0.9rem', padding: '6px 12px'}} onClick={exportarReporteGestion}>
+                  📄 Generar Reporte de Gestión PDF
+                </button>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table" style={{fontSize: '0.85rem'}}>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Resultado</th>
+                    <th>Observación</th>
+                    <th style={{width: '30px'}}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(
+                    (selectedCliente && selectedCliente !== "Todos"
+                      ? filteredGestiones
+                      : [...gestionesFiltradasPorFecha].sort((a, b) => {
+                          const dateA = a?.fecha ? new Date(a.fecha).getTime() : 0;
+                          const dateB = b?.fecha ? new Date(b.fecha).getTime() : 0;
+                          return dateB - dateA;
+                        })
+                    )
+                  ).slice(0, 20).map(g => (
+                    <tr key={g.id}>
+                      <td>{g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-'}</td>
+                      <td>{g.tipo}</td>
+                      <td>{g.resultado}</td>
+                      <td style={{maxWidth: '150px', whiteSpace: 'normal'}}>{g.observacion}</td>
+                      <td>
+                        <button className="promesa-eliminar" style={{position: 'static', transform: 'none', marginLeft: 0}} onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* Panel de Historial General (Visible cuando es "Todos") */}
           {(!selectedCliente || selectedCliente === "Todos") && (
@@ -2821,6 +2756,61 @@ export default function App() {
               </div>
             )}
         </div>
+        </div>
+      );
+    }
+
+    if (tab === "alertas") {
+      return (
+        <div className="card">
+          <div className="card-title">🚨 Alertas de Incumplimiento</div>
+          <div className="row">
+            <label className="field">
+              <span>Búsqueda</span>
+              <input type="text" value={searchAlertas} onChange={e => setSearchAlertas(e.target.value)} placeholder="Buscar cliente o documento..." />
+            </label>
+            <label className="field">
+              <span>Severidad</span>
+              <select value={filtroSeveridad} onChange={e => setFiltroSeveridad(e.target.value)}>
+                <option value="Todos">Todas</option>
+                <option value="Alta">Alta</option>
+                <option value="Media">Media</option>
+                <option value="Baja">Baja</option>
+              </select>
+            </label>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Documento</th>
+                  <th className="num">Monto</th>
+                  <th className="num">Días Vencido</th>
+                  <th>Severidad</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAlertas.length > 0 ? (
+                  filteredAlertas.map((a, i) => (
+                    <tr key={i}>
+                      <td>{a.cliente}</td>
+                      <td>{a.documento}</td>
+                      <td className="num">{fmtMoney(a.monto)}</td>
+                      <td className="num">{a.diasVencidos}</td>
+                      <td>
+                        <span className={`kpi-${a.severidad === 'Alta' ? 'negative' : a.severidad === 'Media' ? 'warning' : 'positive'}`}>
+                          {a.severidad}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr><td colSpan={5} style={{textAlign: 'center', padding: '20px', color: '#9ca3af'}}>No hay alertas activas</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
     }
