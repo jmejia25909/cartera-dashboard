@@ -1,120 +1,35 @@
-/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import "./App.css";
-import { fmtMoney, fmtMoneyCompact } from "./utils/formatters";
 
-import { RankingList } from './components/RankingList';
-
-// Lazy loading de librerías pesadas (solo se cargan cuando se usan)
-const loadXLSX = () => import('xlsx');
-const loadJsPDF = async () => {
-  const [jsPDF, autoTable] = await Promise.all([
-    import('jspdf'),
-    import('jspdf-autotable')
-  ]);
-  return { jsPDF: jsPDF.default, autoTable: autoTable.default };
-};
-
-/* eslint-disable jsx-a11y/no-static-element-interactions */
-
-// Definición global para evitar error TS2339 en window.api
+// Definición global para evitar errores de TypeScript con window.api
 declare global {
   interface Window {
-    api?: any;
+    api: any;
   }
 }
 
-const isWeb = !window.api;
-
-// Tipos
-type Toast = {
+// Interfaces necesarias para TypeScript
+interface Documento {
   id: number;
-  message: string;
-  type: "success" | "error" | "info";
-  duration?: number;
-};
-
-type Empresa = {
-  nombre: string;
-  ruc?: string;
-  direccion?: string;
-  telefono?: string;
-  email?: string;
-  administrador?: string;
-  meta_mensual?: number;
-  tema?: string;
-  logo?: string;
-};
-
-type Documento = {
-  id: number;
+  documento: string;
   numero?: string;
   cliente: string;
   razon_social?: string;
-  tipo_documento: string;
-  documento: string;
+  vendedor?: string;
   fecha_emision: string;
   fecha_vencimiento: string;
-  vendedor?: string;
-  centro_costo?: string;
-  categoria_persona?: string;
   total: number;
-  valor_documento?: number;
-  retenciones?: number;
-  cobros?: number;
   saldo?: number;
+  valor_documento?: number;
   dias_vencidos?: number;
-  // Campos de aging
   por_vencer?: number;
-  dias_30?: number;
-  dias_60?: number;
-  dias_90?: number;
-  dias_120?: number;
-  dias_mas_120?: number;
-  aging?: string; // Propiedad usada en reportes
-};
+  retenciones?: number;
+  centro_costo?: string;
+  aging?: string;
+}
 
-type Stats = {
-  fechaCorte: string;
-  totalSaldo: number;
-  totalCobrado: number;
-  vencidaSaldo: number;
-  percentVencida: number;
-  mora90Saldo: number;
-  percentMora90: number;
-  docsPendientes: number;
-  clientesConSaldo: number;
-  aging: {
-    porVencer: number;
-    d30: number;
-    d60: number;
-    d90: number;
-    d120: number;
-    d150: number;
-    d180: number;
-    d210: number;
-    d240: number;
-    d270: number;
-    d300: number;
-    d330: number;
-    d360: number;
-    d360p: number;
-  };
-  percentTop10: number;
-  npl: number;
-  dso: number;
-  recuperacionMesActual: number;
-  metaMensual: number;
-  percentMetaCumplida: number;
-  tasaCumplimientoPromesas: number;
-};
-
-type Cliente = {
-  cliente: string;
-  razon_social: string;
-};
-
-type Gestion = {
+interface Gestion {
   id: number;
   cliente: string;
   razon_social?: string;
@@ -125,242 +40,146 @@ type Gestion = {
   motivo?: string;
   fecha_promesa?: string;
   monto_promesa?: number;
-};
+}
 
-// ...existing code...
-
-  type MotivoImpago = {
-    label: string;
-    count: number;
-    total: number;
-  };
-
-  type AnalisisRiesgo = {
-    razon_social: string;
-    total_deuda: number;
-    deuda_vencida: number;
-    max_dias_mora: number;
-    score: number;
-  };
-
-  type ProductividadGestor = {
-    usuario: string;
-    total_gestiones: number;
-    promesas: number;
-    pagos: number;
-    tasa_promesa: number;
-    saldo_recuperable: number;
-  };
-
-  type SegmentacionRiesgo = {
-    nombre: string;
-    saldo: number;
-    documentos: number;
-    riesgo: string;
-  };
-
-  type TopCliente = {
-    cliente: string;
-    razon_social?: string;
-    total: number;
-  };
-
-type Alerta = {
+interface Alerta {
   cliente: string;
   documento: string;
   monto: number;
   diasVencidos: number;
   severidad: string;
-};
+}
 
+// Utilidades básicas restauradas
+const fmtMoney = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+const fmtMoneyCompact = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: "compact" }).format(amount);
 
-type TendenciaMes = {
-  mes: string;
-  documentos: number;
-  emision: number;
-  cobrado: number;
-  vencidos: number;
-};
-
-type CuentaAplicar = {
-  id: number;
-  documento?: string;
-  cliente: string;
-  monto: number;
-  tipo: string;
-  estado: string;
-  fecha_recepcion: string;
-  fecha_aplicacion?: string;
-  documento_aplicado?: string;
-  observacion?: string;
-};
-
-type Abono = {
-  id: number;
-  documento: string;
-  total_anterior: number;
-  total_nuevo: number;
-  fecha: string;
-  observacion?: string;
-};
+// Componente RankingList restaurado (versión simplificada)
+const RankingList = ({ title, items, barColor }: any) => (
+  <div style={{ padding: 10 }}>
+    <h4 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#64748b' }}>{title}</h4>
+    {items.map((item: any, i: number) => (
+      <div key={i} style={{ marginBottom: 6, fontSize: '0.8rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+          <span style={{ fontWeight: 500 }}>{item.label}</span>
+          <span style={{ fontWeight: 600 }}>{fmtMoney(item.value)}</span>
+        </div>
+        <div style={{ height: 4, background: '#f1f5f9', borderRadius: 2 }}>
+          <div style={{ height: '100%', width: `${Math.min(100, (item.value / (items[0]?.value || 1)) * 100)}%`, background: item.color || barColor, borderRadius: 2 }}></div>
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 export default function App() {
-      // Eliminado: cuentasAplicar no se usa
-    // Filtros de fecha para el reporte de gestión general
-    const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
-    const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  // Temas disponibles (deben coincidir con los definidos en CSS)
-  const themeNames = ['claro', 'azul', 'pastel', 'oscuro', 'nature'];
-
-  // Leer tema guardado en localStorage al iniciar
-  const getInitialTheme = () => {
-    const saved = window.localStorage.getItem('app_theme');
-    return saved && themeNames.includes(saved) ? saved : 'azul';
-  };
-  const [theme, setTheme] = useState(getInitialTheme());
-  const [pendingTheme, setPendingTheme] = useState(getInitialTheme());
-
-
-  // Aplica el tema usando data-theme en <html> para CSS profesional
-  useEffect(() => {
-    const html = document.documentElement;
-    html.setAttribute('data-theme', theme);
-    window.localStorage.setItem('app_theme', theme);
-  }, [theme]);
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const [tab, setTab] = useState<"dashboard" | "gestion" | "reportes" | "crm" | "analisis" | "alertas" | "tendencias" | "cuentas" | "config">("dashboard");
-  const [empresa, setEmpresa] = useState<Empresa>({ nombre: "Cartera Dashboard" });
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  // --- ESTADOS RESTAURADOS ---
+  const [tab, setTab] = useState("dashboard");
+  const [theme, setTheme] = useState("claro");
+  const [pendingTheme, setPendingTheme] = useState("claro");
+  const [isWeb, setIsWeb] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [hasWritePermissions, setHasWritePermissions] = useState(true);
+  
+  // Datos principales
+  const [docs, setDocs] = useState<any[]>([]);
+  const [clientes, setClientes] = useState<any[]>([]);
   const [vendedores, setVendedores] = useState<string[]>([]);
-  const [docs, setDocs] = useState<Documento[]>([]);
+  const [topClientes, setTopClientes] = useState<any[]>([]);
+  const [gestiones, setGestiones] = useState<any[]>([]);
+  const [allGestiones, setAllGestiones] = useState<any[]>([]);
+  const [tendencias, setTendencias] = useState<any[]>([]);
+  const [abonos, setAbonos] = useState<any[]>([]);
+  const [cuentasAplicar, setCuentasAplicar] = useState<any[]>([]);
+  const [promesas, setPromesas] = useState<any[]>([]);
+  const [alertas, setAlertas] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  
+  // Filtros y Búsquedas
+  const [searchDocumentos, setSearchDocumentos] = useState("");
   const [selectedCliente, setSelectedCliente] = useState("");
   const [selectedVendedor, setSelectedVendedor] = useState("");
-  const [topClientes, setTopClientes] = useState<TopCliente[]>([]);
-  const [gestiones, setGestiones] = useState<Gestion[]>([]);
-  const [promesas, setPromesas] = useState<Gestion[]>([]);
-  const [analisisRiesgo, setAnalisisRiesgo] = useState<AnalisisRiesgo[]>([]);
-  const [motivosData, setMotivosData] = useState<MotivoImpago[]>([]);
-  const [productividadData, setProductividadData] = useState<ProductividadGestor[]>([]);
-  const [segmentacionRiesgo, setSegmentacionRiesgo] = useState<SegmentacionRiesgo[]>([]);
-  const [alertas, setAlertas] = useState<Alerta[]>([]);
-  const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
-  const [abonos, setAbonos] = useState<Abono[]>([]);
-  const [allGestiones, setAllGestiones] = useState<Gestion[]>([]);
-  const [cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
-  const [repoUrl, setRepoUrl] = useState<string>("");
-  // URL remota obtenida dinámicamente desde ngrok
-  const [remoteUrl, setRemoteUrl] = useState<string>("");
+  const [filtroCentroCosto, setFiltroCentroCosto] = useState("Todos");
+  const [filtroAging, setFiltroAging] = useState("Todos");
+  const [searchAlertas, setSearchAlertas] = useState("");
+  const [filtroSeveridad, setFiltroSeveridad] = useState("Todos");
+  const [filtroFecha, setFiltroFecha] = useState("Todas");
+  const [filtroMonto, setFiltroMonto] = useState("Todos");
+  const [filtroVistaGestion, setFiltroVistaGestion] = useState("Todos");
+  const [vistaAgrupada, setVistaAgrupada] = useState(false);
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
+  const [vistaAnalisis, setVistaAnalisis] = useState("motivos");
+
+  // UI y Modales
+  const [showModalGestion, setShowModalGestion] = useState(false);
+  const [showModalEmpresa, setShowModalEmpresa] = useState(false);
+  const [showModalLimpiar, setShowModalLimpiar] = useState(false);
+  const [toasts, setToasts] = useState<any[]>([]);
+  const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: 0 });
   
+  // Configuración
+  const [empresa, setEmpresa] = useState<any>({});
+  const [remoteUrl, setRemoteUrl] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [remoteUrlHealthy, setRemoteUrlHealthy] = useState(false);
+  const [localUrlHealthy, setLocalUrlHealthy] = useState(false);
+  const [centrosCosto, setCentrosCosto] = useState<string[]>([]);
+  const [clientesGestionados, setClientesGestionados] = useState<string[]>([]);
 
-  // Estado para detectar si el cliente tiene permisos de escritura
-  const [hasWritePermissions, setHasWritePermissions] = useState(true);
+  // Placeholders para datos derivados
+  const [motivosData, setMotivosData] = useState<any[]>([]);
+  const [productividadData, setProductividadData] = useState<any[]>([]);
+  const [segmentacionRiesgo, setSegmentacionRiesgo] = useState<any[]>([]);
+  const [analisisRiesgo, setAnalisisRiesgo] = useState<any[]>([]);
 
-  // Función centralizada para registrar gestiones (Optimistic UI + Backend)
-  const registrarGestion = useCallback(async (datos: Partial<Gestion>) => {
-    const nuevaGestion: Gestion = {
-      id: Date.now(), // ID temporal para visualización inmediata
-      cliente: datos.cliente || "",
-      razon_social: datos.cliente || "",
-      fecha: new Date().toISOString(),
-      tipo: datos.tipo || "",
-      resultado: datos.resultado || "",
-      observacion: datos.observacion || "",
-      ...datos
-    } as Gestion;
+  // Funciones auxiliares básicas
+  const addToast = (message: string, type = "info") => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
 
-    // 1. Actualizar UI inmediatamente (Optimistic Update)
-    setAllGestiones(prev => [nuevaGestion, ...prev]);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    addToast("Copiado", "success");
+  };
 
-    // 2. Persistir en Backend (si es Electron)
-    if (!isWeb && hasWritePermissions) {
+  const loadJsPDF = async () => { return { jsPDF: (await import('jspdf')).default, autoTable: (await import('jspdf-autotable')).default }; };
+  const loadXLSX = async () => { return await import('xlsx'); };
+  const checkPermissions = async () => {
+    if (window.api && window.api.hasWritePermissions) {
       try {
-        await window.api.gestionGuardar(datos);
-      } catch (e) { console.error("Error guardando gestión:", e); }
+        const canWrite = await window.api.hasWritePermissions();
+        setHasWritePermissions(canWrite);
+      } catch {
+        setHasWritePermissions(false);
+      }
+    } else {
+      setHasWritePermissions(false);
     }
-  }, [isWeb, hasWritePermissions]);
+  }; 
+  const registrarGestion = async (g: any) => { setAllGestiones(prev => [g, ...prev]); };
 
-  // Configuración de Pestañas (Menú)
   const tabsConfig = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "gestion", label: "Gestión", icon: "📋" },
-    { id: "reportes", label: "Reportes", icon: "📄" },
-    { id: "crm", label: "CRM", icon: "👥" },
-    { id: "analisis", label: "Análisis", icon: "🔍" },
+    { id: "reportes", label: "Reportes", icon: "📑" },
+    { id: "crm", label: "CRM", icon: "🤝" },
+    { id: "analisis", label: "Análisis", icon: "📈" },
     { id: "alertas", label: "Alertas", icon: "🚨" },
-    { id: "tendencias", label: "Tendencias", icon: "📈" },
-    { id: "cuentas", label: "Cuentas", icon: "💳" },
-    { id: "config", label: "Configuración", icon: "⚙️" },
+    { id: "tendencias", label: "Tendencias", icon: "📉" },
+    { id: "cuentas", label: "Cuentas", icon: "💰" },
+    { id: "config", label: "Configuración", icon: "⚙️" }
   ];
 
-  // Estados para búsqueda y filtros
-  const [searchDocumentos, setSearchDocumentos] = useState("");
-  
-  // Estados para tab CRM
-  const [filtroFecha, setFiltroFecha] = useState("Todas");
-  const [filtroMonto, setFiltroMonto] = useState("Todos");
-  
-  // Estados para tab Análisis
-  const [vistaAnalisis, setVistaAnalisis] = useState<"motivos" | "productividad" | "segmentacion" | "riesgo" | "comparativa" | "cronicos">("motivos");
-  
-  // Estados para tab Gestión
-  // Estado para checkboxes de gestión
-  const [clientesGestionados, setClientesGestionados] = useState<string[]>(() => {
-    try {
-      const data = localStorage.getItem('clientesGestionados');
-      const parsed = data ? JSON.parse(data) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // --- HOOKS DE GESTIÓN (nivel superior, nunca dentro de if) ---
-  // 1. todosDocsVencidos primero
-  const todosDocsVencidos = useMemo(() => (docs || []).filter(d => d && (d.dias_vencidos || 0) > 0), [docs]);
-
-  // 2. Luego docsVencidosCliente
-  const docsVencidosCliente = useMemo(() => {
-    if (!selectedCliente || selectedCliente === "Todos") return [];
-    return todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente)
-      .sort((a, b) => (b.dias_vencidos || 0) - (a.dias_vencidos || 0));
-  }, [selectedCliente, todosDocsVencidos]);
-
-  // 3. Luego totalVencidoCliente
-  const totalVencidoCliente = useMemo(() => {
-    return docsVencidosCliente.reduce((sum, d) => sum + d.total, 0);
-  }, [docsVencidosCliente]);
-
-  // 4. filteredGestiones
-  const filteredGestiones = useMemo(() => {
-    const lista = Array.isArray(allGestiones) ? allGestiones : [];
-    const sortFn = (a: { fecha?: string }, b: { fecha?: string }) => {
-      const dateA = a?.fecha ? new Date(a.fecha).getTime() : 0;
-      const dateB = b?.fecha ? new Date(b.fecha).getTime() : 0;
-      return dateB - dateA;
-    };
-    let resultado;
-    if (!selectedCliente || selectedCliente === "Todos") {
-      // Mostrar todas las gestiones (limitado a lo que traiga allGestiones, ej. 90 días)
-      resultado = [...lista].sort(sortFn);
-    } else {
-      // Mostrar gestiones del cliente seleccionado
-      resultado = (gestiones || []).filter(g =>
-        g && (g.cliente === selectedCliente || g.razon_social === selectedCliente)
-      ).sort(sortFn);
-    }
-    return resultado;
-  }, [selectedCliente, gestiones, allGestiones]);
-
-  // Aplica el filtro de fechas a la tabla de gestión de clientes
+  // Variables derivadas restauradas
+  const clientesConVencidos = useMemo(() => Array.from(new Set(docs.filter(d => (d.dias_vencidos || 0) > 0).map(d => d.cliente))), [docs]);
+  const todosDocsVencidos = useMemo(() => docs.filter(d => (d.dias_vencidos || 0) > 0), [docs]);
+  const docsVencidosCliente = useMemo(() => (!selectedCliente || selectedCliente === "Todos") ? [] : todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente), [todosDocsVencidos, selectedCliente]);
+  const totalVencidoCliente = useMemo(() => docsVencidosCliente.reduce((sum, d) => sum + d.total, 0), [docsVencidosCliente]);
   const gestionesFiltradasPorFecha = useMemo(() => {
-    let gestiones = filteredGestiones;
+    let gestiones = allGestiones;
     if (filtroFechaDesde) {
       gestiones = gestiones.filter(g => g.fecha && g.fecha >= filtroFechaDesde);
     }
@@ -369,118 +188,15 @@ export default function App() {
       gestiones = gestiones.filter(g => g.fecha && g.fecha <= hasta);
     }
     return gestiones;
-  }, [filteredGestiones, filtroFechaDesde, filtroFechaHasta]);
+  }, [allGestiones, filtroFechaDesde, filtroFechaHasta]);
+  const clientesUnicos = useMemo(() => (selectedCliente && selectedCliente !== "Todos") ? [selectedCliente] : clientesConVencidos, [clientesConVencidos, selectedCliente]);
+  const filteredGestiones = useMemo(() => allGestiones, [allGestiones]);
 
-    useEffect(() => {
-      try {
-        localStorage.setItem('clientesGestionados', JSON.stringify(clientesGestionados));
-      } catch {}
-    }, [clientesGestionados]);
-  const [filtroVistaGestion, setFiltroVistaGestion] = useState("Todos");
-  
-  // Lista de clientes únicos para la tabla de gestión, filtrada y ordenada
-    // Mover clientesConVencidos arriba para evitar ReferenceError
-    const clientesConVencidos = useMemo(() => Array.from(new Set(todosDocsVencidos.map(d => d?.razon_social || d?.cliente)))
-     .filter(c => c && c.trim() !== "")
-     .sort((a, b) => {
-       const totalA = todosDocsVencidos.filter(d => d.razon_social === a || d.cliente === a).reduce((s, d) => s + d.total, 0);
-       const totalB = todosDocsVencidos.filter(d => d.razon_social === b || d.cliente === b).reduce((s, d) => s + d.total, 0);
-       return totalB - totalA;
-     }), [todosDocsVencidos]);
-
-    const clientesUnicos = useMemo(() => {
-     let lista = clientesConVencidos;
-
-     if (selectedCliente && selectedCliente !== "Todos") {
-       return [selectedCliente];
-     }
-
-     if (filtroVistaGestion === "Mayor Deuda") {
-       return [...lista].sort((a, b) => {
-         const totalA = todosDocsVencidos.filter(d => d.razon_social === a || d.cliente === a).reduce((s, d) => s + d.total, 0);
-         const totalB = todosDocsVencidos.filter(d => d.razon_social === b || d.cliente === b).reduce((s, d) => s + d.total, 0);
-         return totalB - totalA;
-       });
-     }
-     if (filtroVistaGestion === "Más Días Vencidos") {
-       return [...lista].sort((a, b) => {
-         const maxA = Math.max(...todosDocsVencidos.filter(d => d.razon_social === a || d.cliente === a).map(d => d.dias_vencidos || 0));
-         const maxB = Math.max(...todosDocsVencidos.filter(d => d.razon_social === b || d.cliente === b).map(d => d.dias_vencidos || 0));
-         return maxB - maxA;
-       });
-     }
-     return lista;
-    }, [clientesConVencidos, selectedCliente, filtroVistaGestion, todosDocsVencidos]);
-
-  // Estados para tab Reportes
-  const [filtroAging, setFiltroAging] = useState("Todos");
-  const [vistaAgrupada, setVistaAgrupada] = useState(false);
-  
-  // Estados para nuevas funcionalidades
-  const [filtroCentroCosto, setFiltroCentroCosto] = useState("Todos");
-  const [centrosCosto, setCentrosCosto] = useState<string[]>([]);
-  
-  // Estados para Alertas
-  const [searchAlertas, setSearchAlertas] = useState("");
-  const [filtroSeveridad, setFiltroSeveridad] = useState("Todos");
-
-  // Estado para notificaciones
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const toastIdRef = useRef(0);
-
-  // Estados para modales
-  const [showModalGestion, setShowModalGestion] = useState(false);
-  const [showModalEmpresa, setShowModalEmpresa] = useState(false);
-  const [showModalLimpiar, setShowModalLimpiar] = useState(false);
-
-  // Estados de health check
-  const [localUrlHealthy, setLocalUrlHealthy] = useState<boolean>(false);
-  const [remoteUrlHealthy, setRemoteUrlHealthy] = useState<boolean>(false);
-  
-  // Función helper para agregar notificaciones
-  const addToast = useCallback((message: string, type: "success" | "error" | "info" = "info", duration = 3000) => {
-    const id = toastIdRef.current++;
-    setToasts((prev: Toast[]) => [...prev, { id, message, type, duration }]);
-    if (duration > 0) {
-      setTimeout(() => {
-        setToasts((prev: Toast[]) => prev.filter((t: Toast) => t.id !== id));
-      }, duration);
-    }
-  }, []);
-
-  // Función para copiar URL al clipboard
-  const copyToClipboard = useCallback((text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      addToast("� URL seguro copiado! Acepta el certificado al abrir", "success", 4000);
-    }).catch(() => {
-      addToast("Error al copiar URL", "error", 2000);
-    });
-  }, [addToast]);
-
-  // Health check para URLs
-  const checkUrlHealth = useCallback(async (url: string): Promise<boolean> => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000); // 8 segundos timeout
-      
-      // Para URLs HTTPS de Cloudflare, probar el endpoint /api/stats
-      const testUrl = url.includes('https://') ? `${url}/api/stats` : url;
-      
-      const response = await fetch(testUrl, {
-        method: "GET",
-        signal: controller.signal,
-        redirect: "follow", // Seguir redirecciones
-        mode: "cors", // Permitir CORS
-      });
-      clearTimeout(timeout);
-      
-      // Considerar respuesta válida si status está en rango 200-499
-      return response.status >= 200 && response.status < 500;
-    } catch (error) {
-      // Para Cloudflare, si hay error de red pero el túnel está corriendo, considerar como "conectando"
-      console.log(`Health check failed for ${url}:`, error);
-      return false;
-    }
+  // Effect para detectar tamaño de pantalla
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Effect para cargar configuración remota (IP local, etc)
@@ -507,77 +223,20 @@ export default function App() {
   // Effect para detectar cambios de IP automáticamente
   useEffect(() => {
     const ipCheckInterval = setInterval(async () => {
+      if (!window.api?.getGitRemoteUrl) return;
       try {
         const result = await window.api.getGitRemoteUrl();
         if (result.ok && result.url && result.url !== repoUrl) {
           // La IP cambió - actualizar
           console.log(`📡 IP local actualizada: ${repoUrl} -> ${result.url}`);
           setRepoUrl(result.url);
-          addToast(`🔄 IP actualizada: ${result.url}`, "info", 5000);
+          // addToast(`🔄 IP actualizada: ${result.url}`, "info", 5000); // Desactivado: ya hay indicador visual
         }
       } catch (error) {
         console.error("Error verificando IP:", error);
       }
-    }, 30000); // Verificar cada 30 segundos
+    }, 30000);
 
-    return () => clearInterval(ipCheckInterval);
-  }, [repoUrl, addToast]);
-
-  // Effect para health check periódico (Local + ngrok)
-  useEffect(() => {
-    const healthCheckInterval = setInterval(async () => {
-      // Verificar salud de URL local
-      if (repoUrl) {
-        const localHealthy = await checkUrlHealth(repoUrl);
-        setLocalUrlHealthy(localHealthy);
-      }
-      
-      // Verificar estado de ngrok (URL remota)
-      if (remoteUrl && window.api?.checkRemoteUrl) {
-        try {
-          const result = await window.api.checkRemoteUrl();
-          if (result.ok && result.url) {
-            setRemoteUrl(result.url);
-            setRemoteUrlHealthy(true);
-          } else {
-            setRemoteUrlHealthy(false);
-          }
-        } catch (error) {
-          console.error("Error verificando URL remota:", error);
-          setRemoteUrlHealthy(false);
-        }
-      }
-    }, 120000); // Cada 2 minutos para ngrok
-
-    return () => clearInterval(healthCheckInterval);
-  }, [remoteUrl, repoUrl, checkUrlHealth]);
-
-  // Estados para formularios
-  const [gestionForm, setGestionForm] = useState({
-    tipo: "Llamada",
-    resultado: "Contactado",
-    observacion: "",
-    motivo: "",
-    fecha_promesa: "",
-    monto_promesa: 0
-  });
-  
-  useEffect(() => {
-    // Verificar permisos al cargar
-    async function checkPermissions() {
-      if (!isWeb && window.api?.hasWritePermissions) {
-        try {
-          const canWrite = await window.api.hasWritePermissions();
-          setHasWritePermissions(canWrite);
-        } catch {
-          // Si falla, asumimos que es cliente remoto (sin permisos)
-          setHasWritePermissions(false);
-        }
-      } else if (isWeb) {
-        // Modo web = sin permisos de escritura
-        setHasWritePermissions(false);
-      }
-    }
     checkPermissions();
     console.log('[DEBUG] Llamando cargarDatos() al montar App');
     cargarDatos();
@@ -600,58 +259,39 @@ export default function App() {
         }
       })();
     }
+    return () => clearInterval(ipCheckInterval);
   }, []);
 
   async function cargarDatos() {
+    if (!window.api) return;
     try {
-      if (isWeb) {
-        // Modo web: intentar usar fetch() al servidor HTTP
-        try {
-          const [empData, statsData, filtros, top] = await Promise.all([
-            fetch("/api/empresa").then(r => r.json()),
-            fetch("/api/stats").then(r => r.json()),
-            fetch("/api/filtros").then(r => r.json()),
-            fetch("/api/top-clientes?limit=10").then(r => r.json())
-          ]);
-
-          setEmpresa(empData);
-          setStats(statsData);
-          setVendedores(filtros.vendedores || []);
-          setClientes(filtros.clientes || []);
-          setTopClientes(top.rows || []);
-          
-          // Cargar gestiones para promesas
-          const promData = await fetch("/api/gestiones").then(r => r.json());
-          const proms = Array.isArray(promData) ? promData.filter((g: Gestion) => g.resultado.includes("Promesa")) : [];
-          setPromesas(proms);
-          
-          return;
-        } catch (fetchError) {
-          console.warn("Backend no disponible", fetchError);
-          addToast("⚠️ No se pudo conectar al backend - Usa la versión Electron", "error");
-          return;
-        }
-      }
-
-      const [empData, statsData, filtros, top, promData, riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, cuentasAplicarData, abonosData, gestionesRecientes] = await Promise.all([
+      const [empData, statsData, filtros, top, gestionesData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
         window.api.filtrosListar(),
-        window.api.topClientes(10),
-        window.api.gestionesListar(""),
-        window.api.campanasListar?.() || { ok: true, rows: [] },
-        window.api.clientesAnalisis?.() || { ok: true, rows: [] },
-        window.api.motivosImpago?.() || [],
-        window.api.productividadGestor?.() || [],
-        window.api.segmentacionRiesgo?.() || [],
-        window.api.alertasIncumplimiento?.() || [],
-        window.api.pronosticoFlujoCaja?.() || [],
-        window.api.tendenciasHistoricas?.() || [],
-        window.api.disputasListar?.() || [],
-        window.api.cuentasAplicarListar?.() || [],
-        window.api.abonosListar?.() || [],
-        window.api.gestionesReporte?.({ desde: new Date(new Date().setDate(new Date().getDate() - 90)).toISOString().split('T')[0] }) || []
+        window.api.topClientes(),
+        window.api.gestionesListar(),
+        window.api.alertasIncumplimiento(),
+        window.api.tendenciasHistoricas(),
+        window.api.cuentasAplicarListar(),
+        window.api.abonosListar()
       ]);
+
+      if (empData) setEmpresa(empData);
+      if (statsData) setStats(statsData);
+      if (top) setTopClientes(top);
+      if (gestionesData) {
+          setAllGestiones(gestionesData);
+          setPromesas(gestionesData.filter((g: any) => g.resultado?.includes('Promesa')));
+      }
+      if (alertasData) setAlertas(alertasData);
+      if (tendData) setTendencias(tendData);
+      if (cuentasData) setCuentasAplicar(cuentasData);
+      if (abonosData) setAbonos(abonosData);
+
+      // Cargar documentos iniciales
+      const docsResult = await window.api.documentosListar({});
+      if (docsResult?.rows) setDocs(docsResult.rows);
 
       // Obtener URL del repositorio remoto Git
       if (window.api.getGitRemoteUrl) {
@@ -662,42 +302,6 @@ export default function App() {
           console.log("No se pudo obtener URL remoto:", e);
         }
       }
-
-      if (empData) {
-        const emp = empData as Empresa;
-        setEmpresa(emp);
-        if (emp.tema && themeNames.includes(emp.tema)) {
-          setTheme(emp.tema);
-          setPendingTheme(emp.tema);
-        }
-      }
-      if (statsData) setStats(statsData as unknown as Stats);
-      if (filtros) {
-        const f = filtros as { clientes?: Array<{ cliente: string; razon_social: string }>; vendedores?: string[] };
-        setClientes(f.clientes || []);
-        setVendedores(f.vendedores || []);
-      }
-      const topData = top as { rows?: unknown[] } | unknown[];
-      const topList = Array.isArray(topData) ? topData : (topData?.rows || []);
-      setTopClientes(topList as unknown as TopCliente[]);
-      if (promData) setPromesas((promData as Gestion[]).filter((g: Gestion) => g.resultado?.includes("Promesa")));
-      const riesgoTyped = riesgo as { ok?: boolean; rows?: unknown[] };
-      if (riesgoTyped?.ok) setAnalisisRiesgo((riesgoTyped.rows || []) as unknown as AnalisisRiesgo[]);
-      if (motivos) setMotivosData(motivos as MotivoImpago[]);
-      if (productividad) setProductividadData(productividad as ProductividadGestor[]);
-      if (segmento) setSegmentacionRiesgo(segmento as unknown as SegmentacionRiesgo[]);
-      if (alertasData) setAlertas(alertasData as Alerta[]);
-      if (tendData) setTendencias(tendData as TendenciaMes[]);
-      if (cuentasAplicarData) setCuentasAplicar(cuentasAplicarData as CuentaAplicar[]);
-      if (abonosData) setAbonos(abonosData as Abono[]);
-      if (Array.isArray(gestionesRecientes)) {
-        setAllGestiones(prev => {
-          // Merge: mantener gestiones previas que no estén en la nueva lista (por id)
-          const nuevosIds = new Set((gestionesRecientes as Gestion[]).map(g => g.id));
-          const soloPrevios = prev.filter(g => !nuevosIds.has(g.id));
-          return [...(gestionesRecientes as Gestion[]), ...soloPrevios];
-        });
-      }
     } catch (e) {
       console.error("Error cargando datos:", e);
     }
@@ -705,25 +309,27 @@ export default function App() {
 
   // Funciones de filtrado optimizadas con useMemo
   const filteredDocumentos = useMemo(() => 
-    (docs || []).filter((d: Documento) => {
-      if (!d) return false;
+    docs.filter(d => {
       const search = searchDocumentos.toLowerCase();
-      const matchSearch = !search || (d.cliente || "").toLowerCase().includes(search) || (d.documento || "").toLowerCase().includes(search);
-      const matchCliente = !selectedCliente || d.razon_social === selectedCliente || d.cliente === selectedCliente;
-      const matchVendedor = !selectedVendedor || d.vendedor === selectedVendedor;
+      const matchSearch = !search || 
+        (d.cliente && d.cliente.toLowerCase().includes(search)) || 
+        (d.razon_social && d.razon_social.toLowerCase().includes(search)) || 
+        (d.documento && d.documento.toLowerCase().includes(search));
       
+      const matchCliente = !selectedCliente || selectedCliente === "Todos" || d.razon_social === selectedCliente || d.cliente === selectedCliente;
+      const matchVendedor = !selectedVendedor || selectedVendedor === "Todos" || d.vendedor === selectedVendedor;
       const matchCentro = filtroCentroCosto === "Todos" || d.centro_costo === filtroCentroCosto;
       
       let matchAging = true;
       if (filtroAging !== "Todos") {
-         const dias = d.dias_vencidos || 0;
-         if (filtroAging === "Vencidos") matchAging = dias > 0;
-         else if (filtroAging === "Por vencer") matchAging = dias <= 0;
-         else if (filtroAging === "30") matchAging = dias > 0 && dias <= 30;
-         else if (filtroAging === "60") matchAging = dias > 30 && dias <= 60;
-         else if (filtroAging === "90") matchAging = dias > 60 && dias <= 90;
-         else if (filtroAging === "120") matchAging = dias > 90 && dias <= 120;
-         else if (filtroAging === "+120") matchAging = dias > 120;
+          const dias = d.dias_vencidos || 0;
+          if (filtroAging === "Vencidos") matchAging = dias > 0;
+          else if (filtroAging === "Por vencer") matchAging = dias <= 0;
+          else if (filtroAging === "30") matchAging = dias > 0 && dias <= 30;
+          else if (filtroAging === "60") matchAging = dias > 30 && dias <= 60;
+          else if (filtroAging === "90") matchAging = dias > 60 && dias <= 90;
+          else if (filtroAging === "120") matchAging = dias > 90 && dias <= 120;
+          else if (filtroAging === "+120") matchAging = dias > 120;
       }
 
       return matchSearch && matchCliente && matchVendedor && matchCentro && matchAging;
@@ -1044,8 +650,8 @@ export default function App() {
     try {
       const result = await window.api.exportarBackup();
       if (result.ok) {
-        addToast(`Respaldo guardado exitosamente`, "success");
-      } else if (result.message !== "Cancelado por el usuario") {
+        addToast("Respaldo exportado correctamente", "success");
+      } else {
         addToast("Error: " + result.message, "error");
       }
     } catch (e) {
@@ -1345,26 +951,19 @@ export default function App() {
           const doc = new jsPDF();
           const pageWidth = doc.internal.pageSize.getWidth();
           const margin = 15;
-          
           // --- CABECERA MODERNA ---
-          // Fondo suave para la cabecera
           doc.setFillColor(248, 250, 252); // Slate 50
           doc.rect(0, 0, pageWidth, 55, 'F');
-
-          // Logo (si existe)
           if (empresa.logo) {
             try {
               doc.addImage(empresa.logo, 'PNG', margin, 10, 25, 25, undefined, 'FAST');
             } catch (e) { console.warn("Error cargando logo", e); }
           }
-
-          // Datos de la Empresa
           doc.setFontSize(16);
           doc.setTextColor(30, 41, 59); // Slate 800
           doc.setFont("helvetica", "bold");
           const titleX = empresa.logo ? margin + 35 : margin;
           doc.text(empresa.nombre || "Mi Empresa", titleX, 18);
-          
           doc.setFontSize(10);
           doc.setFont("helvetica", "normal");
           doc.setTextColor(71, 85, 105); // Slate 600
@@ -1372,13 +971,10 @@ export default function App() {
           if (empresa.ruc) { doc.text(`RUC: ${empresa.ruc}`, titleX, yPos); yPos += 5; }
           if (empresa.email) { doc.text(empresa.email, titleX, yPos); yPos += 5; }
           if (empresa.telefono) { doc.text(empresa.telefono, titleX, yPos); }
-
-          // Título del Reporte
           doc.setFontSize(22);
           doc.setTextColor(37, 99, 235); // Blue 600
           doc.setFont("helvetica", "bold");
           doc.text("ESTADO DE CUENTA", pageWidth - margin, 20, { align: 'right' });
-
           doc.setFontSize(10);
           doc.setTextColor(100, 116, 139); // Slate 500
           doc.setFont("helvetica", "normal");
@@ -1386,49 +982,39 @@ export default function App() {
           if (empresa.administrador) {
             doc.text(`Responsable: ${empresa.administrador}`, pageWidth - margin, 35, { align: 'right' });
           }
-
           // --- INFORMACIÓN DEL CLIENTE ---
           const startYInfo = 65;
           doc.setDrawColor(226, 232, 240);
           doc.setFillColor(255, 255, 255);
           doc.roundedRect(margin, startYInfo, pageWidth - (margin * 2), 25, 2, 2, 'FD');
-
           doc.setFontSize(9);
           doc.setTextColor(148, 163, 184); // Slate 400
           doc.text("CLIENTE", margin + 6, startYInfo + 8);
-          
           doc.setFontSize(12);
           doc.setTextColor(15, 23, 42); // Slate 900
           doc.setFont("helvetica", "bold");
           doc.text(clienteNombre, margin + 6, startYInfo + 17);
-
           // --- KPIs ---
           const startYKpi = startYInfo + 35;
           const kpiWidth = (pageWidth - (margin * 2) - 10) / 3;
-          
           const drawKpi = (x: number, label: string, value: number, color: [number, number, number]) => {
             doc.setFillColor(255, 255, 255);
             doc.setDrawColor(226, 232, 240);
             doc.roundedRect(x, startYKpi, kpiWidth, 22, 2, 2, 'FD');
-            
             doc.setFillColor(...color);
             doc.rect(x, startYKpi, 3, 22, 'F'); // Barra lateral
-
             doc.setFontSize(8);
             doc.setTextColor(100, 116, 139);
             doc.setFont("helvetica", "normal");
             doc.text(label, x + 8, startYKpi + 8);
-            
             doc.setFontSize(11);
             doc.setTextColor(15, 23, 42);
             doc.setFont("helvetica", "bold");
             doc.text(fmtMoney(value), x + 8, startYKpi + 17);
           };
-
           drawKpi(margin, "TOTAL DEUDA", totalDeuda, [59, 130, 246]);
           drawKpi(margin + kpiWidth + 5, "VENCIDO", totalVencido, [239, 68, 68]);
           drawKpi(margin + (kpiWidth + 5) * 2, "POR VENCER", totalPorVencer, [16, 185, 129]);
-
           // --- TABLA ---
           const tableData = docsCliente.map(d => {
             const dias = d.dias_vencidos || 0;
@@ -1440,15 +1026,20 @@ export default function App() {
               fmtMoney(d.total)
             ];
           });
-          
           autoTable(doc, {
             head: [['Documento', 'Emisión', 'Vencimiento', 'Estado', 'Saldo']],
             body: tableData,
             startY: startYKpi + 32
           });
-          
           doc.save(`Estado_Cuenta_${clienteNombre.replace(/[^a-z0-9]/gi, '_')}.pdf`);
           addToast("Estado de cuenta generado", "success");
+          // Registrar gestión automática de PDF
+          registrarGestion({
+            cliente: clienteNombre,
+            tipo: "PDF",
+            resultado: "Generado",
+            observacion: "Estado de cuenta generado en PDF",
+          });
         } catch (e) {
           console.error(e);
           addToast("Error generando PDF", "error");
@@ -1517,42 +1108,36 @@ export default function App() {
           doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString()}`, 14, 32);
           doc.text(`Alcance: ${selectedCliente === "Todos" || !selectedCliente ? "General (Todos los clientes)" : selectedCliente}`, 14, 38);
 
-          // Agrupar gestiones por cliente
-          const gestionesPorCliente = {};
-          gestionesFiltradas.forEach(g => {
-            const key = g.razon_social || g.cliente;
-            if (!(key in gestionesPorCliente)) {
-              (gestionesPorCliente as Record<string, any[]>)[key] = [];
-            }
-            (gestionesPorCliente as Record<string, any[]>)[key].push(g);
-          });
-
-          // Construir filas: una por cliente, concatenando gestiones
-          const tableData = Object.entries(gestionesPorCliente).map(([cliente, gestiones]) => {
-            // Concatenar fechas, tipos, resultados, observaciones y promesas
-            const gestionesArr = gestiones as any[];
-            const fechas = gestionesArr.map((g: any) => g.fecha.replace('T', ' ').substring(0, 16)).join('\n');
-            const tipos = gestionesArr.map((g: any) => g.tipo).join('\n');
-            const resultados = gestionesArr.map((g: any) => g.resultado).join('\n');
-            const observaciones = gestionesArr.map((g: any) => g.observacion || '-').join('\n');
-            const promesas = gestionesArr.map((g: any) => g.monto_promesa ? fmtMoney(g.monto_promesa) : '-').join('\n');
-            return [cliente, fechas, tipos, resultados, observaciones, promesas];
-          });
+          // Construir filas detalladas (una por gestión) para el reporte
+          const tableData = gestionesFiltradas.map(g => [
+            g.razon_social || g.cliente,
+            g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-',
+            ['Llamada', 'Visita'].some(t => g.tipo.includes(t)) ? 'X' : '',
+            g.tipo.includes('Email') ? 'X' : '',
+            g.tipo.includes('WhatsApp') ? 'X' : '',
+            g.tipo.includes('PDF') ? 'X' : '',
+            g.resultado,
+            g.observacion || '-',
+            g.monto_promesa ? fmtMoney(g.monto_promesa) : '-'
+          ]);
 
           autoTable(doc, {
             startY: 45,
-            head: [['Cliente', 'Fechas', 'Tipo', 'Resultado', 'Observaciones', 'Promesa']],
+            head: [['Cliente', 'Fecha', 'Telf', 'Mail', 'WApp', 'PDF', 'Resultado', 'Observación', 'Promesa']],
             body: tableData,
             theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 3, valign: 'top' },
-            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+            styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', halign: 'center' },
             columnStyles: {
-              0: { cellWidth: 45 }, // Cliente
-              1: { cellWidth: 28 }, // Fechas
-              2: { cellWidth: 20 }, // Tipo
-              3: { cellWidth: 25 }, // Resultado
-              4: { cellWidth: 'auto' }, // Observaciones
-              5: { cellWidth: 20, halign: 'right' } // Promesa
+              0: { cellWidth: 40 }, // Cliente
+              1: { cellWidth: 25 }, // Fecha
+              2: { cellWidth: 10, halign: 'center' }, // Telf
+              3: { cellWidth: 10, halign: 'center' }, // Mail
+              4: { cellWidth: 10, halign: 'center' }, // WApp
+              5: { cellWidth: 10, halign: 'center' }, // PDF
+              6: { cellWidth: 25 }, // Resultado
+              7: { cellWidth: 'auto' }, // Obs
+              8: { cellWidth: 20, halign: 'right' } // Promesa
             },
             alternateRowStyles: { fillColor: [248, 250, 252] }
           });
@@ -1668,10 +1253,15 @@ export default function App() {
                         </td>
                       </tr>
                     ) : (
-                      clientesUnicos.map(cliente => {
-                        const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
-                        const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
-                        const maxDias = docsCliente.length > 0 ? Math.max(...docsCliente.map(d => d.dias_vencidos || 0)) : 0;
+                      [...clientesUnicos]
+                        .map(cliente => {
+                          const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
+                          const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+                          return { cliente, docsCliente, totalCliente };
+                        })
+                        .sort((a, b) => b.totalCliente - a.totalCliente)
+                        .map(({ cliente, docsCliente, totalCliente }) => {
+                          const maxDias = docsCliente.length > 0 ? Math.max(...docsCliente.map(d => d.dias_vencidos || 0)) : 0;
                         
                         // Buscar historial
                         // Usar allGestiones para que el registro sea inmediato y consistente
@@ -1835,19 +1425,28 @@ export default function App() {
             </div>
           )}
 
-          {/* Historial de Gestiones SIEMPRE ABAJO */}
+          {/* Historial de Gestiones UNIFICADO */}
           <div className="card">
-            <div className="card-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e5e7eb', paddingBottom: 8, marginBottom: 12}}>
+            <div className="card-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e5e7eb', paddingBottom: 8, marginBottom: 12, flexWrap: 'wrap', gap: '10px'}}>
               <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
                 <span style={{fontSize: '1.5rem'}}>📋</span>
                 <span style={{fontWeight: 700, fontSize: '1.15rem', color: '#374151'}}>
                   Historial de Gestiones {selectedCliente && selectedCliente !== "Todos" ? `- ${selectedCliente}` : "(General)"}
                 </span>
               </div>
-              <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-                {/* Filtros de fecha si quieres */}
+              <div style={{display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'}}>
+                {(!selectedCliente || selectedCliente === "Todos") && (
+                  <>
+                    <label style={{fontSize: '0.9rem', color: '#374151', display: 'flex', alignItems: 'center'}}>Desde:
+                      <input type="date" value={filtroFechaDesde} onChange={e => setFiltroFechaDesde(e.target.value)} style={{marginLeft: 4, marginRight: 8, padding: '4px', borderRadius: '4px', border: '1px solid #d1d5db'}} />
+                    </label>
+                    <label style={{fontSize: '0.9rem', color: '#374151', display: 'flex', alignItems: 'center'}}>Hasta:
+                      <input type="date" value={filtroFechaHasta} onChange={e => setFiltroFechaHasta(e.target.value)} style={{marginLeft: 4, marginRight: 8, padding: '4px', borderRadius: '4px', border: '1px solid #d1d5db'}} />
+                    </label>
+                  </>
+                )}
                 <button className="btn primary" style={{fontSize: '0.9rem', padding: '6px 12px'}} onClick={exportarReporteGestion}>
-                  📄 Generar Reporte de Gestión PDF
+                  📄 Generar Reporte PDF
                 </button>
               </div>
             </div>
@@ -1855,83 +1454,51 @@ export default function App() {
               <table className="data-table" style={{fontSize: '0.85rem'}}>
                 <thead>
                   <tr>
+                    {(!selectedCliente || selectedCliente === "Todos") && <th>Cliente</th>}
                     <th>Fecha</th>
-                    <th>Tipo</th>
+                    <th className="text-center" title="Llamada/Visita">📞</th>
+                    <th className="text-center" title="Email">📧</th>
+                    <th className="text-center" title="WhatsApp">💬</th>
+                    <th className="text-center" title="PDF Generado">📄</th>
                     <th>Resultado</th>
                     <th>Observación</th>
+                    <th className="num">Promesa</th>
                     <th style={{width: '30px'}}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(
-                    (selectedCliente && selectedCliente !== "Todos"
-                      ? filteredGestiones
-                      : [...gestionesFiltradasPorFecha].sort((a, b) => {
-                          const dateA = a?.fecha ? new Date(a.fecha).getTime() : 0;
-                          const dateB = b?.fecha ? new Date(b.fecha).getTime() : 0;
-                          return dateB - dateA;
-                        })
-                    )
-                  ).slice(0, 20).map(g => (
-                    <tr key={g.id}>
-                      <td>{g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-'}</td>
-                      <td>{g.tipo}</td>
-                      <td>{g.resultado}</td>
-                      <td style={{maxWidth: '150px', whiteSpace: 'normal'}}>{g.observacion}</td>
-                      <td>
-                        <button className="promesa-eliminar" style={{position: 'static', transform: 'none', marginLeft: 0}} onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                  {(() => {
+                    let dataToShow = [];
+                    if (selectedCliente && selectedCliente !== "Todos") {
+                       dataToShow = allGestiones.filter(g => g.cliente === selectedCliente || g.razon_social === selectedCliente);
+                    } else {
+                       dataToShow = gestionesFiltradasPorFecha;
+                    }
+                    
+                    dataToShow.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+                    
+                    if (dataToShow.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={(!selectedCliente || selectedCliente === "Todos") ? 7 : 6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
+                            No hay gestiones registradas
+                          </td>
+                        </tr>
+                      );
+                    }
 
-          {/* Panel de Historial General (Visible cuando es "Todos") */}
-          {(!selectedCliente || selectedCliente === "Todos") && (
-            <div className="card">
-              <div className="card-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e5e7eb', paddingBottom: 8, marginBottom: 12}}>
-                <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-                  <span style={{fontSize: '1.5rem'}}>📋</span>
-                  <span style={{fontWeight: 700, fontSize: '1.15rem', color: '#374151'}}>Historial de Gestiones (General)</span>
-                </div>
-                <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-                  <label style={{fontSize: '0.95rem', color: '#374151'}}>Desde:
-                    <input type="date" value={filtroFechaDesde} onChange={e => setFiltroFechaDesde(e.target.value)} style={{marginLeft: 4, marginRight: 8}} />
-                  </label>
-                  <label style={{fontSize: '0.95rem', color: '#374151'}}>Hasta:
-                    <input type="date" value={filtroFechaHasta} onChange={e => setFiltroFechaHasta(e.target.value)} style={{marginLeft: 4, marginRight: 8}} />
-                  </label>
-                  <button className="btn primary" style={{fontSize: '0.9rem', padding: '6px 12px'}} onClick={exportarReporteGestion}>
-                    📄 Generar Reporte de Gestión PDF
-                  </button>
-                </div>
-              </div>
-              <div className="table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th>Fecha</th>
-                      <th>Tipo</th>
-                      <th>Resultado</th>
-                      <th>Observación</th>
-                      <th className="num">Promesa</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                {filteredGestiones.length > 0 ? (
-                  filteredGestiones.slice(0, 50).map(g => {
-                    const tipoSafe = g.tipo || "";
-                    const resSafe = g.resultado || "";
-                    return (
+                    return dataToShow.slice(0, 50).map(g => (
                       <tr key={g.id}>
-                        <td><strong>{g.razon_social || g.cliente}</strong></td>
+                        {(!selectedCliente || selectedCliente === "Todos") && (
+                          <td><strong>{g.razon_social || g.cliente}</strong></td>
+                        )}
                         <td>{g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-'}</td>
-                        <td>{tipoSafe}</td>
-                        <td>{resSafe}</td>
-                        <td style={{maxWidth: '300px', whiteSpace: 'normal'}}>{g.observacion || '-'}</td>
+                        <td className="text-center">{['Llamada', 'Visita'].some(t => g.tipo.includes(t)) ? '✓' : ''}</td>
+                        <td className="text-center">{g.tipo.includes('Email') ? '✓' : ''}</td>
+                        <td className="text-center">{g.tipo.includes('WhatsApp') ? '✓' : ''}</td>
+                        <td className="text-center">{g.tipo.includes('PDF') ? '✓' : ''}</td>
+                        <td>{g.resultado}</td>
+                        <td style={{maxWidth: '250px', whiteSpace: 'normal'}}>{g.observacion || '-'}</td>
                         <td className="num">
                           {g.fecha_promesa ? (
                             <span className="status-color-warning" style={{fontSize: '0.85rem'}}>
@@ -1939,22 +1506,19 @@ export default function App() {
                             </span>
                           ) : '-'}
                         </td>
+                        <td>
+                          <button className="promesa-eliminar" style={{position: 'static', transform: 'none', marginLeft: 0}} onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions} title="Eliminar">✕</button>
+                        </td>
                       </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
-                      No hay gestiones registradas recientemente
-                    </td>
-                  </tr>
-                )}
-                  </tbody>
-                </table>
-              </div>
-              {filteredGestiones.length > 50 && <p className="table-footnote" style={{textAlign: 'center'}}>Mostrando las últimas 50 gestiones</p>}
+                    ));
+                  })()}
+                </tbody>
+              </table>
             </div>
-          )}
+            {gestionesFiltradasPorFecha.length > 50 && (!selectedCliente || selectedCliente === "Todos") && (
+               <p className="table-footnote" style={{textAlign: 'center'}}>Mostrando las últimas 50 gestiones</p>
+            )}
+          </div>
         </div>
       );
     }
