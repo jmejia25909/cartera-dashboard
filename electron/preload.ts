@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 const apiMethods = {
+  cambiarLogo: () => {
+    console.log("🔄 Preload: Iniciando cambio de logo...");
+    return ipcRenderer.invoke("cambiarLogo");
+  },
   ping: () => ipcRenderer.invoke("ping"),
   getDbPath: () => ipcRenderer.invoke("getDbPath"),
   getDesktopToken: () => ipcRenderer.invoke("getDesktopToken"),

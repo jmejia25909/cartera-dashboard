@@ -209,6 +209,9 @@ type Abono = {
 };
 
 export default function App() {
+    // Filtros de fecha para el reporte de gestión general
+    const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
+    const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   // Temas disponibles (deben coincidir con los definidos en CSS)
   const themeNames = ['claro', 'azul', 'pastel', 'oscuro', 'nature'];
@@ -234,19 +237,6 @@ export default function App() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Configuración de Pestañas (Menú)
-  const tabsConfig = [
-    { id: "dashboard", label: "Dashboard", icon: "📊" },
-    { id: "gestion", label: "Gestión", icon: "📋" },
-    { id: "reportes", label: "Reportes", icon: "📄" },
-    { id: "crm", label: "CRM", icon: "👥" },
-    { id: "analisis", label: "Análisis", icon: "🔍" },
-    { id: "alertas", label: "Alertas", icon: "🚨" },
-    { id: "tendencias", label: "Tendencias", icon: "📈" },
-    { id: "cuentas", label: "Cuentas", icon: "💳" },
-    { id: "config", label: "Configuración", icon: "⚙️" },
-  ];
-
   const [tab, setTab] = useState<"dashboard" | "gestion" | "reportes" | "crm" | "analisis" | "alertas" | "tendencias" | "cuentas" | "config">("dashboard");
   const [empresa, setEmpresa] = useState<Empresa>({ nombre: "Cartera Dashboard" });
   const [stats, setStats] = useState<Stats | null>(null);
@@ -266,6 +256,8 @@ export default function App() {
   const [pronosticos, setPronosticos] = useState<Pronostico[]>([]);
   const [tendencias, setTendencias] = useState<TendenciaMes[]>([]);
   const [abonos, setAbonos] = useState<Abono[]>([]);
+  const [allGestiones, setAllGestiones] = useState<Gestion[]>([]);
+  const [cuentasAplicar, setCuentasAplicar] = useState<CuentaAplicar[]>([]);
   const [repoUrl, setRepoUrl] = useState<string>("");
   // URL remota obtenida dinámicamente desde ngrok
   const [remoteUrl, setRemoteUrl] = useState<string>("");
@@ -273,7 +265,44 @@ export default function App() {
 
   // Estado para detectar si el cliente tiene permisos de escritura
   const [hasWritePermissions, setHasWritePermissions] = useState(true);
-  
+
+  // Función centralizada para registrar gestiones (Optimistic UI + Backend)
+  const registrarGestion = useCallback(async (datos: Partial<Gestion>) => {
+    const nuevaGestion: Gestion = {
+      id: Date.now(), // ID temporal para visualización inmediata
+      cliente: datos.cliente || "",
+      razon_social: datos.cliente || "",
+      fecha: new Date().toISOString(),
+      tipo: datos.tipo || "",
+      resultado: datos.resultado || "",
+      observacion: datos.observacion || "",
+      ...datos
+    } as Gestion;
+
+    // 1. Actualizar UI inmediatamente (Optimistic Update)
+    setAllGestiones(prev => [nuevaGestion, ...prev]);
+
+    // 2. Persistir en Backend (si es Electron)
+    if (!isWeb && hasWritePermissions) {
+      try {
+        await window.api.gestionGuardar(datos);
+      } catch (e) { console.error("Error guardando gestión:", e); }
+    }
+  }, [isWeb, hasWritePermissions]);
+
+  // Configuración de Pestañas (Menú)
+  const tabsConfig = [
+    { id: "dashboard", label: "Dashboard", icon: "📊" },
+    { id: "gestion", label: "Gestión", icon: "📋" },
+    { id: "reportes", label: "Reportes", icon: "📄" },
+    { id: "crm", label: "CRM", icon: "👥" },
+    { id: "analisis", label: "Análisis", icon: "🔍" },
+    { id: "alertas", label: "Alertas", icon: "🚨" },
+    { id: "tendencias", label: "Tendencias", icon: "📈" },
+    { id: "cuentas", label: "Cuentas", icon: "💳" },
+    { id: "config", label: "Configuración", icon: "⚙️" },
+  ];
+
   // Estados para búsqueda y filtros
   const [searchDocumentos, setSearchDocumentos] = useState("");
   const [searchAlertas, setSearchAlertas] = useState("");
@@ -287,8 +316,104 @@ export default function App() {
   const [vistaAnalisis, setVistaAnalisis] = useState<"motivos" | "productividad" | "segmentacion" | "riesgo" | "comparativa" | "cronicos">("motivos");
   
   // Estados para tab Gestión
+  // Estado para checkboxes de gestión
+  const [clientesGestionados, setClientesGestionados] = useState<string[]>(() => {
+    try {
+      const data = localStorage.getItem('clientesGestionados');
+      const parsed = data ? JSON.parse(data) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // --- HOOKS DE GESTIÓN (nivel superior, nunca dentro de if) ---
+  // 1. todosDocsVencidos primero
+  const todosDocsVencidos = useMemo(() => (docs || []).filter(d => d && (d.dias_vencidos || 0) > 0), [docs]);
+
+  // 2. Luego docsVencidosCliente
+  const docsVencidosCliente = useMemo(() => {
+    if (!selectedCliente || selectedCliente === "Todos") return [];
+    return todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente)
+      .sort((a, b) => (b.dias_vencidos || 0) - (a.dias_vencidos || 0));
+  }, [selectedCliente, todosDocsVencidos]);
+
+  // 3. Luego totalVencidoCliente
+  const totalVencidoCliente = useMemo(() => {
+    return docsVencidosCliente.reduce((sum, d) => sum + d.total, 0);
+  }, [docsVencidosCliente]);
+
+  // 4. filteredGestiones
+  const filteredGestiones = useMemo(() => {
+    const lista = Array.isArray(allGestiones) ? allGestiones : [];
+    const sortFn = (a, b) => {
+      const dateA = a?.fecha ? new Date(a.fecha).getTime() : 0;
+      const dateB = b?.fecha ? new Date(b.fecha).getTime() : 0;
+      return dateB - dateA;
+    };
+    let resultado;
+    if (!selectedCliente || selectedCliente === "Todos") {
+      // Mostrar todas las gestiones (limitado a lo que traiga allGestiones, ej. 90 días)
+      resultado = [...lista].sort(sortFn);
+    } else {
+      // Mostrar gestiones del cliente seleccionado
+      resultado = (gestiones || []).filter(g =>
+        g && (g.cliente === selectedCliente || g.razon_social === selectedCliente)
+      ).sort(sortFn);
+    }
+    return resultado;
+  }, [selectedCliente, gestiones, allGestiones]);
+
+  // Aplica el filtro de fechas a la tabla de gestión de clientes
+  const gestionesFiltradasPorFecha = useMemo(() => {
+    let gestiones = filteredGestiones;
+    if (filtroFechaDesde) {
+      gestiones = gestiones.filter(g => g.fecha && g.fecha >= filtroFechaDesde);
+    }
+    if (filtroFechaHasta) {
+      const hasta = filtroFechaHasta.length === 10 ? filtroFechaHasta + 'T23:59:59' : filtroFechaHasta;
+      gestiones = gestiones.filter(g => g.fecha && g.fecha <= hasta);
+    }
+    return gestiones;
+  }, [filteredGestiones, filtroFechaDesde, filtroFechaHasta]);
+
+    useEffect(() => {
+      try {
+        localStorage.setItem('clientesGestionados', JSON.stringify(clientesGestionados));
+      } catch {}
+    }, [clientesGestionados]);
   const [filtroVistaGestion, setFiltroVistaGestion] = useState("Todos");
   
+  // Lista de clientes únicos para la tabla de gestión, filtrada y ordenada
+    // Mover clientesConVencidos arriba para evitar ReferenceError
+    const clientesConVencidos = useMemo(() => Array.from(new Set(todosDocsVencidos.map(d => d?.razon_social || d?.cliente)))
+     .filter(c => c && c.trim() !== "")
+     .sort(), [todosDocsVencidos]);
+
+    const clientesUnicos = useMemo(() => {
+     let lista = clientesConVencidos;
+
+     if (selectedCliente && selectedCliente !== "Todos") {
+       return [selectedCliente];
+     }
+
+     if (filtroVistaGestion === "Mayor Deuda") {
+       return [...lista].sort((a, b) => {
+         const totalA = todosDocsVencidos.filter(d => d.razon_social === a || d.cliente === a).reduce((s, d) => s + d.total, 0);
+         const totalB = todosDocsVencidos.filter(d => d.razon_social === b || d.cliente === b).reduce((s, d) => s + d.total, 0);
+         return totalB - totalA;
+       });
+     }
+     if (filtroVistaGestion === "Más Días Vencidos") {
+       return [...lista].sort((a, b) => {
+         const maxA = Math.max(...todosDocsVencidos.filter(d => d.razon_social === a || d.cliente === a).map(d => d.dias_vencidos || 0));
+         const maxB = Math.max(...todosDocsVencidos.filter(d => d.razon_social === b || d.cliente === b).map(d => d.dias_vencidos || 0));
+         return maxB - maxA;
+       });
+     }
+     return lista;
+    }, [clientesConVencidos, selectedCliente, filtroVistaGestion, todosDocsVencidos]);
+
   // Estados para tab Reportes
   const [filtroAging, setFiltroAging] = useState("Todos");
   const [vistaAgrupada, setVistaAgrupada] = useState(false);
@@ -452,8 +577,13 @@ export default function App() {
       }
     }
     checkPermissions();
+    console.log('[DEBUG] Llamando cargarDatos() al montar App');
     cargarDatos();
     
+    // Log para depuración de gestiones
+    setTimeout(() => {
+      console.log('[DEBUG] allGestiones:', allGestiones);
+    }, 3000);
     // Cargar URL remota (ngrok) al iniciar
     if (!isWeb && window.api?.getRemoteUrl) {
       (async () => {
@@ -501,7 +631,7 @@ export default function App() {
         }
       }
 
-      const [empData, statsData, filtros, top, promData, , riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, , , abonosData] = await Promise.all([
+      const [empData, statsData, filtros, top, promData, , riesgo, motivos, productividad, segmento, alertasData, pronostData, tendData, , cuentasAplicarData, abonosData, gestionesRecientes] = await Promise.all([
         window.api.empresaObtener(),
         window.api.statsObtener(),
         window.api.filtrosListar(),
@@ -517,7 +647,8 @@ export default function App() {
         window.api.tendenciasHistoricas?.() || [],
         window.api.disputasListar?.() || [],
         window.api.cuentasAplicarListar?.() || [],
-        window.api.abonosListar?.() || []
+        window.api.abonosListar?.() || [],
+        window.api.gestionesReporte?.({ desde: new Date(new Date().setDate(new Date().getDate() - 90)).toISOString().split('T')[0] }) || []
       ]);
 
       // Obtener URL del repositorio remoto Git
@@ -555,7 +686,9 @@ export default function App() {
       if (segmento) setSegmentacionRiesgo(segmento as unknown as SegmentacionRiesgo[]);
       if (alertasData) setAlertas(alertasData as Alerta[]);
       if (tendData) setTendencias(tendData as TendenciaMes[]);
+      if (cuentasAplicarData) setCuentasAplicar(cuentasAplicarData as CuentaAplicar[]);
       if (abonosData) setAbonos(abonosData as Abono[]);
+      if (Array.isArray(gestionesRecientes)) setAllGestiones(gestionesRecientes as Gestion[]);
     } catch (e) {
       console.error("Error cargando datos:", e);
     }
@@ -563,7 +696,8 @@ export default function App() {
 
   // Funciones de filtrado optimizadas con useMemo
   const filteredDocumentos = useMemo(() => 
-    docs.filter((d: Documento) => {
+    (docs || []).filter((d: Documento) => {
+      if (!d) return false;
       const search = searchDocumentos.toLowerCase();
       const matchSearch = !search || (d.cliente || "").toLowerCase().includes(search) || (d.documento || "").toLowerCase().includes(search);
       const matchCliente = !selectedCliente || d.razon_social === selectedCliente || d.cliente === selectedCliente;
@@ -589,11 +723,6 @@ export default function App() {
   );
 
   // Datos derivados para Gestión (Memoizados para rendimiento)
-  const todosDocsVencidos = useMemo(() => (docs || []).filter(d => (d.dias_vencidos || 0) > 0), [docs]);
-  
-  const clientesConVencidos = useMemo(() => Array.from(new Set(todosDocsVencidos.map(d => d.razon_social || d.cliente)))
-    .filter(c => c && c.trim() !== "")
-    .sort(), [todosDocsVencidos]);
 
   // Paginación para Reportes
   const [currentPage, setCurrentPage] = useState(1);
@@ -622,9 +751,10 @@ export default function App() {
 
   // 3. Eficiencia de Cobranza Real (MOVER ARRIBA para que esté disponible en renderContent)
   const eficienciaCobranza = useMemo(() => {
-    const totalEmitido = docs.reduce((sum, d) => sum + (d.valor_documento || 0), 0);
-    const totalCobrado = docs.reduce((sum, d) => sum + ((d.valor_documento || 0) - (d.total || 0)), 0);
-    const totalPendiente = docs.reduce((sum, d) => sum + (d.total || 0), 0);
+    const safeDocs = docs || [];
+    const totalEmitido = safeDocs.reduce((sum, d) => sum + (d?.valor_documento || 0), 0);
+    const totalCobrado = safeDocs.reduce((sum, d) => sum + ((d?.valor_documento || 0) - (d?.total || 0)), 0);
+    const totalPendiente = safeDocs.reduce((sum, d) => sum + (d?.total || 0), 0);
     // DSO = (Saldo Total / Ventas últimos 90 días) × 90
     // Aproximación: usar total emitido como ventas
     const dsoReal = totalEmitido > 0 ? Math.round((totalPendiente / totalEmitido) * 90) : 0;
@@ -643,13 +773,13 @@ export default function App() {
     const hoy = new Date();
     const en7Dias = new Date(hoy.getTime() + 7 * 24 * 60 * 60 * 1000);
     const en30Dias = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const vencen7Dias = docs.filter(d => {
-      if (!d.fecha_vencimiento || d.total <= 0) return false;
+    const vencen7Dias = (docs || []).filter(d => {
+      if (!d || !d.fecha_vencimiento || d.total <= 0) return false;
       const fvenc = new Date(d.fecha_vencimiento);
       return fvenc >= hoy && fvenc <= en7Dias && d.por_vencer > 0;
     });
-    const vencen30Dias = docs.filter(d => {
-      if (!d.fecha_vencimiento || d.total <= 0) return false;
+    const vencen30Dias = (docs || []).filter(d => {
+      if (!d || !d.fecha_vencimiento || d.total <= 0) return false;
       const fvenc = new Date(d.fecha_vencimiento);
       return fvenc >= hoy && fvenc <= en30Dias && d.por_vencer > 0;
     });
@@ -665,8 +795,9 @@ export default function App() {
 
   // 2. Análisis de Retenciones
   const analisisRetenciones = useMemo(() => {
-    const totalRetenido = docs.reduce((sum, d) => sum + (d.retenciones || 0), 0);
-    const docsConRetencion = docs.filter(d => (d.retenciones || 0) > 0);
+    const safeDocs = docs || [];
+    const totalRetenido = safeDocs.reduce((sum, d) => sum + (d?.retenciones || 0), 0);
+    const docsConRetencion = safeDocs.filter(d => d && (d.retenciones || 0) > 0);
     return {
       totalRetenido,
       cantidadDocs: docsConRetencion.length,
@@ -692,7 +823,8 @@ export default function App() {
       clientes: Set<string>;
     }>();
     
-    docs.forEach(d => {
+    (docs || []).forEach(d => {
+      if (!d) return;
       const vendedor = d.vendedor || 'Sin Vendedor';
       if (!vendedorMap.has(vendedor)) {
         vendedorMap.set(vendedor, {
@@ -738,7 +870,8 @@ export default function App() {
       vendedor: string;
     }>();
     
-    docs.forEach(d => {
+    (docs || []).forEach(d => {
+      if (!d) return;
       const dias = d.dias_vencidos || 0;
       
       if (dias > 0) {
@@ -774,7 +907,7 @@ export default function App() {
 
   // 6. Extraer centros de costo únicos
   useEffect(() => {
-    const centros = Array.from(new Set(docs.map(d => d.centro_costo).filter(Boolean))).sort();
+    const centros = Array.from(new Set((docs || []).map(d => d?.centro_costo).filter(Boolean))).sort();
     setCentrosCosto(centros as string[]);
   }, [docs]);
 
@@ -1167,21 +1300,6 @@ export default function App() {
     if (tab === "gestion") {
       // VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta
       
-      // Datos del cliente seleccionado
-      const docsVencidosCliente = selectedCliente && selectedCliente !== "Todos"
-        ? todosDocsVencidos.filter(d => (d.razon_social === selectedCliente || d.cliente === selectedCliente))
-            .sort((a, b) => (b.dias_vencidos || 0) - (a.dias_vencidos || 0))
-        : [];
-      const totalVencidoCliente = docsVencidosCliente.reduce((sum, d) => sum + d.total, 0);
-      
-      // Gestiones filtradas del cliente seleccionado
-      const filteredGestiones = selectedCliente && selectedCliente !== "Todos"
-        ? gestiones.filter(g => {
-            const matchCliente = g.cliente === selectedCliente || g.razon_social === selectedCliente;
-            return matchCliente;
-          }).sort((a, b) => b.fecha.localeCompare(a.fecha))
-        : [];
-      
       // KPIs globales
       const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + d.total, 0);
       
@@ -1199,56 +1317,175 @@ export default function App() {
           return;
         }
         
-        const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre))
-          .sort((a, b) => (b.dias_vencidos || 0) - (a.dias_vencidos || 0));
-        const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+        // Obtener SOLO documentos VENCIDOS con saldo del cliente
+        const docsCliente = docs.filter(d => 
+          (d.razon_social === clienteNombre || d.cliente === clienteNombre) && 
+          (d.saldo || d.total) > 0.01 &&
+          (d.dias_vencidos || 0) > 0
+        ).sort((a, b) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime());
+
+        if (docsCliente.length === 0) {
+          addToast("Este cliente no tiene documentos vencidos", "info");
+          return;
+        }
+
+        const totalDeuda = docsCliente.reduce((sum, d) => sum + d.total, 0);
+        const totalVencido = docsCliente.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + d.total, 0);
+        const totalPorVencer = totalDeuda - totalVencido;
         
         try {
           const { jsPDF, autoTable } = await loadJsPDF();
           const doc = new jsPDF();
+          const pageWidth = doc.internal.pageSize.getWidth();
+          const pageHeight = doc.internal.pageSize.getHeight();
+          const margin = 15;
           
-          doc.setFontSize(18);
-          doc.text("ESTADO DE CUENTA", 14, 20);
+          // --- CABECERA MODERNA ---
+          // Fondo suave para la cabecera
+          doc.setFillColor(248, 250, 252); // Slate 50
+          doc.rect(0, 0, pageWidth, 55, 'F');
+
+          // Logo (si existe)
+          if (empresa.logo) {
+            try {
+              doc.addImage(empresa.logo, 'PNG', margin, 10, 25, 25, undefined, 'FAST');
+            } catch (e) { console.warn("Error cargando logo", e); }
+          }
+
+          // Datos de la Empresa
+          doc.setFontSize(16);
+          doc.setTextColor(30, 41, 59); // Slate 800
+          doc.setFont("helvetica", "bold");
+          const titleX = empresa.logo ? margin + 35 : margin;
+          doc.text(empresa.nombre || "Mi Empresa", titleX, 18);
           
           doc.setFontSize(10);
-          doc.text(`Cliente: ${clienteNombre}`, 14, 30);
-          doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString('es-ES')}`, 14, 37);
-          doc.text(`Moneda: USD`, 14, 44);
-          
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(71, 85, 105); // Slate 600
+          let yPos = 24;
+          if (empresa.ruc) { doc.text(`RUC: ${empresa.ruc}`, titleX, yPos); yPos += 5; }
+          if (empresa.email) { doc.text(empresa.email, titleX, yPos); yPos += 5; }
+          if (empresa.telefono) { doc.text(empresa.telefono, titleX, yPos); }
+
+          // Título del Reporte
+          doc.setFontSize(22);
+          doc.setTextColor(37, 99, 235); // Blue 600
+          doc.setFont("helvetica", "bold");
+          doc.text("ESTADO DE CUENTA", pageWidth - margin, 20, { align: 'right' });
+
+          doc.setFontSize(10);
+          doc.setTextColor(100, 116, 139); // Slate 500
+          doc.setFont("helvetica", "normal");
+          doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - margin, 30, { align: 'right' });
+          if (empresa.administrador) {
+            doc.text(`Responsable: ${empresa.administrador}`, pageWidth - margin, 35, { align: 'right' });
+          }
+
+          // --- INFORMACIÓN DEL CLIENTE ---
+          const startYInfo = 65;
+          doc.setDrawColor(226, 232, 240);
+          doc.setFillColor(255, 255, 255);
+          doc.roundedRect(margin, startYInfo, pageWidth - (margin * 2), 25, 2, 2, 'FD');
+
           doc.setFontSize(9);
-          doc.setFillColor(59, 130, 246);
-          doc.setTextColor(255, 255, 255);
-          doc.text(`Documentos Vencidos: ${docsCliente.length}`, 14, 53);
-          doc.setTextColor(0, 0, 0);
-          doc.text(`Total Vencido: ${fmtMoney(totalCliente)}`, 14, 60);
+          doc.setTextColor(148, 163, 184); // Slate 400
+          doc.text("CLIENTE", margin + 6, startYInfo + 8);
           
-          const tableData = docsCliente.map(d => [
-            d.documento || d.numero,
-            d.fecha_emision,
-            d.fecha_vencimiento,
-            d.dias_vencidos || 0,
-            fmtMoney(d.total)
-          ]);
+          doc.setFontSize(12);
+          doc.setTextColor(15, 23, 42); // Slate 900
+          doc.setFont("helvetica", "bold");
+          doc.text(clienteNombre, margin + 6, startYInfo + 17);
+
+          // --- KPIs ---
+          const startYKpi = startYInfo + 35;
+          const kpiWidth = (pageWidth - (margin * 2) - 10) / 3;
           
-          autoTable(doc, {
-            head: [['Documento', 'Emisión', 'Vencimiento', 'Días Venc.', 'Saldo']],
-            body: tableData,
-            startY: 68,
-            styles: { fontSize: 9, cellPadding: 4 },
-            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontStyle: 'bold' },
-            margin: { left: 14, right: 14 },
-            alternateRowStyles: { fillColor: [245, 247, 250] },
-            foot: [[{ content: `TOTAL VENCIDO: ${fmtMoney(totalCliente)}`, colSpan: 5, styles: { fontStyle: 'bold', fillColor: [239, 68, 68], textColor: [255, 255, 255] } }]]
+          const drawKpi = (x: number, label: string, value: number, color: [number, number, number]) => {
+            doc.setFillColor(255, 255, 255);
+            doc.setDrawColor(226, 232, 240);
+            doc.roundedRect(x, startYKpi, kpiWidth, 22, 2, 2, 'FD');
+            
+            doc.setFillColor(...color);
+            doc.rect(x, startYKpi, 3, 22, 'F'); // Barra lateral
+
+            doc.setFontSize(8);
+            doc.setTextColor(100, 116, 139);
+            doc.setFont("helvetica", "normal");
+            doc.text(label, x + 8, startYKpi + 8);
+            
+            doc.setFontSize(11);
+            doc.setTextColor(15, 23, 42);
+            doc.setFont("helvetica", "bold");
+            doc.text(fmtMoney(value), x + 8, startYKpi + 17);
+          };
+
+          drawKpi(margin, "TOTAL DEUDA", totalDeuda, [59, 130, 246]);
+          drawKpi(margin + kpiWidth + 5, "VENCIDO", totalVencido, [239, 68, 68]);
+          drawKpi(margin + (kpiWidth + 5) * 2, "POR VENCER", totalPorVencer, [16, 185, 129]);
+
+          // --- TABLA ---
+          const tableData = docsCliente.map(d => {
+            const dias = d.dias_vencidos || 0;
+            return [
+              d.documento || d.numero,
+              d.fecha_emision,
+              d.fecha_vencimiento,
+              dias > 0 ? `${dias} días` : 'Vigente',
+              fmtMoney(d.total)
+            ];
           });
           
-          const pageHeight = doc.internal.pageSize.getHeight();
-          doc.setFontSize(8);
-          doc.setTextColor(150, 150, 150);
-          doc.text("Este documento fue generado automáticamente.", 14, pageHeight - 10);
-          doc.text(`Página 1 de 1`, pageHeight - 10, pageHeight - 5, { align: 'right' });
+          autoTable(doc, {
+            head: [['Documento', 'Emisión', 'Vencimiento', 'Estado', 'Saldo']],
+            body: tableData,
+            startY: startYKpi + 32,
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 5, textColor: [51, 65, 85], lineColor: [226, 232, 240], lineWidth: 0.1 },
+            headStyles: { fillColor: [241, 245, 249], textColor: [71, 85, 105], fontStyle: 'bold', lineWidth: 0 },
+            columnStyles: {
+              0: { fontStyle: 'bold' },
+              3: { halign: 'center' },
+              4: { halign: 'right', fontStyle: 'bold' }
+            },
+            alternateRowStyles: { fillColor: [255, 255, 255] },
+            didParseCell: function(data: any) {
+              if (data.section === 'body' && data.column.index === 3) {
+                if (data.cell.raw === 'Vigente') data.cell.styles.textColor = [22, 163, 74];
+                else data.cell.styles.textColor = [220, 38, 38];
+              }
+            },
+            foot: [[
+              { content: 'TOTAL GENERAL', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+              { content: fmtMoney(totalDeuda), styles: { halign: 'right', fontStyle: 'bold', fillColor: [241, 245, 249] } }
+            ]]
+          });
           
-          doc.save(`EstadoDeCuenta_${clienteNombre.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-          addToast("✅ Estado de Cuenta generado correctamente", "success");
+          // --- FOOTER ---
+          const pageCount = (doc as any).internal.getNumberOfPages();
+          for(let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            const footerY = pageHeight - 10;
+            doc.setDrawColor(226, 232, 240);
+            doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            // Puedes poner aquí un mensaje personalizado si lo deseas
+            doc.text(`Página ${i} de ${pageCount}`, pageWidth - margin, footerY, { align: 'right' });
+          }
+          
+          const fechaArchivo = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+          const nombreArchivo = `Estado_Cuenta_${clienteNombre.replace(/[^a-z0-9]/gi, '_').toUpperCase()}_${fechaArchivo}.pdf`;
+          doc.save(nombreArchivo);
+          addToast("✅ Estado de Cuenta moderno generado", "success");
+
+          // Registrar gestión automática de PDF
+          registrarGestion({
+            cliente: clienteNombre,
+            tipo: "PDF",
+            resultado: "Generado",
+            observacion: "Estado de cuenta generado y descargado",
+          });
+
         } catch (error) {
           addToast("❌ Error al generar Estado de Cuenta", "error");
           console.error(error);
@@ -1256,17 +1493,131 @@ export default function App() {
       };
       
       // Función para copiar texto de email
-      const copiarParaEmail = (clienteNombre: string) => {
+      // Función para abrir el cliente de correo con el cuerpo prellenado
+      const enviarEmail = async (clienteNombre: string) => {
+        const empresaNombre = empresa?.nombre || "[Nombre de tu Empresa]";
+        const fechaHoy = new Date().toLocaleDateString();
         const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre));
         const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
         
-        const texto = `Estimado cliente ${clienteNombre},\n\nAdjunto encontrará su estado de cuenta actualizado.\n\nResumen:\n- Documentos vencidos: ${docsCliente.length}\n- Total vencido: ${fmtMoney(totalCliente)}`;
+        const asunto = encodeURIComponent(`RECORDATORIO DE PAGO - ${empresaNombre}`);
         
-        navigator.clipboard.writeText(texto).then(() => {
-          addToast("✅ Texto copiado al portapapeles", "success");
-        }).catch(() => {
-          addToast("❌ Error al copiar texto", "error");
+        const lineas = [
+          `Estimados señores de ${clienteNombre}:`,
+          ``,
+          `Reciban un cordial saludo.`,
+          ``,
+          `Por medio de la presente, hacemos entrega de su Estado de Cuenta con corte al ${fechaHoy}.`,
+          ``,
+          `Hemos identificado saldos pendientes que ya han superado su fecha de vencimiento. A continuación, presentamos el resumen de su cartera a la fecha:`,
+          ``,
+          ` Total Vencido: ${fmtMoney(totalCliente)}`,
+          ``,
+          `Adjunto a este correo encontrará el desglose detallado de el/los documento(s) pendiente(s), donde podrá verificar las fechas de emisión y los días de mora acumulados.`,
+          ``,
+          `Le solicitamos de la manera más atenta proceder con el pago urgente de estos valores. En caso de que el pago ya haya sido gestionado, por favor envíenos el comprobante correspondiente para actualizar su estado de cuenta de inmediato.`,
+          ``,
+          `Quedo a su entera disposición para cualquier aclaración o consulta adicional.`,
+          ``,
+          `Atentamente,`,
+          ``,
+          `Departamento de Cobranzas ${empresaNombre}`,
+          `Lic. Alba Mayorga L.`
+        ];
+
+        const cuerpo = encodeURIComponent(lineas.join('\r\n'));
+        window.open(`mailto:?subject=${asunto}&body=${cuerpo}`, '_blank');
+
+        // Registrar gestión automática de Email
+        registrarGestion({
+          cliente: clienteNombre,
+          tipo: "Email",
+          resultado: "Enviado",
+          observacion: "Recordatorio de pago enviado por correo",
         });
+        addToast("Gestión de Email registrada", "success");
+      };
+
+      // Función para generar Reporte de Gestión (Evidencia)
+      const exportarReporteGestion = async () => {
+        // Filtrar gestiones por fecha si hay filtro
+        let gestionesFiltradas = filteredGestiones;
+        if (filtroFechaDesde) {
+          gestionesFiltradas = gestionesFiltradas.filter(g => g.fecha && g.fecha >= filtroFechaDesde);
+        }
+        if (filtroFechaHasta) {
+          // Incluir todo el día hasta 23:59:59
+          const hasta = filtroFechaHasta.length === 10 ? filtroFechaHasta + 'T23:59:59' : filtroFechaHasta;
+          gestionesFiltradas = gestionesFiltradas.filter(g => g.fecha && g.fecha <= hasta);
+        }
+        if (gestionesFiltradas.length === 0) {
+          addToast("No hay gestiones para reportar en el rango seleccionado", "info");
+          return;
+        }
+        try {
+          const { jsPDF, autoTable } = await loadJsPDF();
+          const doc = new jsPDF();
+
+          // Header
+          doc.setFillColor(241, 245, 249);
+          doc.rect(0, 0, 210, 40, 'F');
+
+          doc.setFontSize(18);
+          doc.setTextColor(30, 41, 59);
+          doc.text("REPORTE DE GESTIÓN DE COBRANZA", 14, 18);
+
+          doc.setFontSize(10);
+          doc.setTextColor(100, 116, 139);
+          doc.text(`Empresa: ${empresa.nombre || 'Mi Empresa'}`, 14, 26);
+          doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString()}`, 14, 32);
+          doc.text(`Alcance: ${selectedCliente === "Todos" || !selectedCliente ? "General (Todos los clientes)" : selectedCliente}`, 14, 38);
+
+          // Agrupar gestiones por cliente
+          const gestionesPorCliente = {};
+          gestionesFiltradas.forEach(g => {
+            const key = g.razon_social || g.cliente;
+            if (!gestionesPorCliente[key]) {
+              gestionesPorCliente[key] = [];
+            }
+            gestionesPorCliente[key].push(g);
+          });
+
+          // Construir filas: una por cliente, concatenando gestiones
+          const tableData = Object.entries(gestionesPorCliente).map(([cliente, gestiones]) => {
+            // Concatenar fechas, tipos, resultados, observaciones y promesas
+            const fechas = gestiones.map(g => g.fecha.replace('T', ' ').substring(0, 16)).join('\n');
+            const tipos = gestiones.map(g => g.tipo).join('\n');
+            const resultados = gestiones.map(g => g.resultado).join('\n');
+            const observaciones = gestiones.map(g => g.observacion || '-').join('\n');
+            const promesas = gestiones.map(g => g.monto_promesa ? fmtMoney(g.monto_promesa) : '-').join('\n');
+            return [cliente, fechas, tipos, resultados, observaciones, promesas];
+          });
+
+          autoTable(doc, {
+            startY: 45,
+            head: [['Cliente', 'Fechas', 'Tipo', 'Resultado', 'Observaciones', 'Promesa']],
+            body: tableData,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 3, valign: 'top' },
+            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+            columnStyles: {
+              0: { cellWidth: 45 }, // Cliente
+              1: { cellWidth: 28 }, // Fechas
+              2: { cellWidth: 20 }, // Tipo
+              3: { cellWidth: 25 }, // Resultado
+              4: { cellWidth: 'auto' }, // Observaciones
+              5: { cellWidth: 20, halign: 'right' } // Promesa
+            },
+            alternateRowStyles: { fillColor: [248, 250, 252] }
+          });
+
+          const safeName = (selectedCliente === "Todos" || !selectedCliente ? "General" : selectedCliente).replace(/[^a-z0-9]/gi, '_');
+          doc.save(`Reporte_Gestion_${safeName}_${new Date().toISOString().split('T')[0]}.pdf`);
+          addToast("✅ Reporte de gestión generado", "success");
+        } catch (e) {
+          console.error(e);
+          addToast("Error generando reporte", "error");
+        }
       };
 
       return (
@@ -1303,10 +1654,15 @@ export default function App() {
                 <span>Cliente</span>
                 <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
                   <option value="Todos">Todos</option>
-                  {clientesConVencidos.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {clientes.map(c => (
+                    <option key={c.cliente || c.razon_social} value={c.cliente || c.razon_social}>
+                      {c.razon_social || c.cliente}
+                    </option>
                   ))}
                 </select>
+
+                {/* Forzar reset de selectedCliente al poner Todos */}
+                {selectedCliente === 'Todos' && setTimeout(() => setSelectedCliente(''), 0)}
               </label>
               <label className="field">
                 <span>Estado</span>
@@ -1319,7 +1675,7 @@ export default function App() {
               </label>
             </div>
             
-            <div className="flex-row">
+            <div className="flex-row" style={{ flexWrap: 'wrap' }}>
               <button className="btn secondary" onClick={() => addToast("Función de acción masiva en desarrollo", "info")} disabled={!hasWritePermissions}>
                 📞 Acción Masiva
               </button>
@@ -1337,58 +1693,84 @@ export default function App() {
           <div className="card">
             <div className="card-title">📋 Tabla de Gestión - Clientes</div>
             <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th style={{width: '40px'}}>✓</th>
-                    <th>Cliente</th>
-                    <th className="num">Vencido $</th>
-                    <th>📞 Llamada</th>
-                    <th className="text-center">📧 Email</th>
-                    <th>🎯 Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {clientesConVencidos.length > 0 ? (
-                    clientesConVencidos
-                      .map(cliente => {
+              <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
+                <table className="data-table" style={{minWidth: 1100, width: '100%', tableLayout: 'fixed'}}>
+                  <thead>
+                    <tr>
+                      <th style={{width: '40px'}}>✓</th>
+                      <th>Cliente</th>
+                      <th className="num">Vencido $</th>
+                      <th>📞 Llamada</th>
+                      <th className="text-center">📧 Email</th>
+                      <th className="text-center">💬 WhatsApp</th>
+                      <th className="text-center">📄 PDF</th>
+                      <th>🎯 Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientesUnicos.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{textAlign: 'center', color: '#9ca3af', padding: '20px'}}>
+                          No se encontraron clientes con los filtros seleccionados
+                        </td>
+                      </tr>
+                    ) : (
+                      clientesUnicos.map(cliente => {
                         const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
                         const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
-                        return { cliente, docsCliente, totalCliente };
-                      })
-                      .sort((a, b) => b.totalCliente - a.totalCliente)
-                      .slice(0, 50)
-                      .map(({ cliente, docsCliente, totalCliente }) => {
-                        const maxDias = Math.max(...docsCliente.map(d => d.dias_vencidos || 0));
-                        const ultimaGestion = gestiones.filter(g => g.cliente === cliente || g.razon_social === cliente).sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
-                        // Indicador visual por días
+                        const maxDias = docsCliente.length > 0 ? Math.max(...docsCliente.map(d => d.dias_vencidos || 0)) : 0;
+                        
+                        // Buscar historial
+                        const gestionesCliente = gestionesFiltradasPorFecha.filter(g => (g.razon_social || g.cliente) === cliente);
+                        const lastCall = gestionesCliente.find(g => g.tipo === 'Llamada' || g.tipo === 'Visita');
+                        const lastEmail = gestionesCliente.find(g => g.tipo === 'Email');
+                        const lastWhatsapp = gestionesCliente.find(g => g.tipo === 'WhatsApp');
+                        const lastPdf = gestionesCliente.find(g => g.tipo === 'PDF');
+
                         const colorIndicador = maxDias > 90 ? '#ef4444' : maxDias > 60 ? '#f59e0b' : '#10b981';
+                        const isSelected = selectedCliente === cliente;
+
                         return (
-                          <tr key={cliente} style={{borderLeft: `4px solid ${colorIndicador}`}}>
+                          <tr
+                            key={cliente}
+                            style={{
+                              borderLeft: `4px solid ${colorIndicador}`,
+                              background: isSelected ? 'rgba(168, 85, 247, 0.10)' : undefined
+                            }}
+                          >
                             <td style={{textAlign: 'center'}}>
-                              <input type="checkbox" />
+                              <input
+                                type="checkbox"
+                                checked={clientesGestionados.includes(cliente)}
+                                onChange={e => {
+                                  setClientesGestionados(prev =>
+                                    e.target.checked
+                                      ? [...prev, cliente]
+                                      : prev.filter(c => c !== cliente)
+                                  );
+                                }}
+                              />
                             </td>
-                            <td><strong>{cliente}</strong></td>
-                            <td className="num" style={{color: colorIndicador, fontWeight: 'bold'}}>{fmtMoney(totalCliente)}</td>
-                            <td>{ultimaGestion ? ultimaGestion.fecha.split('T')[0] : '-'}</td>
-                            <td style={{textAlign: 'center'}}>{ultimaGestion && ultimaGestion.tipo.includes('Email') ? '✓' : 'X'}</td>
                             <td>
-                              <button className="btn secondary" style={{fontSize: '0.75rem', padding: '4px 8px'}} onClick={() => exportarEstadoDeCuenta(cliente)}>
+                              <a href="#" style={{fontWeight: 700, color: '#7c3aed'}} onClick={(e) => { e.preventDefault(); setSelectedCliente(cliente); }}>{cliente}</a>
+                            </td>
+                            <td className="num">{fmtMoney(totalCliente)}</td>
+                            <td>{lastCall ? (lastCall.fecha ? lastCall.fecha.replace('T', ' ').substring(0, 16) : '-') : '-'}</td>
+                            <td className="text-center">{lastEmail ? '✓' : '•'}</td>
+                            <td className="text-center">{lastWhatsapp ? '✓' : '•'}</td>
+                            <td className="text-center">{lastPdf ? '✓' : '•'}</td>
+                            <td>
+                              <button className="btn secondary" onClick={() => exportarEstadoDeCuenta(cliente)}>
                                 📄 PDF
                               </button>
                             </td>
                           </tr>
                         );
                       })
-                  ) : (
-                    <tr>
-                      <td colSpan={6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
-                        No hay clientes con documentos vencidos
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
             {clientesConVencidos.length > 50 && (
               <p className="table-footnote">Mostrando 50 de {clientesConVencidos.length} clientes</p>
@@ -1399,12 +1781,52 @@ export default function App() {
           {selectedCliente && selectedCliente !== "Todos" && (
             <div className="card">
               <div className="card-title">💬 Panel de Gestión Rápida - {selectedCliente}</div>
-              <div className="flex-row">
+              <div className="flex-row" style={{ flexWrap: 'wrap' }}>
                 <button className="btn secondary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
                   📞 Registrar Llamada
                 </button>
-                <button className="btn secondary" onClick={() => copiarParaEmail(selectedCliente)}>
-                  📧 Copiar Texto Email
+                <button className="btn secondary" onClick={() => enviarEmail(selectedCliente)}>
+                  📧 Enviar Email
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={async () => {
+                    const empresaNombre = empresa?.nombre || "[Nombre de tu Empresa]";
+                    const fechaHoy = new Date().toLocaleDateString();
+                    const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === selectedCliente || d.cliente === selectedCliente));
+                    const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+                    
+                    const lineas = [
+                    `Hola *${selectedCliente}*,`,
+                    '',
+                    `Te saluda el Departamento de Cobranzas de *${empresaNombre}*.`,
+                    '',
+                    `*Recordatorio de Pago* al ${fechaHoy}`,
+                    `*Total Vencido:* ${fmtMoney(totalCliente)}`,
+                    '',
+                    `Adjunto el detalle en PDF para tu revisión.`,
+                    '',
+                    `Por favor, ayúdanos con la confirmación del pago a la brevedad posible. Si ya fue realizado, envíanos el comprobante por este medio.`,
+                    '',
+                    `Cualquier duda, quedo atenta.`,
+                    '',
+                    `¡Saludos!`
+                  ];
+                    
+                    const mensaje = encodeURIComponent(lineas.join('\n'));
+                    window.open(`https://wa.me/?text=${mensaje}`, '_blank');
+
+                    // Registrar gestión automática de WhatsApp
+                    registrarGestion({
+                      cliente: selectedCliente,
+                      tipo: "WhatsApp",
+                      resultado: "Enviado",
+                      observacion: "Recordatorio enviado por WhatsApp",
+                    });
+                    addToast("Gestión de WhatsApp registrada", "success");
+                  }}
+                >
+                  💬 WhatsApp
                 </button>
                 <button className="btn secondary" onClick={() => setShowModalGestion(true)} disabled={!hasWritePermissions}>
                   💬 Nueva Gestión
@@ -1463,34 +1885,114 @@ export default function App() {
               
               {/* Timeline de Gestiones */}
               <div>
-                <h4 style={{margin: '16px 0 8px 0', color: 'var(--text-main)'}}>📋 Historial de Gestiones</h4>
-                <div className="promesas-lista">
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 8px 0'}}>
+                  <h4 style={{margin: 0, color: 'var(--text-main)'}}>📋 Historial de Gestiones</h4>
+                  <button className="btn secondary" style={{fontSize: '0.75rem', padding: '4px 8px'}} onClick={exportarReporteGestion}>
+                    📄 Reporte PDF
+                  </button>
+                </div>
+                <div className="table-wrapper">
+                  <table className="data-table" style={{fontSize: '0.85rem'}}>
+                    <thead>
+                      <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Resultado</th>
+                        <th>Observación</th>
+                        <th style={{width: '30px'}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
                   {filteredGestiones.length > 0 ? (
                     filteredGestiones.slice(0, 10).map(g => {
-                      const borderColor = g.resultado.includes('Pagado') ? '#2ea44f' : g.resultado.includes('Promesa') ? '#f59e0b' : g.resultado.includes('No') ? '#e63946' : '#3b82f6';
                       return (
-                        <div key={g.id} className="promesa-item" style={{ borderLeft: `4px solid ${borderColor}` }}>
-                          <div className="promesa-main">
-                            <div className="flex-center">
-                              <span className="promesa-icon">{g.tipo.includes("Llamada") ? "📞" : g.tipo.includes("Email") ? "📧" : g.tipo.includes("WhatsApp") ? "💬" : "📝"}</span>
-                              <div>
-                                <div className="promesa-info">{g.tipo} - {g.resultado}</div>
-                                <div className="promesa-fecha">📅 {g.fecha}</div>
-                              </div>
-                            </div>
-                            <div className="promesa-observacion">{g.observacion}</div>
-                            {g.fecha_promesa && <div className="promesa-motivo status-color-warning">⏰ Promesa: {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}</div>}
-                          </div>
-                          <button className="promesa-eliminar" onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
-                        </div>
+                        <tr key={g.id}>
+                          <td>{g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-'}</td>
+                          <td>{g.tipo}</td>
+                          <td>{g.resultado}</td>
+                          <td style={{maxWidth: '150px', whiteSpace: 'normal'}}>{g.observacion}</td>
+                          <td>
+                            <button className="promesa-eliminar" style={{position: 'static', transform: 'none', marginLeft: 0}} onClick={() => eliminarGestion(g.id)} disabled={!hasWritePermissions}>✕</button>
+                          </td>
+                        </tr>
                       );
                     })
                   ) : (
-                    <p className="promesa-vacia">Sin gestiones registradas para este cliente</p>
+                    <tr><td colSpan={5} style={{textAlign: 'center', color: '#9ca3af', padding: '12px'}}>Sin gestiones registradas</td></tr>
                   )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
               </div>
+            </div>
+          )}
+
+          {/* Panel de Historial General (Visible cuando es "Todos") */}
+          {(!selectedCliente || selectedCliente === "Todos") && (
+            <div className="card">
+              <div className="card-title" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e5e7eb', paddingBottom: 8, marginBottom: 12}}>
+                <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
+                  <span style={{fontSize: '1.5rem'}}>📋</span>
+                  <span style={{fontWeight: 700, fontSize: '1.15rem', color: '#374151'}}>Historial de Gestiones (General)</span>
+                </div>
+                <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+                  <label style={{fontSize: '0.95rem', color: '#374151'}}>Desde:
+                    <input type="date" value={filtroFechaDesde} onChange={e => setFiltroFechaDesde(e.target.value)} style={{marginLeft: 4, marginRight: 8}} />
+                  </label>
+                  <label style={{fontSize: '0.95rem', color: '#374151'}}>Hasta:
+                    <input type="date" value={filtroFechaHasta} onChange={e => setFiltroFechaHasta(e.target.value)} style={{marginLeft: 4, marginRight: 8}} />
+                  </label>
+                  <button className="btn primary" style={{fontSize: '0.9rem', padding: '6px 12px'}} onClick={exportarReporteGestion}>
+                    📄 Generar Reporte de Gestión PDF
+                  </button>
+                </div>
+              </div>
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Fecha</th>
+                      <th>Tipo</th>
+                      <th>Resultado</th>
+                      <th>Observación</th>
+                      <th className="num">Promesa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                {filteredGestiones.length > 0 ? (
+                  filteredGestiones.slice(0, 50).map(g => {
+                    const tipoSafe = g.tipo || "";
+                    const resSafe = g.resultado || "";
+                    return (
+                      <tr key={g.id}>
+                        <td><strong>{g.razon_social || g.cliente}</strong></td>
+                        <td>{g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-'}</td>
+                        <td>{tipoSafe}</td>
+                        <td>{resSafe}</td>
+                        <td style={{maxWidth: '300px', whiteSpace: 'normal'}}>{g.observacion || '-'}</td>
+                        <td className="num">
+                          {g.fecha_promesa ? (
+                            <span className="status-color-warning" style={{fontSize: '0.85rem'}}>
+                              {g.fecha_promesa} - {fmtMoney(g.monto_promesa || 0)}
+                            </span>
+                          ) : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
+                      No hay gestiones registradas recientemente
+                    </td>
+                  </tr>
+                )}
+                  </tbody>
+                </table>
+              </div>
+              {filteredGestiones.length > 50 && <p className="table-footnote" style={{textAlign: 'center'}}>Mostrando las últimas 50 gestiones</p>}
             </div>
           )}
         </div>
@@ -1543,12 +2045,10 @@ export default function App() {
                     style={{ padding: '12px 32px', fontSize: '1rem', borderRadius: '12px', boxShadow: '0 4px 14px rgba(0,0,0,0.1)' }}
                     onClick={async () => {
                       setTheme(pendingTheme);
-                      const nuevaEmpresa = { ...empresa, tema: pendingTheme };
-                      setEmpresa(nuevaEmpresa);
                       if (!isWeb) {
                         try {
-                            await window.api.empresaGuardar(nuevaEmpresa);
-                            addToast("Tema guardado y aplicado", "success");
+                          await window.api.empresaGuardar({ ...empresa, tema: pendingTheme });
+                          addToast("Tema guardado y aplicado", "success");
                         } catch(e) {
                             console.error(e);
                             addToast("Error guardando tema", "error");
@@ -1556,7 +2056,7 @@ export default function App() {
                       } else {
                           addToast("Tema aplicado (local)", "success");
                       }
-                    }} 
+                    }}
                   >
                     💾 Guardar y Aplicar Tema
                   </button>
@@ -1778,7 +2278,16 @@ export default function App() {
             <div className="row">
               <label className="field">
                 <span>Cliente</span>
-                <select value={selectedCliente} onChange={e => setSelectedCliente(e.target.value)}>
+                <select
+                  value={selectedCliente}
+                  onChange={e => {
+                    const value = e.target.value;
+                    if (value === 'Todos') {
+                      setSelectedCliente("");
+                    } else {
+                      setSelectedCliente(value);
+                    }
+                  }}>
                   <option value="">Todos</option>
                   {clientes.map(c => (
                     <option key={c.cliente} value={c.razon_social}>{c.razon_social}</option>
@@ -1827,7 +2336,7 @@ export default function App() {
                 <span>Vista Agrupada con Subtotales</span>
               </label>
             </div>
-            <div className="flex-row">
+            <div className="flex-row" style={{ flexWrap: 'wrap' }}>
               <button className="btn primary" onClick={exportarExcel}>📥 Exportar a Excel</button>
               <button className="btn primary" onClick={exportarPDF}>📄 Exportar a PDF</button>
               <button className="btn secondary" onClick={() => alert('Comparativa mensual: función en desarrollo')}>📈 Comparar Períodos</button>
@@ -1841,7 +2350,7 @@ export default function App() {
                       <th>Cliente</th>
                       <th>Documento</th>
                       <th>Vendedor</th>
-                      <th>F. Vencimiento</th>
+                      <th className="th-fvenc">F. Vencimiento</th>
                       <th>Aging</th>
                       <th className="num">Total</th>
                     </tr>
@@ -2277,83 +2786,15 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {deudoresCronicos.length > 0 ? (
-                      deudoresCronicos.map((d, idx) => (
-                        <tr key={idx} style={{ background: idx < 5 ? 'rgba(239, 68, 68, 0.1)' : 'transparent' }}>
-                          <td><strong>{idx + 1}</strong></td>
-                          <td>{d.razon_social}</td>
-                          <td>{d.vendedor}</td>
-                          <td className="num">{fmtMoney(d.totalDeuda)}</td>
-                          <td className="num kpi-negative">{fmtMoney(d.totalVencido)}</td>
-                          <td className="num">{d.documentosVencidos}</td>
-                          <td>
-                            <span className="kpi-negative">
-                              {d.dias_promedio >= 120 ? '🔴 Crítico' : '🟠 Alto'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr><td colSpan={7}>No hay deudores crónicos (todos los clientes están al día o en mora &lt; 90 días)</td></tr>
-                    )}
+                    <tr>
+                      <td colSpan={7} style={{textAlign: 'center', color: '#9ca3af'}}>
+                        No hay datos
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
-        </div>
-      );
-    }
-
-    if (tab === "alertas") {
-      return (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-          <div className="card-title">🚨 Alertas de Incumplimiento</div>
-          <div className="row">
-            <label className="field">
-              <span>Búsqueda</span>
-              <input type="text" value={searchAlertas} onChange={e => setSearchAlertas(e.target.value)} placeholder="Buscar por cliente o documento..." />
-            </label>
-            <label className="field">
-              <span>Severidad</span>
-              <select value={filtroSeveridad} onChange={e => setFiltroSeveridad(e.target.value)}>
-                <option value="Todos">Todos</option>
-                <option value="Crítico">Crítico</option>
-                <option value="Alto">Alto</option>
-                <option value="Medio">Medio</option>
-                <option value="Bajo">Bajo</option>
-              </select>
-            </label>
-          </div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Documento</th>
-                  <th className="num">Monto</th>
-                  <th className="num">Días Vencido</th>
-                  <th>Severidad</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAlertas.length > 0 ? filteredAlertas.map((a, i) => (
-                  <tr key={i}>
-                    <td>{a.cliente}</td>
-                    <td>{a.documento}</td>
-                    <td className="num">{fmtMoney(a.monto)}</td>
-                    <td className="num">{a.diasVencidos}</td>
-                    <td>
-                      <span className={a.severidad === "Crítico" ? "kpi-negative" : a.severidad === "Alto" ? "kpi-warning" : ""}>
-                        {a.severidad}
-                      </span>
-                    </td>
-                  </tr>
-                )) : <tr><td colSpan={5}>No hay alertas</td></tr>}
-              </tbody>
-            </table>
-          </div>
         </div>
         </div>
       );
@@ -2440,6 +2881,14 @@ export default function App() {
     }
 
     if (tab === "config") {
+      const themes: Record<string, { '--bg-gradient': string; '--text': string }> = {
+        pastel: { '--bg-gradient': 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)', '--text': '#1f2937' },
+        lavanda: { '--bg-gradient': 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)', '--text': '#1f2937' },
+        coral: { '--bg-gradient': 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%)', '--text': '#1f2937' },
+        azul: { '--bg-gradient': 'linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%)', '--text': '#1e3a8a' },
+        gris: { '--bg-gradient': 'linear-gradient(135deg, #f3f4f6 0%, #9ca3af 100%)', '--text': '#111827' }
+      };
+
       return (
         <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: 'var(--bg-surface)', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
           <h2 style={{ marginBottom: 18, fontWeight: 700, color: 'var(--text-main)' }}>Configuración y Administración</h2>
@@ -2477,7 +2926,7 @@ export default function App() {
           {/* Sección: Personalización y Temas */}
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <button className={`btn theme${theme === 'pastel' ? ' selected' : ''}`} style={{ background: themes.pastel['--bg-gradient'], color: themes.pastel['--text'], border: theme === 'pastel' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('pastel')}>🌸 Femenino Pastel</button>
               <button className={`btn theme${theme === 'lavanda' ? ' selected' : ''}`} style={{ background: themes.lavanda['--bg-gradient'], color: themes.lavanda['--text'], border: theme === 'lavanda' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('lavanda')}>💜 Femenino Lavanda</button>
               <button className={`btn theme${theme === 'coral' ? ' selected' : ''}`} style={{ background: themes.coral['--bg-gradient'], color: themes.coral['--text'], border: theme === 'coral' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('coral')}>🌷 Femenino Coral</button>
@@ -2528,7 +2977,7 @@ export default function App() {
               {empresa.logo ? (
                 <img src={empresa.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               ) : (
-                '💰'
+                <img src="/logo-freeplastic.png" alt="Logo FreePlastic" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               )}
             </div>
             <div>

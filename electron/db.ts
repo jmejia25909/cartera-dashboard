@@ -125,7 +125,8 @@ function ensureSchema(db: Database.Database) {
       ruc TEXT DEFAULT '',
       administrador TEXT DEFAULT '',
       iva_percent REAL DEFAULT 15.0,
-      meta_mensual REAL DEFAULT 100000
+      meta_mensual REAL DEFAULT 100000,
+      logo TEXT
     );
 
     /* Tabla de Gestiones (CRM) */
@@ -269,6 +270,13 @@ function ensureSchema(db: Database.Database) {
     if (!tableHasColumn(db, "clientes", c)) {
       try { db.exec(`ALTER TABLE clientes ADD COLUMN ${c} TEXT DEFAULT ''`); } catch (e) { console.warn(`Error al agregar columna ${c} a clientes:`, e); }
     }
+  }
+
+  // Migración: Agregar columna logo si no existe
+  if (!tableHasColumn(db, "empresa", "logo")) {
+    try {
+      db.exec("ALTER TABLE empresa ADD COLUMN logo TEXT");
+    } catch (e) { console.warn("Error al agregar columna logo a empresa:", e); }
   }
 
   // Insertar registro de empresa por defecto si no existe
