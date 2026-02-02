@@ -688,7 +688,14 @@ export default function App() {
       if (tendData) setTendencias(tendData as TendenciaMes[]);
       if (cuentasAplicarData) setCuentasAplicar(cuentasAplicarData as CuentaAplicar[]);
       if (abonosData) setAbonos(abonosData as Abono[]);
-      if (Array.isArray(gestionesRecientes)) setAllGestiones(gestionesRecientes as Gestion[]);
+      if (Array.isArray(gestionesRecientes)) {
+        setAllGestiones(prev => {
+          // Merge: mantener gestiones previas que no estén en la nueva lista (por id)
+          const nuevosIds = new Set((gestionesRecientes as Gestion[]).map(g => g.id));
+          const soloPrevios = prev.filter(g => !nuevosIds.has(g.id));
+          return [...(gestionesRecientes as Gestion[]), ...soloPrevios];
+        });
+      }
     } catch (e) {
       console.error("Error cargando datos:", e);
     }
@@ -946,6 +953,15 @@ export default function App() {
   async function guardarGestion() {
     if (isWeb || !selectedCliente) return;
     try {
+      // Construir la nueva gestión igual que registrarGestion
+      const nuevaGestion = {
+        id: Date.now(),
+        cliente: selectedCliente,
+        razon_social: selectedCliente,
+        fecha: new Date().toISOString(),
+        ...gestionForm
+      };
+      setAllGestiones(prev => [nuevaGestion, ...prev]);
       await window.api.gestionGuardar({
         cliente: selectedCliente,
         ...gestionForm
@@ -1721,7 +1737,8 @@ export default function App() {
                         const maxDias = docsCliente.length > 0 ? Math.max(...docsCliente.map(d => d.dias_vencidos || 0)) : 0;
                         
                         // Buscar historial
-                        const gestionesCliente = gestionesFiltradasPorFecha.filter(g => (g.razon_social || g.cliente) === cliente);
+                        // Usar allGestiones para que el registro sea inmediato y consistente
+                        const gestionesCliente = allGestiones.filter(g => (g.razon_social || g.cliente) === cliente);
                         const lastCall = gestionesCliente.find(g => g.tipo === 'Llamada' || g.tipo === 'Visita');
                         const lastEmail = gestionesCliente.find(g => g.tipo === 'Email');
                         const lastWhatsapp = gestionesCliente.find(g => g.tipo === 'WhatsApp');
@@ -1755,10 +1772,18 @@ export default function App() {
                               <a href="#" style={{fontWeight: 700, color: '#7c3aed'}} onClick={(e) => { e.preventDefault(); setSelectedCliente(cliente); }}>{cliente}</a>
                             </td>
                             <td className="num">{fmtMoney(totalCliente)}</td>
-                            <td>{lastCall ? (lastCall.fecha ? lastCall.fecha.replace('T', ' ').substring(0, 16) : '-') : '-'}</td>
-                            <td className="text-center">{lastEmail ? '✓' : '•'}</td>
-                            <td className="text-center">{lastWhatsapp ? '✓' : '•'}</td>
-                            <td className="text-center">{lastPdf ? '✓' : '•'}</td>
+                            <td className="text-center">
+                              {lastCall ? <><span style={{color:'#10b981'}}>✓</span> <span style={{fontSize:'0.8em',color:'#888'}}>{lastCall.fecha ? lastCall.fecha.replace('T',' ').substring(0,16) : ''}</span></> : '•'}
+                            </td>
+                            <td className="text-center">
+                              {lastEmail ? <><span style={{color:'#3b82f6'}}>✓</span> <span style={{fontSize:'0.8em',color:'#888'}}>{lastEmail.fecha ? lastEmail.fecha.replace('T',' ').substring(0,16) : ''}</span></> : '•'}
+                            </td>
+                            <td className="text-center">
+                              {lastWhatsapp ? <><span style={{color:'#22c55e'}}>✓</span> <span style={{fontSize:'0.8em',color:'#888'}}>{lastWhatsapp.fecha ? lastWhatsapp.fecha.replace('T',' ').substring(0,16) : ''}</span></> : '•'}
+                            </td>
+                            <td className="text-center">
+                              {lastPdf ? <><span style={{color:'#6366f1'}}>✓</span> <span style={{fontSize:'0.8em',color:'#888'}}>{lastPdf.fecha ? lastPdf.fecha.replace('T',' ').substring(0,16) : ''}</span></> : '•'}
+                            </td>
                             <td>
                               <button className="btn secondary" onClick={() => exportarEstadoDeCuenta(cliente)}>
                                 📄 PDF
