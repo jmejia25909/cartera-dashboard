@@ -1,13 +1,6 @@
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
-
-// Definición global para evitar errores de TypeScript con window.api
-declare global {
-  interface Window {
-    api: any;
-  }
-}
 
 // Interfaces necesarias para TypeScript
 interface Documento {
@@ -77,7 +70,7 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [theme, setTheme] = useState("claro");
   const [pendingTheme, setPendingTheme] = useState("claro");
-  const [isWeb, setIsWeb] = useState(false);
+  const [isWeb, _setIsWeb] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [hasWritePermissions, setHasWritePermissions] = useState(true);
   
@@ -90,7 +83,7 @@ export default function App() {
   const [allGestiones, setAllGestiones] = useState<any[]>([]);
   const [tendencias, setTendencias] = useState<any[]>([]);
   const [abonos, setAbonos] = useState<any[]>([]);
-  const [cuentasAplicar, setCuentasAplicar] = useState<any[]>([]);
+  const [_cuentasAplicar, setCuentasAplicar] = useState<any[]>([]);
   const [promesas, setPromesas] = useState<any[]>([]);
   const [alertas, setAlertas] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -123,15 +116,15 @@ export default function App() {
   const [remoteUrl, setRemoteUrl] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [remoteUrlHealthy, setRemoteUrlHealthy] = useState(false);
-  const [localUrlHealthy, setLocalUrlHealthy] = useState(false);
+  const [localUrlHealthy, _setLocalUrlHealthy] = useState(false);
   const [centrosCosto, setCentrosCosto] = useState<string[]>([]);
-  const [clientesGestionados, setClientesGestionados] = useState<string[]>([]);
+  const [_clientesGestionados, _setClientesGestionados] = useState<string[]>([]);
 
   // Placeholders para datos derivados
   const [motivosData, setMotivosData] = useState<any[]>([]);
   const [productividadData, setProductividadData] = useState<any[]>([]);
   const [segmentacionRiesgo, setSegmentacionRiesgo] = useState<any[]>([]);
-  const [analisisRiesgo, setAnalisisRiesgo] = useState<any[]>([]);
+  const [analisisRiesgo, _setAnalisisRiesgo] = useState<any[]>([]);
 
   // Funciones auxiliares básicas
   const addToast = (message: string, type = "info") => {
@@ -178,17 +171,6 @@ export default function App() {
   const todosDocsVencidos = useMemo(() => docs.filter(d => (d.dias_vencidos || 0) > 0), [docs]);
   const docsVencidosCliente = useMemo(() => (!selectedCliente || selectedCliente === "Todos") ? [] : todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente), [todosDocsVencidos, selectedCliente]);
   const totalVencidoCliente = useMemo(() => docsVencidosCliente.reduce((sum, d) => sum + d.total, 0), [docsVencidosCliente]);
-  const gestionesFiltradasPorFecha = useMemo(() => {
-    let gestiones = allGestiones;
-    if (filtroFechaDesde) {
-      gestiones = gestiones.filter(g => g.fecha && g.fecha >= filtroFechaDesde);
-    }
-    if (filtroFechaHasta) {
-      const hasta = filtroFechaHasta.length === 10 ? filtroFechaHasta + 'T23:59:59' : filtroFechaHasta;
-      gestiones = gestiones.filter(g => g.fecha && g.fecha <= hasta);
-    }
-    return gestiones;
-  }, [allGestiones, filtroFechaDesde, filtroFechaHasta]);
   const clientesUnicos = useMemo(() => (selectedCliente && selectedCliente !== "Todos") ? [selectedCliente] : clientesConVencidos, [clientesConVencidos, selectedCliente]);
   const filteredGestiones = useMemo(() => allGestiones, [allGestiones]);
 
@@ -270,7 +252,7 @@ export default function App() {
         window.api.statsObtener(),
         window.api.filtrosListar(),
         window.api.topClientes(),
-        window.api.gestionesListar(),
+        window.api.gestionesListar(""),
         window.api.alertasIncumplimiento(),
         window.api.tendenciasHistoricas(),
         window.api.cuentasAplicarListar(),
@@ -293,8 +275,8 @@ export default function App() {
           );
           setPromesas(promesasPendientes);
       }
-      if (alertasData) setAlertas(alertasData);
-      if (tendData) setTendencias(tendData);
+      if (alertasData) setAlertas(alertasData as any[]);
+      if (tendData) setTendencias(tendData as any[]);
       if (cuentasData) setCuentasAplicar(cuentasData);
       if (abonosData) setAbonos(abonosData);
 
@@ -316,7 +298,7 @@ export default function App() {
       try {
         if (window.api.motivosImpago) {
           const motivosResult = await window.api.motivosImpago();
-          if (motivosResult) setMotivosData(motivosResult);
+          if (motivosResult) setMotivosData(motivosResult as any[]);
         }
       } catch (e) {
         console.log("Error cargando Motivos de Impago:", e);
@@ -325,7 +307,7 @@ export default function App() {
       try {
         if (window.api.productividadGestor) {
           const productividadResult = await window.api.productividadGestor();
-          if (productividadResult) setProductividadData(productividadResult);
+          if (productividadResult) setProductividadData(productividadResult as any[]);
         }
       } catch (e) {
         console.log("Error cargando Productividad:", e);
@@ -350,36 +332,6 @@ export default function App() {
       console.error("Error cargando datos:", e);
     }
   }
-
-  // Funciones de filtrado optimizadas con useMemo
-  const filteredDocumentos = useMemo(() => 
-    docs.filter(d => {
-      const search = searchDocumentos.toLowerCase();
-      const matchSearch = !search || 
-        (d.cliente && d.cliente.toLowerCase().includes(search)) || 
-        (d.razon_social && d.razon_social.toLowerCase().includes(search)) || 
-        (d.documento && d.documento.toLowerCase().includes(search));
-      
-      const matchCliente = !selectedCliente || selectedCliente === "Todos" || d.razon_social === selectedCliente || d.cliente === selectedCliente;
-      const matchVendedor = !selectedVendedor || selectedVendedor === "Todos" || d.vendedor === selectedVendedor;
-      const matchCentro = filtroCentroCosto === "Todos" || d.centro_costo === filtroCentroCosto;
-      
-      let matchAging = true;
-      if (filtroAging !== "Todos") {
-          const dias = d.dias_vencidos || 0;
-          if (filtroAging === "Vencidos") matchAging = dias > 0;
-          else if (filtroAging === "Por vencer") matchAging = dias <= 0;
-          else if (filtroAging === "30") matchAging = dias > 0 && dias <= 30;
-          else if (filtroAging === "60") matchAging = dias > 30 && dias <= 60;
-          else if (filtroAging === "90") matchAging = dias > 60 && dias <= 90;
-          else if (filtroAging === "120") matchAging = dias > 90 && dias <= 120;
-          else if (filtroAging === "+120") matchAging = dias > 120;
-      }
-
-      return matchSearch && matchCliente && matchVendedor && matchCentro && matchAging;
-    }),
-    [docs, searchDocumentos, selectedCliente, selectedVendedor, filtroCentroCosto, filtroAging]
-  );
 
   // Datos derivados para Gestión (Memoizados para rendimiento)
 
@@ -680,12 +632,12 @@ export default function App() {
         await cargarDocumentos();
       } else {
         const errorMsg = resultTyped?.message || "Error desconocido";
-        addToast("Error en importación: " + errorMsg, "error", 6000);
+        addToast("Error en importación: " + errorMsg, "error");
         console.error("Error importando (backend):", errorMsg);
       }
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
-      addToast("Error importando Excel: " + errorMsg, "error", 6000);
+      addToast("Error importando Excel: " + errorMsg, "error");
       console.error("Error importando (frontend):", e);
     }
   }
@@ -696,7 +648,7 @@ export default function App() {
       return;
     }
     try {
-      const result = await window.api.exportarBackup();
+      const result = await window.api!.exportarBackup();
       if (result.ok) {
         addToast("Respaldo exportado correctamente", "success");
       } else {
@@ -714,11 +666,11 @@ export default function App() {
       return;
     }
     try {
-      const result = await window.api.cambiarLogo();
+      const result = await window.api!.cambiarLogo();
       if (result.ok) {
         addToast("Logotipo actualizado correctamente", "success");
         // Actualizar estado local inmediatamente
-        setEmpresa(prev => ({ ...prev, logo: result.logo }));
+        setEmpresa((prev: any) => ({ ...prev, logo: result.logo }));
       }
       else if (result.message !== "Cancelado") addToast("Error: " + result.message, "error");
     } catch (e) {

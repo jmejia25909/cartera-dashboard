@@ -92,6 +92,9 @@ declare global {
       cuentasAplicarListar: () => Promise<CuentaAplicarData[]>;
       cuentaAplicarCrear: (data: CuentaAplicarData) => Promise<{ ok: boolean; message?: string }>;
       cuentaAplicarActualizar: (data: CuentaAplicarData) => Promise<{ ok: boolean; message?: string }>;
+      abonosListar: () => Promise<any[]>;
+      exportarBackup: () => Promise<{ ok: boolean; message?: string }>;
+      cambiarLogo: () => Promise<{ ok: boolean; message?: string; logo?: string }>;
       generarPDF: (filename: string) => Promise<{ ok: boolean; message?: string }>;
       getNetworkInfo: () => Promise<{ ip: string; tunnel?: string }>;
       getGitRemoteUrl: () => Promise<{ ok: boolean; url?: string }>;
