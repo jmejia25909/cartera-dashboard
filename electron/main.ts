@@ -253,21 +253,20 @@ function getClienteInfo(codigo: string) {
 function listGestiones(cliente: string) {
   try {
     if (!cliente) {
-      // Si no se especifica cliente, devolver todas las PROMESAS DE PAGO (Global)
-      // Usamos alias 'd' para documentos para evitar confusiones en la subconsulta
+      // Si no se especifica cliente, devolver TODAS las gestiones (no solo promesas)
+      // Ordenadas por fecha más reciente primero
       return db.prepare(`
         SELECT 
           g.id, g.cliente, g.fecha, g.tipo, g.resultado, g.observacion, g.fecha_promesa, g.monto_promesa,
           COALESCE((SELECT d.razon_social FROM documentos d WHERE d.cliente = g.cliente LIMIT 1), g.cliente) as razon_social 
         FROM gestiones g
-        WHERE g.resultado LIKE '%Promesa%' 
         ORDER BY 
-          CASE WHEN g.fecha_promesa IS NULL THEN 1 ELSE 0 END,
-          g.fecha_promesa ASC
-        LIMIT 1000
+          g.fecha DESC
+        LIMIT 5000
       `).all();
     }
-    return db.prepare("SELECT * FROM gestiones WHERE cliente = ? ORDER BY id DESC").all(cliente);
+    // Para cliente específico: devolver sus gestiones ordenadas por fecha reciente
+    return db.prepare("SELECT * FROM gestiones WHERE cliente = ? ORDER BY fecha DESC LIMIT 1000").all(cliente);
   } catch (e: any) { 
     console.error("Error obteniendo gestiones:", e.message);
     return []; 
@@ -572,9 +571,9 @@ function computeStats() {
          FROM documentos
          WHERE is_subtotal = 0
            AND total > 0
-           AND date(fecha_vencimiento) < date(?)`
+           AND date(fecha_vencimiento) < date('now', 'localtime')`
       )
-      .get(todayIso).v
+      .get().v
   );
 
   const mora90Saldo = Number(
@@ -584,9 +583,9 @@ function computeStats() {
          FROM documentos
          WHERE is_subtotal = 0
            AND total > 0
-           AND date(fecha_vencimiento) < date(?, '-90 day')`
+           AND date(fecha_vencimiento) < date('now', 'localtime', '-90 day')`
       )
-      .get(todayIso).v
+      .get().v
   );
 
   const mora120Saldo = Number(
@@ -1396,8 +1395,9 @@ ipcMain.handle("reiniciarEstructuraExcel", async () => {
 ipcMain.handle("limpiarBaseDatos", async () => {
   try {
     const tx = db.transaction(() => {
-      // Truncar tablas de datos, preservando config
+      // Truncar TODAS las tablas de datos (sistema completamente limpio)
       db.exec("DELETE FROM documentos");
+      db.exec("DELETE FROM clientes");         // ✅ AGREGADO: Limpiar clientes
       db.exec("DELETE FROM gestiones");
       db.exec("DELETE FROM disputas");
       db.exec("DELETE FROM cuentas_aplicar");
@@ -1408,7 +1408,7 @@ ipcMain.handle("limpiarBaseDatos", async () => {
       db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
     });
     tx();
-    return { ok: true, message: "Base de datos limpia. Preservada: config de empresa, IVA, meta, clientes y vendedores." };
+    return { ok: true, message: "Base de datos completamente limpia. Sistema listo para nueva instalación." };
   } catch (e: any) {
     return { ok: false, message: e.message };
   }
@@ -1433,7 +1433,10 @@ ipcMain.handle("clienteGuardarInfo", (_evt, data) => {
 });
 
 ipcMain.handle("gestionGuardar", (_evt, data) => {
-  db.prepare("INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario, motivo) VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario, @motivo)").run({
+  db.prepare(`
+    INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario, motivo, fecha, creado_en) 
+    VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario, @motivo, datetime('now', 'localtime'), datetime('now', 'localtime'))
+  `).run({
     ...data,
     usuario: data.usuario || 'sistema',
     motivo: data.motivo || null
