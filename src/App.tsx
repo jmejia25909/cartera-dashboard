@@ -883,7 +883,17 @@ export default function App() {
             }}>
             
             {/* AGING - BARRAS HORIZONTALES FINAS */}
-            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ 
+              padding: '8px', 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'flex-start',
+              borderTop: '5px solid #10b981',
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(16,185,129,0.1)',
+              transition: 'all 0.3s ease'
+            }}>
               <RankingList
                 title="Aging de Cartera"
                 items={Array.isArray(agingData) ? agingData.map((a) => ({
@@ -900,7 +910,17 @@ export default function App() {
             </div>
 
             {/* TOP CLIENTES - BARRAS FINAS */}
-            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ 
+              padding: '8px', 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'flex-start',
+              borderTop: '5px solid #a855f7',
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(168,85,247,0.1)',
+              transition: 'all 0.3s ease'
+            }}>
               <RankingList
                 title="Top Clientes"
                 items={Array.isArray(topClientesData) ? topClientesData.slice(0, 10).map((c) => ({
@@ -917,7 +937,17 @@ export default function App() {
             </div>
 
             {/* VENDEDORES - BARRAS FINAS */}
-            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ 
+              padding: '8px', 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'flex-start',
+              borderTop: '5px solid #3b82f6',
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(59,130,246,0.1)',
+              transition: 'all 0.3s ease'
+            }}>
               <RankingList
                 title="Por Vendedor"
                 items={Array.isArray(analisisPorVendedor) ? analisisPorVendedor.slice(0, 10).map((v) => ({
@@ -934,7 +964,17 @@ export default function App() {
             </div>
 
             {/* DEUDORES CRÓNICOS - BARRAS FINAS */}
-            <div className="card" style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="card" style={{ 
+              padding: '8px', 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              justifyContent: 'flex-start',
+              borderTop: '5px solid #dc2626',
+              borderRadius: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(220,38,38,0.1)',
+              transition: 'all 0.3s ease'
+            }}>
               <RankingList
                 title="Deudores Crónicos"
                 items={Array.isArray(deudoresCronicos) ? deudoresCronicos.slice(0, 10).map((d) => ({
