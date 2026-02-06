@@ -1396,20 +1396,26 @@ ipcMain.handle("limpiarBaseDatos", async () => {
   try {
     const tx = db.transaction(() => {
       // Truncar TODAS las tablas de datos (sistema completamente limpio)
-      db.exec("DELETE FROM documentos");
-      db.exec("DELETE FROM clientes");         // ✅ AGREGADO: Limpiar clientes
-      db.exec("DELETE FROM gestiones");
-      db.exec("DELETE FROM disputas");
-      db.exec("DELETE FROM cuentas_aplicar");
-      db.exec("DELETE FROM abonos");
-      db.exec("DELETE FROM campana_clientes");
-      db.exec("DELETE FROM campanas");
+      db.prepare("DELETE FROM gestiones").run();
+      db.prepare("DELETE FROM documentos").run();
+      db.prepare("DELETE FROM clientes").run();
+      db.prepare("DELETE FROM disputas").run();
+      db.prepare("DELETE FROM cuentas_aplicar").run();
+      db.prepare("DELETE FROM abonos").run();
+      db.prepare("DELETE FROM campana_clientes").run();
+      db.prepare("DELETE FROM campanas").run();
       // Resetear excel_headers_json para que próxima importación defina nueva estructura
       db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
     });
     tx();
+    
+    // Limpiar base de datos (liberar espacio y asegurar consistencia)
+    db.pragma('optimize');
+    db.exec('VACUUM');
+    
     return { ok: true, message: "Base de datos completamente limpia. Sistema listo para nueva instalación." };
   } catch (e: any) {
+    console.error("Error limpiando BD:", e);
     return { ok: false, message: e.message };
   }
 });
@@ -1528,36 +1534,6 @@ ipcMain.handle("productividadGestor", async () => {
   `).all();
   
   return data;
-});
-
-ipcMain.handle("segmentacionRiesgo", async () => {
-  const data = db.prepare(`
-    SELECT 
-      c.id,
-      c.cliente,
-      ROUND(SUM(COALESCE(d.total - d.cobros, 0)), 2) as saldo_total,
-      COUNT(DISTINCT d.id) as documentos,
-      MAX(d.fecha_vencimiento) as fecha_vencimiento_max,
-      CASE
-        WHEN COUNT(g.id) = 0 THEN 'Bajo'
-        WHEN SUM(COALESCE(d.total - d.cobros, 0)) > 100000 AND d.fecha_vencimiento < date('now', '-90 days') THEN 'Alto'
-        WHEN SUM(COALESCE(d.total - d.cobros, 0)) > 50000 AND d.fecha_vencimiento < date('now', '-30 days') THEN 'Medio'
-        ELSE 'Bajo'
-      END as riesgo
-    FROM clientes c
-    LEFT JOIN documentos d ON c.cliente = d.cliente
-    LEFT JOIN gestiones g ON c.cliente = g.cliente AND g.fecha >= date('now', '-30 days')
-    GROUP BY c.id
-    ORDER BY saldo_total DESC
-  `).all();
-  
-  return data.map((row: any) => ({
-    id: row.id,
-    nombre: row.cliente,
-    saldo: row.saldo_total || 0,
-    documentos: row.documentos || 0,
-    riesgo: row.riesgo
-  }));
 });
 
 ipcMain.handle("alertasIncumplimiento", async () => {

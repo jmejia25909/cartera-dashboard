@@ -32,7 +32,6 @@ const apiMethods = {
   campanasGuardar: (data: unknown) => ipcRenderer.invoke("campanasGuardar", data),
   motivosImpago: () => ipcRenderer.invoke("motivosImpago"),
   productividadGestor: () => ipcRenderer.invoke("productividadGestor"),
-  segmentacionRiesgo: () => ipcRenderer.invoke("segmentacionRiesgo"),
   alertasIncumplimiento: () => ipcRenderer.invoke("alertasIncumplimiento"),
   pronosticoFlujoCaja: () => ipcRenderer.invoke("pronosticoFlujoCaja"),
   tendenciasHistoricas: () => ipcRenderer.invoke("tendenciasHistoricas"),

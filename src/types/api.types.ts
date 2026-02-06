@@ -40,6 +40,8 @@ export interface EmpresaData {
   iva_percent?: number;
   meta_mensual?: number;
   excel_headers_json?: string;
+  tema?: string;
+  logo?: string;
 }
 
 export interface ClienteInfo {

@@ -1,0 +1,31 @@
+{
+  appId: "com.mm.carteradashboard",
+  productName: "CarteraDashBoardM&M",
+  copyright: "Copyright (c) 2026",
+  directories: {
+    output: "release",
+    buildResources: "build"
+  },
+  files: [
+    "dist/**",
+    "dist-electron/**",
+    "package.json"
+  ],
+  asar: true,
+  asarUnpack: [
+    "node_modules/better-sqlite3/**",
+    "node_modules/@ngrok/**"
+  ],
+  npmRebuild: true,
+  win: {
+    target: ["nsis"]
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowElevation: true,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true
+  }
+}

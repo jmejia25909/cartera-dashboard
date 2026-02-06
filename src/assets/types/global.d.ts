@@ -83,7 +83,6 @@ declare global {
       clientesAnalisis: () => Promise<unknown>;
       motivosImpago: () => Promise<unknown>;
       productividadGestor: () => Promise<unknown>;
-      segmentacionRiesgo: () => Promise<RiesgoCliente[]>;
       alertasIncumplimiento: () => Promise<unknown>;
       pronosticoFlujoCaja: () => Promise<PronosticoMes[]>;
       tendenciasHistoricas: () => Promise<unknown>;

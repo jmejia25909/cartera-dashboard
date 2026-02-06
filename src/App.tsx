@@ -47,6 +47,60 @@ interface Alerta {
 const fmtMoney = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 const fmtMoneyCompact = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: "compact" }).format(amount);
 
+const toNumber = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (value === null || value === undefined) return 0;
+  const raw = String(value).trim();
+  if (!raw) return 0;
+  const cleaned = raw.replace(/[^\d.,-]/g, '');
+  if (cleaned.includes('.') && cleaned.includes(',')) {
+    return Number(cleaned.replace(/\./g, '').replace(',', '.')) || 0;
+  }
+  if (cleaned.includes(',') && !cleaned.includes('.')) {
+    return Number(cleaned.replace(',', '.')) || 0;
+  }
+  return Number(cleaned) || 0;
+};
+
+const getDocAmount = (d: Documento) => toNumber(d.total ?? d.saldo ?? d.valor_documento ?? 0);
+
+const getAgingLabel = (d: Documento) => {
+  const dias = d.dias_vencidos ?? 0;
+  if (dias <= 0) return 'Por Vencer';
+  if (dias > 360) return '>360';
+  if (dias > 330) return '360';
+  if (dias > 300) return '330';
+  if (dias > 270) return '300';
+  if (dias > 240) return '270';
+  if (dias > 210) return '240';
+  if (dias > 180) return '210';
+  if (dias > 150) return '180';
+  if (dias > 120) return '150';
+  if (dias > 90) return '120';
+  if (dias > 60) return '90';
+  if (dias > 30) return '60';
+  return '30';
+};
+
+const normalizeSeveridad = (raw?: string) => {
+  const value = (raw || '').trim().toLowerCase();
+  if (value === 'critico' || value === 'crítico' || value === 'critica' || value === 'crítica' || value === 'critical') {
+    return { label: 'Crítico', level: 'critical' };
+  }
+  if (value === 'alta' || value === 'alto' || value === 'high') {
+    return { label: 'Alta', level: 'high' };
+  }
+  if (value === 'media' || value === 'medio' || value === 'medium') {
+    return { label: 'Media', level: 'medium' };
+  }
+  if (value === 'baja' || value === 'bajo' || value === 'low') {
+    return { label: 'Baja', level: 'low' };
+  }
+  if (!value) return { label: 'Sin datos', level: 'normal' };
+  const label = value.charAt(0).toUpperCase() + value.slice(1);
+  return { label, level: 'normal' };
+};
+
 // Componente RankingList restaurado (versión simplificada)
 const RankingList = ({ title, items, barColor }: any) => (
   <div style={{ padding: 10 }}>
@@ -79,8 +133,18 @@ export default function App() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [vendedores, setVendedores] = useState<string[]>([]);
   const [topClientes, setTopClientes] = useState<any[]>([]);
-  const [gestiones, setGestiones] = useState<any[]>([]);
   const [allGestiones, setAllGestiones] = useState<any[]>([]);
+  
+  // Filtros y Búsquedas
+  const [selectedCliente, setSelectedCliente] = useState("");
+  const [selectedVendedor, setSelectedVendedor] = useState("");
+  
+  // Filtrar gestiones del cliente seleccionado desde allGestiones
+  const gestiones = useMemo(() => {
+    if (!selectedCliente || selectedCliente === 'Todos') return allGestiones;
+    return allGestiones.filter(g => g.cliente === selectedCliente);
+  }, [allGestiones, selectedCliente]);
+  
   const [tendencias, setTendencias] = useState<any[]>([]);
   const [abonos, setAbonos] = useState<any[]>([]);
   const [_cuentasAplicar, setCuentasAplicar] = useState<any[]>([]);
@@ -88,10 +152,7 @@ export default function App() {
   const [alertas, setAlertas] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   
-  // Filtros y Búsquedas
   const [searchDocumentos, setSearchDocumentos] = useState("");
-  const [selectedCliente, setSelectedCliente] = useState("");
-  const [selectedVendedor, setSelectedVendedor] = useState("");
   const [filtroCentroCosto, setFiltroCentroCosto] = useState("Todos");
   const [filtroAging, setFiltroAging] = useState("Todos");
   const [searchAlertas, setSearchAlertas] = useState("");
@@ -103,6 +164,7 @@ export default function App() {
   const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
   const [vistaAnalisis, setVistaAnalisis] = useState("motivos");
+  const [mostrarGraficaTendencias, setMostrarGraficaTendencias] = useState(false);
 
   // UI y Modales
   const [showModalGestion, setShowModalGestion] = useState(false);
@@ -123,8 +185,26 @@ export default function App() {
   // Placeholders para datos derivados
   const [motivosData, setMotivosData] = useState<any[]>([]);
   const [productividadData, setProductividadData] = useState<any[]>([]);
-  const [segmentacionRiesgo, setSegmentacionRiesgo] = useState<any[]>([]);
-  const [analisisRiesgo, _setAnalisisRiesgo] = useState<any[]>([]);
+  const [analisisRiesgo, setAnalisisRiesgo] = useState<any[]>([]);
+
+  useEffect(() => {
+    const storedTheme = localStorage.getItem('cartera_theme');
+    if (storedTheme) {
+      setTheme(storedTheme);
+      setPendingTheme(storedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    const appliedTheme = theme || 'claro';
+    document.documentElement.setAttribute('data-theme', appliedTheme);
+    document.body.setAttribute('data-theme', appliedTheme);
+    try {
+      localStorage.setItem('cartera_theme', appliedTheme);
+    } catch (e) {
+      console.error('Error guardando tema en localStorage:', e);
+    }
+  }, [theme]);
 
   // Funciones auxiliares básicas
   const addToast = (message: string, type = "info") => {
@@ -152,7 +232,64 @@ export default function App() {
       setHasWritePermissions(false);
     }
   }; 
-  const registrarGestion = async (g: any) => { setAllGestiones(prev => [g, ...prev]); };
+  const registrarGestion = async (g: any) => {
+    const nuevasGestiones = [g, ...allGestiones];
+    setAllGestiones(nuevasGestiones);
+    // Persistir en localStorage
+    try {
+      localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
+    } catch (e) {
+      console.error("Error guardando en localStorage:", e);
+    }
+    if (isWeb || !window.api?.gestionGuardar) return;
+    try {
+      const targetCliente = (g?.cliente || selectedCliente || '').trim();
+      const payload = { cliente: targetCliente, ...g };
+      await window.api.gestionGuardar(payload);
+      // No recargar - confiar solo en estado local
+    } catch (e) {
+      console.error("Error registrando gestión automática:", e);
+    }
+  };
+
+  const buildAnalisisRiesgo = (docsInput: Documento[]) => {
+    const clienteMap = new Map<string, {
+      razon_social: string;
+      total_deuda: number;
+      deuda_vencida: number;
+      max_dias_mora: number;
+    }>();
+
+    (docsInput || []).forEach(d => {
+      if (!d) return;
+      const cliente = d.razon_social || d.cliente;
+      const saldo = (d.total ?? d.saldo ?? 0) as number;
+      const dias = d.dias_vencidos ?? 0;
+
+      if (!clienteMap.has(cliente)) {
+        clienteMap.set(cliente, {
+          razon_social: cliente,
+          total_deuda: 0,
+          deuda_vencida: 0,
+          max_dias_mora: 0
+        });
+      }
+
+      const c = clienteMap.get(cliente)!;
+      c.total_deuda += saldo;
+      if (dias > 0) c.deuda_vencida += saldo;
+      if (dias > c.max_dias_mora) c.max_dias_mora = dias;
+    });
+
+    return Array.from(clienteMap.values())
+      .map(c => {
+        const ratio = c.total_deuda > 0 ? (c.deuda_vencida / c.total_deuda) * 100 : 0;
+        const mora = Math.min(100, (c.max_dias_mora / 180) * 100);
+        const score = Math.max(0, Math.round(100 - (mora * 0.6 + ratio * 0.4)));
+        return { ...c, score };
+      })
+      .sort((a, b) => b.deuda_vencida - a.deuda_vencida);
+  };
 
   const tabsConfig = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
@@ -167,10 +304,10 @@ export default function App() {
   ];
 
   // Variables derivadas restauradas
-  const clientesConVencidos = useMemo(() => Array.from(new Set(docs.filter(d => (d.dias_vencidos || 0) > 0).map(d => d.cliente))), [docs]);
-  const todosDocsVencidos = useMemo(() => docs.filter(d => (d.dias_vencidos || 0) > 0), [docs]);
+  const clientesConVencidos = useMemo(() => Array.from(new Set(docs.filter(d => (d.dias_vencidos || 0) > 0 && (getDocAmount(d) > 0)).map(d => d.cliente))), [docs]);
+  const todosDocsVencidos = useMemo(() => docs.filter(d => (d.dias_vencidos || 0) > 0 && (getDocAmount(d) > 0)), [docs]);
   const docsVencidosCliente = useMemo(() => (!selectedCliente || selectedCliente === "Todos") ? [] : todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente), [todosDocsVencidos, selectedCliente]);
-  const totalVencidoCliente = useMemo(() => docsVencidosCliente.reduce((sum, d) => sum + d.total, 0), [docsVencidosCliente]);
+  const totalVencidoCliente = useMemo(() => docsVencidosCliente.reduce((sum, d) => sum + getDocAmount(d), 0), [docsVencidosCliente]);
   const clientesUnicos = useMemo(() => (selectedCliente && selectedCliente !== "Todos") ? [selectedCliente] : clientesConVencidos, [clientesConVencidos, selectedCliente]);
   const filteredGestiones = useMemo(() => allGestiones, [allGestiones]);
 
@@ -181,53 +318,35 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Effect para cargar configuración remota (IP local, etc)
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const response = await fetch("/api/config");
-        const config = await response.json();
-        if (config.ok && config.remoteUrl) {
-          console.log(`📡 URL remota desde servidor: ${config.remoteUrl}`);
-          setRemoteUrl(config.remoteUrl);
-        }
-      } catch (error) {
-        console.log("Error cargando configuración remota:", error);
-      }
-    };
-    
-    fetchConfig();
-    // Cargar configuración cada 30 segundos en caso de cambios de IP
-    const interval = setInterval(fetchConfig, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Effect para detectar cambios de IP y cargar configuración al montar - REMOVIDO fetch(/api/config) que causaba errores
 
-  // Effect para detectar cambios de IP automáticamente
+  // Effect para detectar cambios de IP y cargar datos al montar
   useEffect(() => {
+    // Verificar permisos y cargar datos al montar
+    checkPermissions();
+    console.log('[DEBUG] Llamando cargarDatos() al montar App');
+    cargarDatos();
+    
+    // Log para depuración de gestiones después de 3 segundos
+    setTimeout(() => {
+      console.log('[DEBUG] allGestiones:', allGestiones);
+    }, 3000);
+
+    // Verificar IP cada 30 segundos (desde API Electron, no desde servidor HTTP)
     const ipCheckInterval = setInterval(async () => {
       if (!window.api?.getGitRemoteUrl) return;
       try {
         const result = await window.api.getGitRemoteUrl();
         if (result.ok && result.url && result.url !== repoUrl) {
-          // La IP cambió - actualizar
           console.log(`📡 IP local actualizada: ${repoUrl} -> ${result.url}`);
           setRepoUrl(result.url);
-          // addToast(`🔄 IP actualizada: ${result.url}`, "info", 5000); // Desactivado: ya hay indicador visual
         }
       } catch (error) {
         console.error("Error verificando IP:", error);
       }
     }, 30000);
 
-    checkPermissions();
-    console.log('[DEBUG] Llamando cargarDatos() al montar App');
-    cargarDatos();
-    
-    // Log para depuración de gestiones
-    setTimeout(() => {
-      console.log('[DEBUG] allGestiones:', allGestiones);
-    }, 3000);
-    // Cargar URL remota (ngrok) al iniciar
+    // Cargar URL remota (ngrok) al iniciar desde API Electron
     if (!isWeb && window.api?.getRemoteUrl) {
       (async () => {
         try {
@@ -241,6 +360,7 @@ export default function App() {
         }
       })();
     }
+
     return () => clearInterval(ipCheckInterval);
   }, []);
 
@@ -259,7 +379,13 @@ export default function App() {
         window.api.abonosListar()
       ]);
 
-      if (empData) setEmpresa(empData);
+      if (empData) {
+        setEmpresa(empData);
+        if (empData.tema) {
+          setTheme(empData.tema);
+          setPendingTheme(empData.tema);
+        }
+      }
       if (statsData) setStats(statsData);
       if (top) setTopClientes(top);
       if (filtros) {
@@ -268,9 +394,25 @@ export default function App() {
         if (filtros.vendedores) setVendedores(filtros.vendedores);
       }
       if (gestionesData) {
-          setAllGestiones(gestionesData);
+          // Cargar gestiones locales desde localStorage
+          let gestionesLocales: any[] = [];
+          try {
+            const stored = localStorage.getItem('cartera_gestiones_locales');
+            if (stored) gestionesLocales = JSON.parse(stored);
+          } catch (e) {
+            console.error("Error cargando localStorage:", e);
+          }
+          
+          // Merge: prioridad a gestiones locales (ID string) sobre backend (ID numérico)
+          const gestionesBackend = Array.isArray(gestionesData) ? gestionesData : [];
+          const gestionesMerged = [
+            ...gestionesLocales.filter((g: any) => typeof g.id === 'string'), // Locales primero
+            ...gestionesBackend.filter((g: any) => typeof g.id === 'number')  // Backend después
+          ];
+          
+          setAllGestiones(gestionesMerged);
           // Filtrar promesas: buscar registros con "Promesa" en el resultado y que NO tengan "Cumplida"
-          const promesasPendientes = gestionesData.filter((g: any) => 
+          const promesasPendientes = gestionesMerged.filter((g: any) => 
             g.resultado?.includes('Promesa') && !g.resultado?.includes('Cumplida') && g.fecha_promesa
           );
           setPromesas(promesasPendientes);
@@ -282,7 +424,11 @@ export default function App() {
 
       // Cargar documentos iniciales
       const docsResult = await window.api.documentosListar({});
-      if (docsResult?.rows) setDocs(docsResult.rows);
+      if (docsResult?.rows) {
+        const rows = docsResult.rows as Documento[];
+        setDocs(rows);
+        setAnalisisRiesgo(buildAnalisisRiesgo(rows));
+      }
 
       // Obtener URL del repositorio remoto Git
       if (window.api.getGitRemoteUrl) {
@@ -313,15 +459,6 @@ export default function App() {
         console.log("Error cargando Productividad:", e);
       }
 
-      try {
-        if (window.api.segmentacionRiesgo) {
-          const segmentacionResult = await window.api.segmentacionRiesgo();
-          if (segmentacionResult) setSegmentacionRiesgo(segmentacionResult);
-        }
-      } catch (e) {
-        console.log("Error cargando Segmentación de Riesgo:", e);
-      }
-
       // Para "Análisis Riesgo" usamos clientesConVencidos que ya se calcula arriba
       // No necesita carga adicional, se devuelva de gestionesData
 
@@ -341,11 +478,24 @@ export default function App() {
   const filteredAlertas = useMemo(() => alertas.filter((a: Alerta) => {
       const search = searchAlertas.toLowerCase();
       const matchSearch = !search || a.cliente.toLowerCase().includes(search) || a.documento.toLowerCase().includes(search);
-      const matchSeveridad = filtroSeveridad === "Todos" || a.severidad === filtroSeveridad;
+      const sevInfo = normalizeSeveridad(a.severidad);
+      const matchSeveridad = filtroSeveridad === "Todos" || sevInfo.label === filtroSeveridad;
       return matchSearch && matchSeveridad;
     }),
     [alertas, searchAlertas, filtroSeveridad]
   );
+
+  const resumenVencidos = useMemo(() => {
+    const resumen = new Map<string, number>();
+    (todosDocsVencidos || []).forEach(d => {
+      const cliente = d.razon_social || d.cliente || 'Sin cliente';
+      const saldo = (d.total ?? d.saldo ?? 0) as number;
+      resumen.set(cliente, (resumen.get(cliente) || 0) + saldo);
+    });
+    return Array.from(resumen.entries())
+      .map(([cliente, total]) => ({ cliente, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [todosDocsVencidos]);
 
   // NUEVOS CÁLCULOS BASADOS EN IMPORTACIÓN
 
@@ -519,29 +669,24 @@ export default function App() {
         vendedor: selectedVendedor || undefined
       });
       const resultTyped = result as { ok?: boolean; rows?: unknown[] };
-      if (resultTyped?.rows) setDocs(resultTyped.rows as unknown as Documento[]);
+      if (resultTyped?.rows) {
+        const rows = resultTyped.rows as unknown as Documento[];
+        setDocs(rows);
+        setAnalisisRiesgo(buildAnalisisRiesgo(rows));
+      }
     } catch (e) {
       console.error("Error cargando documentos:", e);
     }
   }, [selectedCliente, selectedVendedor]);
 
   const cargarGestiones = useCallback(async (selectedCliente: string) => {
+    // Ya no se utiliza - gestiones está en useMemo filtrado de allGestiones
     if (isWeb || !selectedCliente) return;
-    try {
-      const data = await window.api.gestionesListar(selectedCliente);
-      if (data) setGestiones(data as Gestion[]);
-    } catch (e) {
-      console.error("Error cargando gestiones:", e);
-    }
   }, []);
 
   useEffect(() => {
     cargarDocumentos();
   }, [cargarDocumentos]);
-
-  useEffect(() => {
-    if (selectedCliente) cargarGestiones(selectedCliente);
-  }, [cargarGestiones, selectedCliente]);
 
   async function guardarGestion() {
     if (isWeb || !selectedCliente) return;
@@ -555,6 +700,23 @@ export default function App() {
       if (result?.ok) {
         addToast("Gestión guardada exitosamente", "success");
         
+        // Agregar gestión al estado local con ID único
+        const nuevaGestion = {
+          id: `manual_${Date.now()}`,
+          cliente: selectedCliente,
+          fecha: new Date().toISOString(),
+          ...gestionForm
+        };
+        const nuevasGestiones = [nuevaGestion, ...allGestiones];
+        setAllGestiones(nuevasGestiones);
+        
+        // Persistir en localStorage
+        try {
+          localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
+        } catch (e) {
+          console.error("Error guardando en localStorage:", e);
+        }
+        
         // Limpiar formulario
         setShowModalGestion(false);
         setGestionForm({
@@ -565,15 +727,6 @@ export default function App() {
           fecha_promesa: "",
           monto_promesa: 0
         });
-        
-        // Recargar gestiones para este cliente
-        const gestionesActualizadas = await window.api.gestionesListar(selectedCliente);
-        if (gestionesActualizadas) {
-          setGestiones(gestionesActualizadas as Gestion[]);
-        }
-        
-        // Recargar datos generales para actualizar promesas y allGestiones
-        await cargarDatos();
       } else {
         addToast(result?.message || "Error guardando gestión", "error");
       }
@@ -588,8 +741,17 @@ export default function App() {
     try {
       await window.api.gestionEliminar(id);
       addToast("Gestión eliminada", "success");
-      await cargarGestiones(selectedCliente);
-      await cargarDatos();
+      
+      // Actualizar solo estado local
+      const nuevasGestiones = allGestiones.filter(g => g.id !== id);
+      setAllGestiones(nuevasGestiones);
+      
+      // Persistir en localStorage
+      try {
+        localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
+      } catch (e) {
+        console.error("Error guardando en localStorage:", e);
+      }
     } catch (e) {
       addToast("Error eliminando gestión", "error");
       console.error("Error eliminando gestión:", e);
@@ -601,7 +763,20 @@ export default function App() {
     try {
       await window.api.gestionCumplir(id);
       addToast("Promesa cumplida", "success");
-      await cargarDatos();
+      
+      // Actualizar solo estado local
+      const nuevasGestiones = allGestiones.map(g => 
+        g.id === id ? { ...g, resultado: 'Promesa Cumplida' } : g
+      );
+      setAllGestiones(nuevasGestiones);
+      setPromesas(prev => prev.filter(p => p.id !== id));
+      
+      // Persistir en localStorage
+      try {
+        localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
+      } catch (e) {
+        console.error("Error guardando en localStorage:", e);
+      }
     } catch (e) {
       addToast("Error cumpliendo promesa", "error");
       console.error("Error cumpliendo promesa:", e);
@@ -954,7 +1129,10 @@ export default function App() {
       // VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta
       
       // KPIs globales
-      const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + d.total, 0);
+      const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + getDocAmount(d), 0);
+      const totalPorGestionar = (selectedCliente && selectedCliente !== "Todos")
+        ? docsVencidosCliente.reduce((sum, d) => sum + getDocAmount(d), 0)
+        : totalVencidoSistema;
       
       // Calcular gestiones de hoy
       const hoy = new Date().toISOString().split('T')[0];
@@ -982,8 +1160,8 @@ export default function App() {
           return;
         }
 
-        const totalDeuda = docsCliente.reduce((sum, d) => sum + d.total, 0);
-        const totalVencido = docsCliente.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + d.total, 0);
+        const totalDeuda = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
+        const totalVencido = docsCliente.filter(d => (d.dias_vencidos || 0) > 0).reduce((sum, d) => sum + getDocAmount(d), 0);
         const totalPorVencer = totalDeuda - totalVencido;
         
         try {
@@ -1075,10 +1253,12 @@ export default function App() {
           addToast("Estado de cuenta generado", "success");
           // Registrar gestión automática de PDF
           registrarGestion({
+            id: `pdf_${Date.now()}`,
             cliente: clienteNombre,
             tipo: "PDF",
             resultado: "Generado",
             observacion: "Estado de cuenta generado en PDF",
+            fecha: new Date().toISOString()
           });
         } catch (e) {
           console.error(e);
@@ -1090,7 +1270,7 @@ export default function App() {
         const empresaNombre = empresa?.nombre || "[Nombre Empresa]";
         const fechaHoy = new Date().toLocaleDateString();
         const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === clienteNombre || d.cliente === clienteNombre));
-        const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+        const totalCliente = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
         
         const asunto = `Estado de Cuenta - ${empresaNombre}`;
         const lineas = [
@@ -1106,10 +1286,12 @@ export default function App() {
 
         // Registrar gestión automática de Email
         registrarGestion({
+          id: `email_${Date.now()}`,
           cliente: clienteNombre,
           tipo: "Email",
           resultado: "Enviado",
           observacion: "Recordatorio de pago enviado por correo",
+          fecha: new Date().toISOString()
         });
         addToast("Gestión de Email registrada", "success");
       };
@@ -1204,7 +1386,7 @@ export default function App() {
               </div>
               <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
                 <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>Total por Gestionar</div>
-                <div className="kpi-value kpi-negative" style={{fontSize: '1.8rem', marginTop: '4px', fontWeight: '700'}}>{fmtMoney(totalVencidoSistema)}</div>
+                <div className="kpi-value kpi-negative" style={{fontSize: '1.8rem', marginTop: '4px', fontWeight: '700'}}>{fmtMoney(totalPorGestionar)}</div>
               </div>
               <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
                 <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>Contactados Hoy</div>
@@ -1273,7 +1455,7 @@ export default function App() {
                   fontSize: '0.8rem'
                 }}
               />
-              <span style={{color: '#94a3b8', fontSize: '0.75rem'}}>—</span>
+              <span style={{color: '#94a3b8', fontSize: '0.75rem'}}>•</span>
               <input 
                 type="date" 
                 value={filtroFechaHasta} 
@@ -1307,14 +1489,44 @@ export default function App() {
 
             {/* Fila 3: Acciones Masivas - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap'}}>
-              <button className="btn secondary" onClick={() => addToast("Función de acción masiva en desarrollo", "info")} disabled={!hasWritePermissions} style={{padding: '4px 10px', fontSize: '0.8rem'}}>
+              <button
+                className="btn secondary"
+                onClick={() => {
+                  if (resumenVencidos.length === 0) {
+                    addToast("No hay clientes con vencidos", "info");
+                    return;
+                  }
+                  const top = resumenVencidos.slice(0, 50);
+                  const lines = top.map(r => `${r.cliente}: ${fmtMoney(r.total)}`);
+                  copyToClipboard(lines.join('\r\n'));
+                  addToast("Lista masiva copiada al portapapeles", "success");
+                }}
+                disabled={!hasWritePermissions}
+                style={{padding: '4px 10px', fontSize: '0.8rem'}}
+              >
                 📞 Masiva
               </button>
-              <button className="btn secondary" onClick={() => addToast("Función de envío masivo en desarrollo", "info")} disabled={!hasWritePermissions} style={{padding: '4px 10px', fontSize: '0.8rem'}}>
+              <button
+                className="btn secondary"
+                onClick={() => {
+                  if (resumenVencidos.length === 0) {
+                    addToast("No hay clientes con vencidos", "info");
+                    return;
+                  }
+                  const top = resumenVencidos.slice(0, 30);
+                  const lines = [
+                    `Resumen de vencidos - ${new Date().toLocaleDateString()}`,
+                    '',
+                    ...top.map(r => `- ${r.cliente}: ${fmtMoney(r.total)}`)
+                  ];
+                  const cuerpo = encodeURIComponent(lines.join('\r\n'));
+                  window.open(`mailto:?subject=Resumen%20de%20Vencidos&body=${cuerpo}`, '_blank');
+                  addToast("Resumen masivo listo para enviar", "success");
+                }}
+                disabled={!hasWritePermissions}
+                style={{padding: '4px 10px', fontSize: '0.8rem'}}
+              >
                 📧 Estados
-              </button>
-              <button className="btn primary" onClick={() => exportarEstadoDeCuenta(selectedCliente)} disabled={!selectedCliente || selectedCliente === "Todos"} style={{padding: '4px 10px', fontSize: '0.8rem'}}>
-                📥 Estado
               </button>
             </div>
           </div>
@@ -1360,7 +1572,7 @@ export default function App() {
                   onClick={() => setSelectedCliente(null)}
                   title="Volver a lista de clientes"
                 >
-                  ← Volver
+                  🔙 Volver
                 </button>
               </div>
 
@@ -1424,7 +1636,7 @@ export default function App() {
                     const empresaNombre = empresa?.nombre || "[Nombre de tu Empresa]";
                     const fechaHoy = new Date().toLocaleDateString();
                     const docsCliente = todosDocsVencidos.filter(d => (d.razon_social === selectedCliente || d.cliente === selectedCliente));
-                    const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+                    const totalCliente = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
                     const lineas = [
                       `Hola *${selectedCliente}*,`,
                       '',
@@ -1442,10 +1654,12 @@ export default function App() {
                     const mensaje = encodeURIComponent(lineas.join('\n'));
                     window.open(`https://wa.me/?text=${mensaje}`, '_blank');
                     registrarGestion({
+                      id: `whatsapp_${Date.now()}`,
                       cliente: selectedCliente,
                       tipo: "WhatsApp",
                       resultado: "Enviado",
                       observacion: "Recordatorio enviado por WhatsApp",
+                      fecha: new Date().toISOString()
                     });
                     addToast("Gestión de WhatsApp registrada", "success");
                   }}
@@ -1486,7 +1700,7 @@ export default function App() {
                           <th>Documento</th>
                           <th>Emisión</th>
                           <th>Vencimiento</th>
-                          <th className="num">Días Venc.</th>
+                          <th className="num">Días Vencidos</th>
                           <th className="num">Total</th>
                         </tr>
                       </thead>
@@ -1617,7 +1831,7 @@ export default function App() {
                                 disabled={!hasWritePermissions}
                                 title="Eliminar gestión"
                               >
-                                ✕
+                                ❌
                               </button>
                             </td>
                           </tr>
@@ -1644,7 +1858,7 @@ export default function App() {
                     <thead>
                       <tr>
                         <th>Cliente</th>
-                        <th className="num">Vencido $</th>
+                        <th className="num">Vencido</th>
                         <th className="text-center" title="Última llamada">📞</th>
                         <th className="text-center" title="Último email">📧</th>
                         <th className="text-center" title="Último WhatsApp">💬</th>
@@ -1663,7 +1877,7 @@ export default function App() {
                         [...clientesUnicos]
                           .map(cliente => {
                             const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
-                            const totalCliente = docsCliente.reduce((sum, d) => sum + d.total, 0);
+                            const totalCliente = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
                             return { cliente, docsCliente, totalCliente };
                           })
                           .sort((a, b) => b.totalCliente - a.totalCliente)
@@ -1688,16 +1902,16 @@ export default function App() {
                                 <td style={{fontWeight: '600', color: '#7c3aed'}}>{cliente}</td>
                                 <td className="num" style={{fontWeight: '700', fontSize: '0.95rem'}}>{fmtMoney(totalCliente)}</td>
                                 <td className="text-center" title={lastCall ? lastCall.fecha : 'Sin contacto'}>
-                                  {lastCall ? <span style={{color:'#10b981', fontSize: '1.1rem'}}>✓</span> : '•'}
+                                  {lastCall ? <span style={{color:'#10b981', fontSize: '1.1rem'}}>✅</span> : '○'}
                                 </td>
                                 <td className="text-center" title={lastEmail ? lastEmail.fecha : 'Sin envío'}>
-                                  {lastEmail ? <span style={{color:'#3b82f6', fontSize: '1.1rem'}}>✓</span> : '•'}
+                                  {lastEmail ? <span style={{color:'#3b82f6', fontSize: '1.1rem'}}>✅</span> : '○'}
                                 </td>
                                 <td className="text-center" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envío'}>
-                                  {lastWhatsapp ? <span style={{color:'#22c55e', fontSize: '1.1rem'}}>✓</span> : '•'}
+                                  {lastWhatsapp ? <span style={{color:'#22c55e', fontSize: '1.1rem'}}>✅</span> : '○'}
                                 </td>
                                 <td className="text-center" title={lastPdf ? lastPdf.fecha : 'Sin PDF'}>
-                                  {lastPdf ? <span style={{color:'#6366f1', fontSize: '1.1rem'}}>✓</span> : '•'}
+                                  {lastPdf ? <span style={{color:'#6366f1', fontSize: '1.1rem'}}>✅</span> : '○'}
                                 </td>
                                 <td>
                                   <button 
@@ -1760,7 +1974,7 @@ export default function App() {
                       onClick={() => setPendingTheme(t.id)}
                       title={`Seleccionar tema ${t.name}`}
                     >
-                      {pendingTheme === t.id && <span className="theme-check">✓</span>}
+                      {pendingTheme === t.id && <span className="theme-check">✅</span>}
                     </div>
                   ))}
                 </div>
@@ -1889,21 +2103,33 @@ export default function App() {
     }
 
     if (tab === "reportes") {
+      const normalizedSearch = searchDocumentos.trim().toLowerCase();
+      const docsFiltrados = docs.filter((d: Documento) => {
+        const clienteNombre = d.razon_social || d.cliente || '';
+        const matchCliente = !selectedCliente || d.cliente === selectedCliente || d.razon_social === selectedCliente;
+        const matchVendedor = !selectedVendedor || d.vendedor === selectedVendedor;
+        const matchCentro = filtroCentroCosto === "Todos" || d.centro_costo === filtroCentroCosto;
+
+        let matchAging = true;
+        const dias = d.dias_vencidos ?? 0;
+        if (filtroAging === "Vencidos") matchAging = dias > 0;
+        else if (filtroAging === "Por vencer" || filtroAging === "Por Vencer") matchAging = dias <= 0;
+        else if (filtroAging === "+120") matchAging = dias > 120;
+        else if (filtroAging !== "Todos") matchAging = getAgingLabel(d) === filtroAging;
+
+        const matchSearch = !normalizedSearch
+          || clienteNombre.toLowerCase().includes(normalizedSearch)
+          || (d.cliente || '').toLowerCase().includes(normalizedSearch)
+          || (d.documento || d.numero || '').toLowerCase().includes(normalizedSearch);
+
+        return matchCliente && matchVendedor && matchCentro && matchAging && matchSearch;
+      });
+
       const exportarExcel = async () => {
         try {
           const XLSX = await loadXLSX();
-          const dataExport = docs.map((d: any) => {
-            // Calcular aging si no existe
-            let aging = d.aging;
-            if (!aging) {
-               const dias = d.dias_vencidos || 0;
-               if (dias <= 0) aging = 'Por Vencer';
-               else if (dias <= 30) aging = '30';
-               else if (dias <= 60) aging = '60';
-               else if (dias <= 90) aging = '90';
-               else if (dias <= 120) aging = '120';
-               else aging = '+120';
-            }
+          const dataExport = docsFiltrados.map((d: any) => {
+            const aging = d.aging || getAgingLabel(d);
             return {
             'Documento': d.documento,
             'Cliente': d.cliente,
@@ -1937,17 +2163,8 @@ export default function App() {
           doc.setFontSize(10);
           doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
           
-          const tableData = docs.map((d: any) => {
-            let aging = d.aging;
-            if (!aging) {
-               const dias = d.dias_vencidos || 0;
-               if (dias <= 0) aging = 'Por Vencer';
-               else if (dias <= 30) aging = '30';
-               else if (dias <= 60) aging = '60';
-               else if (dias <= 90) aging = '90';
-               else if (dias <= 120) aging = '120';
-               else aging = '+120';
-            }
+          const tableData = docsFiltrados.map((d: any) => {
+            const aging = d.aging || getAgingLabel(d);
             return [
             d.documento,
             d.razon_social,
@@ -1978,25 +2195,25 @@ export default function App() {
             <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
               <div className="kpi-card">
                 <div className="kpi-title">Total Documentos</div>
-                <div className="kpi-value">{docs.length}</div>
+                <div className="kpi-value">{docsFiltrados.length}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Monto Total</div>
-                <div className="kpi-value">{fmtMoney(docs.reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
+                <div className="kpi-value">{fmtMoney(docsFiltrados.reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Docs Vencidos</div>
-                <div className="kpi-value kpi-negative">{docs.filter((d: any) => (d.dias_vencidos || 0) > 0).length}</div>
-                <div className="kpi-subtitle">{docs.length > 0 ? ((docs.filter((d: any) => (d.dias_vencidos || 0) > 0).length / docs.length) * 100).toFixed(1) : 0}% del total</div>
+                <div className="kpi-value kpi-negative">{docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).length}</div>
+                <div className="kpi-subtitle">{docsFiltrados.length > 0 ? ((docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).length / docsFiltrados.length) * 100).toFixed(1) : 0}% del total</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Monto Vencido</div>
-                <div className="kpi-value kpi-negative">{fmtMoney(docs.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
-                <div className="kpi-subtitle">{docs.length > 0 ? ((docs.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0) / docs.reduce((sum: number, d: any) => sum + (d.total || 0), 0)) * 100).toFixed(1) : 0}% del total</div>
+                <div className="kpi-value kpi-negative">{fmtMoney(docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
+                <div className="kpi-subtitle">{docsFiltrados.length > 0 ? ((docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0) / docsFiltrados.reduce((sum: number, d: any) => sum + (d.total || 0), 0)) * 100).toFixed(1) : 0}% del total</div>
               </div>
               <div className="kpi-card">
                 <div className="kpi-title">Clientes Únicos</div>
-                <div className="kpi-value">{new Set(docs.map((d: any) => d.cliente)).size}</div>
+                <div className="kpi-value">{new Set(docsFiltrados.map((d: any) => d.cliente)).size}</div>
               </div>
             </div>
           </div>
@@ -2078,14 +2295,14 @@ export default function App() {
                       <th>Cliente</th>
                       <th>Documento</th>
                       <th>Vendedor</th>
-                      <th className="th-fvenc">F. Vencimiento</th>
+                      <th className="th-fvenc">Fecha Vencimiento</th>
                       <th>Aging</th>
                       <th className="num">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {docs.length > 0 ? (
-                      docs.map((d: any) => (
+                    {docsFiltrados.length > 0 ? (
+                      docsFiltrados.map((d: any) => (
                         <tr key={d.id}>
                           <td>{d.razon_social}</td>
                           <td>{d.documento}</td>
@@ -2093,24 +2310,7 @@ export default function App() {
                           <td>{d.fecha_vencimiento}</td>
                           <td>
                             <span className={((d.dias_vencidos || 0) > 90) ? 'kpi-negative' : ((d.dias_vencidos || 0) > 60) ? 'kpi-warning' : ''}>
-                              {d.aging
-                                ? d.aging
-                                : d.dias_vencidos !== undefined
-                                  ? d.dias_vencidos > 360 ? '>360'
-                                    : d.dias_vencidos > 330 ? '360'
-                                    : d.dias_vencidos > 300 ? '330'
-                                    : d.dias_vencidos > 270 ? '300'
-                                    : d.dias_vencidos > 240 ? '270'
-                                    : d.dias_vencidos > 210 ? '240'
-                                    : d.dias_vencidos > 180 ? '210'
-                                    : d.dias_vencidos > 150 ? '180'
-                                    : d.dias_vencidos > 120 ? '150'
-                                    : d.dias_vencidos > 90 ? '120'
-                                    : d.dias_vencidos > 60 ? '90'
-                                    : d.dias_vencidos > 30 ? '60'
-                                    : d.dias_vencidos > 0 ? '30'
-                                    : 'Por Vencer'
-                                  : '-'}
+                              {d.aging ? d.aging : getAgingLabel(d)}
                             </span>
                           </td>
                           <td className="num">{fmtMoney(typeof d.total === 'number' ? d.total : (d.valor_documento || 0))}</td>
@@ -2121,11 +2321,62 @@ export default function App() {
                     )}
                   </tbody>
                 </table>
-                <p className="table-footnote">Mostrando {docs.length} de {docs.length} documentos</p>
+                <p className="table-footnote">Mostrando {docsFiltrados.length} de {docsFiltrados.length} documentos</p>
               </div>
             ) : (
               <div className="table-wrapper">
-                {/* Aquí puedes agregar el renderizado de agrupados si lo necesitas en el futuro */}
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Cliente</th>
+                      <th>Documento</th>
+                      <th>Vendedor</th>
+                      <th className="th-fvenc">Fecha Vencimiento</th>
+                      <th>Aging</th>
+                      <th className="num">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docsFiltrados.length > 0 ? (
+                      Object.entries(
+                        docsFiltrados.reduce((acc: Record<string, { cliente: string; total: number; rows: Documento[] }>, d) => {
+                          const key = d.razon_social || d.cliente || 'Sin cliente';
+                          if (!acc[key]) acc[key] = { cliente: key, total: 0, rows: [] };
+                          acc[key].rows.push(d);
+                          acc[key].total += (d.total ?? d.saldo ?? 0);
+                          return acc;
+                        }, {})
+                      )
+                        .map(([, group]) => group)
+                        .sort((a, b) => b.total - a.total)
+                        .flatMap(group => [
+                          (
+                            <tr key={`group-${group.cliente}`} style={{ background: '#f8fafc' }}>
+                              <td colSpan={5} style={{ fontWeight: 700 }}>
+                                {group.cliente}
+                              </td>
+                              <td className="num" style={{ fontWeight: 700 }}>
+                                {fmtMoney(group.total)}
+                              </td>
+                            </tr>
+                          ),
+                          ...group.rows.map(row => (
+                            <tr key={row.id}>
+                              <td></td>
+                              <td>{row.documento}</td>
+                              <td>{row.vendedor}</td>
+                              <td>{row.fecha_vencimiento}</td>
+                              <td>{row.aging ? row.aging : getAgingLabel(row)}</td>
+                              <td className="num">{fmtMoney(typeof row.total === 'number' ? row.total : (row.valor_documento || 0))}</td>
+                            </tr>
+                          ))
+                        ])
+                    ) : (
+                      <tr><td colSpan={6}>No hay resultados</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                <p className="table-footnote">Mostrando {docsFiltrados.length} de {docsFiltrados.length} documentos</p>
               </div>
             )}
           </div>
@@ -2196,7 +2447,7 @@ export default function App() {
                     <tr>
                       <th>Documento</th>
                       <th>Cliente</th>
-                      <th className="num">Total Documento</th>
+                      <th className="num">Total</th>
                       <th className="num">Retención</th>
                       <th className="num">% Retención</th>
                     </tr>
@@ -2374,7 +2625,6 @@ export default function App() {
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
               <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
               <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
-              <button className={`btn ${vistaAnalisis === 'segmentacion' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('segmentacion')}>Segmentación</button>
               <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>
               <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>⚠️ Deudores Crónicos</button>
             </div>
@@ -2436,35 +2686,6 @@ export default function App() {
               </div>
             )}
 
-            {vistaAnalisis === 'segmentacion' && (
-              <div className="table-wrapper">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Cliente</th>
-                      <th className="num">Saldo</th>
-                      <th className="num">Documentos</th>
-                      <th className="num">Riesgo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {segmentacionRiesgo.length > 0 ? segmentacionRiesgo.map((s, i) => (
-                      <tr key={i}>
-                        <td>{s.nombre}</td>
-                        <td className="num">{fmtMoney(s.saldo)}</td>
-                        <td className="num">{s.documentos}</td>
-                        <td className="num">
-                          <span className={s.riesgo === "Alto" ? "kpi-negative" : s.riesgo === "Medio" ? "kpi-warning" : ""}>
-                            {s.riesgo}
-                          </span>
-                        </td>
-                      </tr>
-                    )) : <tr><td colSpan={4} style={{textAlign: 'center', color: '#888', fontSize: '1.1rem'}}><b>Segmentación de Riesgo</b><br/><span style={{fontWeight: 'normal'}}>Sin datos</span><div style={{marginTop: '16px'}}><svg width="120" height="80"><rect x="10" y="30" width="100" height="20" rx="8" fill="#e5e7eb"/><text x="60" y="45" textAnchor="middle" fill="#bbb" fontSize="14">Gráfica</text></svg></div></td></tr>}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
             {vistaAnalisis === 'riesgo' && (
               <div className="table-wrapper">
                 <table className="data-table">
@@ -2479,21 +2700,29 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {analisisRiesgo.map((a, i) => {
-                      const prediccion = a.score < 30 ? '🔴 Alto Riesgo' : a.score < 60 ? '🟡 Riesgo Medio' : '🟢 Bajo Riesgo';
-                      return (
-                        <tr key={i}>
-                          <td>{a.razon_social}</td>
-                          <td className="num">{fmtMoney(a.total_deuda)}</td>
-                          <td className="num">{fmtMoney(a.deuda_vencida)}</td>
-                          <td className="num">{a.max_dias_mora}</td>
-                          <td className="num">
-                            <span className={a.score < 50 ? "kpi-negative" : ""}>{a.score}</span>
-                          </td>
-                          <td>{prediccion}</td>
-                        </tr>
-                      );
-                    })}
+                    {analisisRiesgo.length > 0 ? (
+                      analisisRiesgo.map((a, i) => {
+                        const prediccion = a.score < 30 ? '🔴 Alto Riesgo' : a.score < 60 ? '🟡 Riesgo Medio' : '🟢 Bajo Riesgo';
+                        return (
+                          <tr key={i}>
+                            <td>{a.razon_social}</td>
+                            <td className="num">{fmtMoney(a.total_deuda)}</td>
+                            <td className="num">{fmtMoney(a.deuda_vencida)}</td>
+                            <td className="num">{a.max_dias_mora}</td>
+                            <td className="num">
+                              <span className={a.score < 50 ? "kpi-negative" : ""}>{a.score}</span>
+                            </td>
+                            <td>{prediccion}</td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={6} style={{textAlign: 'center', color: '#9ca3af', padding: '20px'}}>
+                          Sin datos de riesgo
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2510,7 +2739,6 @@ export default function App() {
                       <th className="num">Deuda Total</th>
                       <th className="num">Vencido (+90 días)</th>
                       <th className="num">Docs Vencidos</th>
-                      <th className="num">Días Promedio</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2523,12 +2751,11 @@ export default function App() {
                           <td className="num">{fmtMoney(d.totalDeuda)}</td>
                           <td className="num kpi-negative">{fmtMoney(d.totalVencido)}</td>
                           <td className="num">{d.documentosVencidos}</td>
-                          <td className="num"><strong>{d.dias_promedio}</strong> días</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} style={{textAlign: 'center', color: '#9ca3af', padding: '20px'}}>
+                        <td colSpan={6} style={{textAlign: 'center', color: '#9ca3af', padding: '20px'}}>
                           ✅ No hay deudores crónicos (mora mayor a 90 días)
                         </td>
                       </tr>
@@ -2555,6 +2782,7 @@ export default function App() {
               <span>Severidad</span>
               <select value={filtroSeveridad} onChange={e => setFiltroSeveridad(e.target.value)}>
                 <option value="Todos">Todas</option>
+                <option value="Crítico">Crítico</option>
                 <option value="Alta">Alta</option>
                 <option value="Media">Media</option>
                 <option value="Baja">Baja</option>
@@ -2574,19 +2802,22 @@ export default function App() {
               </thead>
               <tbody>
                 {filteredAlertas.length > 0 ? (
-                  filteredAlertas.map((a, i) => (
-                    <tr key={i}>
-                      <td>{a.cliente}</td>
-                      <td>{a.documento}</td>
-                      <td className="num">{fmtMoney(a.monto)}</td>
-                      <td className="num">{a.diasVencidos}</td>
-                      <td>
-                        <span className={`kpi-${a.severidad === 'Alta' ? 'negative' : a.severidad === 'Media' ? 'warning' : 'positive'}`}>
-                          {a.severidad}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  filteredAlertas.map((a, i) => {
+                    const sevInfo = normalizeSeveridad(a.severidad);
+                    return (
+                      <tr key={i}>
+                        <td>{a.cliente}</td>
+                        <td>{a.documento}</td>
+                        <td className="num">{fmtMoney(a.monto)}</td>
+                        <td className="num">{a.diasVencidos}</td>
+                        <td>
+                          <span className={`status-label status-${sevInfo.level}`}>
+                            {sevInfo.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr><td colSpan={5} style={{textAlign: 'center', padding: '20px', color: '#9ca3af'}}>No hay alertas activas</td></tr>
                 )}
@@ -2598,10 +2829,51 @@ export default function App() {
     }
 
     if (tab === "tendencias") {
+      const maxEmision = Math.max(1, ...tendencias.map((t: any) => t.emision || 0));
+      const maxCobrado = Math.max(1, ...tendencias.map((t: any) => t.cobrado || 0));
       return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+            <button
+              className="btn secondary"
+              onClick={() => setMostrarGraficaTendencias(prev => !prev)}
+              disabled={tendencias.length === 0}
+            >
+              {mostrarGraficaTendencias ? '📋 Tabla' : '📊 Gráfica'}
+            </button>
+          </div>
+
+          {mostrarGraficaTendencias && tendencias.length > 0 ? (
+            <div style={{ display: 'grid', gap: '10px', paddingBottom: '10px' }}>
+              {tendencias.map((t: any, i: number) => {
+                const widthEmision = Math.max(6, Math.round(((t.emision || 0) / maxEmision) * 100));
+                const widthCobrado = Math.max(6, Math.round(((t.cobrado || 0) / maxCobrado) * 100));
+                return (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 110px', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 600, color: '#334155' }}>{t.mes}</div>
+                    <div style={{ display: 'grid', gap: '6px' }}>
+                      <div style={{ background: '#e2e8f0', height: 8, borderRadius: 6, overflow: 'hidden' }}>
+                        <div style={{ width: `${widthEmision}%`, height: '100%', background: '#3b82f6' }}></div>
+                      </div>
+                      <div style={{ background: '#e2e8f0', height: 8, borderRadius: 6, overflow: 'hidden' }}>
+                        <div style={{ width: `${widthCobrado}%`, height: '100%', background: '#10b981' }}></div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: '0.85rem' }}>
+                      <div>{fmtMoney(t.emision || 0)}</div>
+                      <div style={{ color: '#16a34a' }}>{fmtMoney(t.cobrado || 0)}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', gap: '12px' }}>
+                <span>⬜ Emisión</span>
+                <span style={{ color: '#10b981' }}>⬜ Cobrado</span>
+              </div>
+            </div>
+          ) : (
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
@@ -2626,6 +2898,7 @@ export default function App() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
         </div>
       );
@@ -2636,6 +2909,11 @@ export default function App() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">📜 Historial de Abonos Detectados</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+            <button className="btn primary" onClick={importarExcel} disabled={!hasWritePermissions}>
+              📥 Importar Excel
+            </button>
+          </div>
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
@@ -3008,20 +3286,40 @@ export default function App() {
               <button className="btn secondary" onClick={() => setShowModalLimpiar(false)}>Cancelar</button>
               <button className="btn danger" onClick={async () => {
                 try {
+                  // PRIMERO: Limpiar localStorage COMPLETAMENTE
+                  console.log("🧹 Limpiando localStorage...");
+                  try {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    // Limpiar cada key individualmente como respaldo
+                    localStorage.removeItem('cartera_gestiones_locales');
+                    localStorage.removeItem('cartera_theme');
+                    localStorage.removeItem('electron_data');
+                    console.log("✅ localStorage y sessionStorage limpios");
+                  } catch (e) {
+                    console.error("Error limpiando almacenamiento local:", e);
+                  }
+
+                  // SEGUNDO: Limpiar BD
+                  console.log("🗑️ Limpiando Base de Datos...");
                   const result = await window.api.limpiarBaseDatos?.();
+                  
                   if (result?.ok) {
+                    console.log("✅ Base de datos limpia");
                     setShowModalLimpiar(false);
-                    addToast("Base de datos limpiada. Recargando sistema...", "success");
+                    addToast("Base de datos y caché local limpiados completamente. Recargando sistema...", "success");
                     
-                    // Esperar 500ms para que se vea el mensaje
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    // Esperar 1 segundo para que se vea el mensaje
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     
-                    // Recargar la página completamente para limpiar TODA la memoria
-                    window.location.reload();
+                    // TERCERO: Recargar COMPLETAMENTE la página (sin caché)
+                    console.log("🔄 Recargando página...");
+                    window.location.href = window.location.href; // Force full reload
                   } else {
                     addToast(result?.message || "Error limpiando base", "error");
                   }
                 } catch (e) {
+                  console.error("Error en limpiarBaseDatos:", e);
                   addToast("Error limpiando base de datos", "error");
                   console.error(e);
                 }
