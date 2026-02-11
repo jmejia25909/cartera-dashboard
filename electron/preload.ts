@@ -43,6 +43,7 @@ const apiMethods = {
   abonosListar: () => ipcRenderer.invoke("abonosListar"),
   clientesListar: () => ipcRenderer.invoke("clientesListar"),
   getGitRemoteUrl: () => ipcRenderer.invoke("getGitRemoteUrl"),
+  getUpdateInfo: () => ipcRenderer.invoke("getUpdateInfo"),
 };
 
 contextBridge.exposeInMainWorld("carteraApi", apiMethods);

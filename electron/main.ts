@@ -36,6 +36,77 @@ const VERBOSE_IP_LOGS = process.env.VERBOSE_IP_LOGS === "1";
 const CLOUDFLARE_TUNNEL_URL = "";
 const CLOUDFLARE_TUNNEL_NAME = "";
 
+type UpdateMeta = {
+  updateCount: number;
+  lastVersion: string;
+  currentVersion?: string;
+  updatedAt?: string;
+  firstRunAt?: string;
+};
+
+function getUpdateMetaPath(): string {
+  return join(app.getPath("userData"), "update-meta.json");
+}
+
+function readUpdateMeta(): UpdateMeta {
+  const nowIso = new Date().toISOString();
+  try {
+    const p = getUpdateMetaPath();
+    if (!fs.existsSync(p)) {
+      return { updateCount: 0, lastVersion: "", firstRunAt: nowIso };
+    }
+    const raw = fs.readFileSync(p, "utf-8");
+    const parsed = JSON.parse(raw) as UpdateMeta;
+    return {
+      updateCount: Number.isFinite(parsed.updateCount) ? parsed.updateCount : 0,
+      lastVersion: parsed.lastVersion || "",
+      currentVersion: parsed.currentVersion,
+      updatedAt: parsed.updatedAt,
+      firstRunAt: parsed.firstRunAt || nowIso,
+    };
+  } catch (e) {
+    console.warn("No se pudo leer update-meta.json:", e);
+    return { updateCount: 0, lastVersion: "", firstRunAt: nowIso };
+  }
+}
+
+function writeUpdateMeta(meta: UpdateMeta) {
+  try {
+    fs.writeFileSync(getUpdateMetaPath(), JSON.stringify(meta, null, 2));
+  } catch (e) {
+    console.warn("No se pudo guardar update-meta.json:", e);
+  }
+}
+
+function trackUpdateInstall(): UpdateMeta {
+  const currentVersion = app.getVersion();
+  const nowIso = new Date().toISOString();
+  const meta = readUpdateMeta();
+  meta.currentVersion = currentVersion;
+  if (!meta.firstRunAt) meta.firstRunAt = nowIso;
+  if (meta.lastVersion !== currentVersion) {
+    meta.updateCount = (meta.updateCount || 0) + 1;
+    meta.lastVersion = currentVersion;
+    meta.updatedAt = nowIso;
+    console.log(`✅ Instalación registrada: v${currentVersion} | Instalación #${meta.updateCount} | ${nowIso}`);
+  }
+  writeUpdateMeta(meta);
+  return meta;
+}
+
+function logInstallationEvent(event: string, details?: any) {
+  const logDir = join(app.getPath('userData'), 'logs');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  const logFile = join(logDir, 'installation.log');
+  const timestamp = new Date().toISOString();
+  const entry = `[${timestamp}] ${event} | Version: ${app.getVersion()} | ${JSON.stringify(details || {})}`;
+  try {
+    fs.appendFileSync(logFile, entry + '\n', 'utf-8');
+  } catch (e) {
+    console.warn('No se pudo escribir en installation.log:', e);
+  }
+}
+
 // Función para verificar si la petición viene de la aplicación desktop
 function isDesktopClient(req: http.IncomingMessage): boolean {
   return req.headers["x-desktop-token"] === DESKTOP_TOKEN;
@@ -1181,6 +1252,10 @@ app.whenReady().then(async () => {
   const dbInstance = openDb();
   db = dbInstance.db;
 
+  // Registrar conteo de actualizaciones por version
+  const updateMeta = trackUpdateInstall();
+  logInstallationEvent('APP_START', { updateCount: updateMeta.updateCount, version: app.getVersion() });
+
   // MIGRACIÓN AUTOMÁTICA: Asegurar que existe la columna 'tema'
   try {
     const cols = db.prepare("PRAGMA table_info(empresa)").all();
@@ -1759,6 +1834,10 @@ ipcMain.handle("getGitRemoteUrl", async () => {
   const networkIp = getNetworkIp();
   const port = 3000; // Puerto del servidor web
   return { ok: true, url: `http://${networkIp}:${port}` };
+});
+
+ipcMain.handle("getUpdateInfo", async () => {
+  return trackUpdateInstall();
 });
 
 // Handler para obtener la URL remota de Cloudflare

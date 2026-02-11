@@ -45,7 +45,6 @@ interface Alerta {
 
 // Utilidades básicas restauradas
 const fmtMoney = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-const fmtMoneyCompact = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: "compact" }).format(amount);
 
 const toNumber = (value: unknown) => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -170,6 +169,8 @@ export default function App() {
   const [showModalGestion, setShowModalGestion] = useState(false);
   const [showModalEmpresa, setShowModalEmpresa] = useState(false);
   const [showModalLimpiar, setShowModalLimpiar] = useState(false);
+  const [showModalDocumentacion, setShowModalDocumentacion] = useState(false);
+  const [showModalHistorial, setShowModalHistorial] = useState(false);
   const [toasts, setToasts] = useState<any[]>([]);
   const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: 0 });
   
@@ -178,9 +179,11 @@ export default function App() {
   const [remoteUrl, setRemoteUrl] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [remoteUrlHealthy, setRemoteUrlHealthy] = useState(false);
-  const [localUrlHealthy, _setLocalUrlHealthy] = useState(false);
+  const [localUrlHealthy, setLocalUrlHealthy] = useState(false);
   const [centrosCosto, setCentrosCosto] = useState<string[]>([]);
   const [_clientesGestionados, _setClientesGestionados] = useState<string[]>([]);
+  const [dbPath, setDbPath] = useState("");
+  const [updateInfo, setUpdateInfo] = useState<{ updateCount: number; currentVersion?: string; lastVersion?: string; updatedAt?: string; firstRunAt?: string } | null>(null);
 
   // Placeholders para datos derivados
   const [motivosData, setMotivosData] = useState<any[]>([]);
@@ -216,6 +219,12 @@ export default function App() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     addToast("Copiado", "success");
+  };
+
+  const formatUpdateDate = (value?: string) => {
+    if (!value) return "N/A";
+    const dt = new Date(value);
+    return Number.isNaN(dt.getTime()) ? value : dt.toLocaleString();
   };
 
   const loadJsPDF = async () => { return { jsPDF: (await import('jspdf')).default, autoTable: (await import('jspdf-autotable')).default }; };
@@ -326,6 +335,12 @@ export default function App() {
     checkPermissions();
     console.log('[DEBUG] Llamando cargarDatos() al montar App');
     cargarDatos();
+
+    if (window.api?.getUpdateInfo) {
+      window.api.getUpdateInfo()
+        .then(info => setUpdateInfo(info))
+        .catch(() => setUpdateInfo(null));
+    }
     
     // Log para depuración de gestiones después de 3 segundos
     setTimeout(() => {
@@ -363,6 +378,11 @@ export default function App() {
 
     return () => clearInterval(ipCheckInterval);
   }, []);
+
+  // Marcar la URL local como disponible cuando exista un valor
+  useEffect(() => {
+    setLocalUrlHealthy(Boolean(repoUrl));
+  }, [repoUrl]);
 
   async function cargarDatos() {
     if (!window.api) return;
@@ -437,6 +457,16 @@ export default function App() {
           if (remoteUrl?.url) setRepoUrl(remoteUrl.url);
         } catch (e) {
           console.log("No se pudo obtener URL remoto:", e);
+        }
+      }
+
+      // Ruta de base de datos para respaldo/actualizaciones manuales
+      if (!isWeb && window.api.getDbPath) {
+        try {
+          const path = await window.api.getDbPath();
+          if (path) setDbPath(path);
+        } catch (e) {
+          console.log("No se pudo obtener ruta de BD:", e);
         }
       }
 
@@ -979,11 +1009,11 @@ export default function App() {
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>VENCE 7D</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f59e0b' }}>{fmtMoneyCompact(vencimientosProximos.monto7)}</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f59e0b' }}>{fmtMoney(vencimientosProximos.monto7)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>VENCE 30D</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f97316' }}>{fmtMoneyCompact(vencimientosProximos.monto30)}</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#f97316' }}>{fmtMoney(vencimientosProximos.monto30)}</div>
             </div>
             <div className="card" style={{ padding: '6px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.52rem', color: 'var(--text-secondary)', marginBottom: '1px' }}>RETENCIONES</div>
@@ -1943,8 +1973,8 @@ export default function App() {
       return (
         <div>
         <div className="config-container">
-          <h2 style={{ marginBottom: 10, fontWeight: 800, color: 'var(--text-main)', fontSize: '1.8rem' }}>Configuración</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 20 }}>Administra las preferencias generales y el sistema</p>
+          <h2 style={{ marginBottom: 6, fontWeight: 800, color: 'var(--text-main)', fontSize: '1.4rem' }}>Configuración</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 14, fontSize: '0.85rem' }}>Administra las preferencias generales y el sistema</p>
 
           <div className="config-grid">
             
@@ -1979,10 +2009,10 @@ export default function App() {
                   ))}
                 </div>
                 
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '25px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
                   <button 
                     className="btn primary" 
-                    style={{ padding: '12px 32px', fontSize: '1rem', borderRadius: '12px', boxShadow: '0 4px 14px rgba(0,0,0,0.1)' }}
+                    style={{ padding: '8px 24px', fontSize: '0.9rem', borderRadius: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
                     onClick={async () => {
                       setTheme(pendingTheme);
                       if (!isWeb) {
@@ -2050,32 +2080,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* TARJETA 4: USUARIOS Y SEGURIDAD */}
-            <div className="config-card">
-              <div className="config-header">
-                <div className="config-icon-box">🛡️</div>
-                <div className="config-title">
-                  <h3>Seguridad</h3>
-                  <p>Usuarios y accesos</p>
-                </div>
-              </div>
-              <div className="config-actions">
-                <button className="config-btn" onClick={() => addToast("Módulo de Usuarios en desarrollo", "info")}>
-                  <span><span className="config-btn-icon">👤</span> Administrar usuarios</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-                <button className="config-btn" onClick={() => addToast("Cambio de contraseña en desarrollo", "info")}>
-                  <span><span className="config-btn-icon">🔒</span> Cambiar contraseña</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-                <button className="config-btn" onClick={() => addToast("Gestión de Roles en desarrollo", "info")}>
-                  <span><span className="config-btn-icon">🔑</span> Roles y permisos</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-              </div>
-            </div>
-
-            {/* TARJETA 5: SISTEMA */}
+            {/* TARJETA 4: SISTEMA */}
             <div className="config-card">
               <div className="config-header">
                 <div className="config-icon-box">🔧</div>
@@ -2085,14 +2090,34 @@ export default function App() {
                 </div>
               </div>
               <div className="config-actions">
-                <button className="config-btn" onClick={() => addToast("Documentación próximamente", "info")}>
+                <button className="config-btn" onClick={() => setShowModalDocumentacion(true)}>
                   <span><span className="config-btn-icon">📖</span> Documentación</span>
                   <span className="config-btn-arrow">→</span>
                 </button>
-                <button className="config-btn" onClick={() => addToast("Historial disponible en próximas versiones", "info")}>
+                <button className="config-btn" onClick={() => setShowModalHistorial(true)}>
                   <span><span className="config-btn-icon">📝</span> Historial de cambios</span>
                   <span className="config-btn-arrow">→</span>
                 </button>
+              </div>
+              <div style={{ marginTop: 12, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bfdbfe', fontSize: '0.7rem', color: '#1e40af', lineHeight: '1.3' }}>
+                <div style={{ fontWeight: 600, marginBottom: 6, fontSize: '0.75rem' }}>📋 Información Legal</div>
+                <div style={{ marginBottom: 3 }}>© 2026 Jhon Franklin Mejia Castro</div>
+                <div style={{ marginBottom: 3 }}>RUC: 0950998104001</div>
+                <div style={{ fontSize: '0.65rem', marginTop: 4, fontStyle: 'italic', color: '#3730a3' }}>Prohibida reproducción no autorizada.</div>
+              </div>
+              <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--bg-main)', borderRadius: 8, border: '1px dashed var(--border)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                  <span>Versión</span>
+                  <strong style={{ color: 'var(--text-main)' }}>{updateInfo?.currentVersion || 'N/A'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+                  <span>Actualizaciones</span>
+                  <strong style={{ color: 'var(--text-main)' }}>{updateInfo?.updateCount ?? 0}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+                  <span>Última actualización</span>
+                  <strong style={{ color: 'var(--text-main)' }}>{formatUpdateDate(updateInfo?.updatedAt)}</strong>
+                </div>
               </div>
             </div>
 
@@ -2975,18 +3000,11 @@ export default function App() {
             <button className="btn secondary" style={{ marginRight: 8 }}>🖼️ Cambiar logo</button>
           </div>
 
-          {/* Sección: Usuarios y Permisos */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Usuarios y Permisos</h3>
-            <button className="btn primary" style={{ marginRight: 8 }}>👤 Administrar usuarios</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🔑 Roles y permisos</button>
-          </div>
-
           {/* Sección: Importación/Exportación */}
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Importación y Exportación</h3>
             <button className="btn primary" style={{ marginRight: 8 }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📤 Exportar respaldo</button>
+            <button className="btn secondary" style={{ marginRight: 8 }} onClick={exportarBackup} disabled={!hasWritePermissions}>📤 Exportar respaldo</button>
             <button className="btn secondary" style={{ marginRight: 8 }}>📄 Descargar plantilla</button>
           </div>
 
@@ -2994,8 +3012,15 @@ export default function App() {
           <div style={{ marginBottom: 24 }}>
             <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Sincronización y Backup</h3>
             <button className="btn primary" style={{ marginRight: 8 }}>🔄 Sincronizar</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>💾 Backup manual</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>♻️ Restaurar backup</button>
+            <button className="btn secondary" style={{ marginRight: 8 }} onClick={exportarBackup} disabled={!hasWritePermissions}>💾 Backup manual</button>
+            <button className="btn secondary" style={{ marginRight: 8 }} onClick={() => addToast("Restaurar backup en desarrollo", "info")}>♻️ Restaurar backup</button>
+            <div style={{ marginTop: 10, fontSize: '0.9rem', color: '#64748b' }}>
+              Las actualizaciones manuales no borran datos. La base se guarda en esta ruta:
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+              <code style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: 6 }}>{dbPath || "(cargando...)"}</code>
+              <button className="btn secondary" onClick={() => dbPath && copyToClipboard(dbPath)} disabled={!dbPath}>📋 Copiar ruta</button>
+            </div>
           </div>
 
           {/* Sección: Personalización y Temas */}
@@ -3009,13 +3034,6 @@ export default function App() {
               <button className={`btn theme${theme === 'gris' ? ' selected' : ''}`} style={{ background: themes.gris['--bg-gradient'], color: themes.gris['--text'], border: theme === 'gris' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('gris')}>🟫 Masculino Gris</button>
             </div>
             <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Los cambios se aplicarán automáticamente.</span>
-          </div>
-
-          {/* Sección: Seguridad */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: 'var(--accent)', marginBottom: 8 }}>Seguridad</h3>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔒 Cambiar contraseña</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>🔐 Autenticación 2 pasos</button>
           </div>
 
           {/* Sección: Soporte y Ayuda */}
@@ -3254,6 +3272,116 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalEmpresa(false)}>Cancelar</button>
               <button className="btn primary" onClick={guardarEmpresa}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Documentación */}
+      {showModalDocumentacion && (
+        <div className="modal-overlay" onClick={() => setShowModalDocumentacion(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div className="modal-header">📖 Guía Rápida del Sistema</div>
+            <div className="modal-body" style={{ lineHeight: 1.6 }}>
+              
+              <h3 style={{ color: '#2563eb', marginTop: 0 }}>🏠 Dashboard</h3>
+              <p>Vista general con KPIs principales: cartera total, vencida, morosidad. Gráficos de aging y top clientes.</p>
+
+              <h3 style={{ color: '#2563eb', marginTop: 16 }}>👥 Gestión de Clientes</h3>
+              <ul style={{ marginLeft: 20 }}>
+                <li><strong>Ver clientes:</strong> Lista de clientes con saldo vencido y estado de contacto</li>
+                <li><strong>Registrar gestión:</strong> Llamadas, emails, WhatsApp, visitas con resultado y promesas</li>
+                <li><strong>Seguimiento:</strong> Historial completo por cliente</li>
+              </ul>
+
+              <h3 style={{ color: '#2563eb', marginTop: 16 }}>📊 Reportes</h3>
+              <ul style={{ marginLeft: 20 }}>
+                <li><strong>Documentos:</strong> Tabla completa de facturas con filtros por cliente, vendedor, aging</li>
+                <li><strong>Exportar:</strong> Excel/PDF con documentos seleccionados</li>
+                <li><strong>Estados de cuenta:</strong> PDF por cliente para enviar</li>
+              </ul>
+
+              <h3 style={{ color: '#2563eb', marginTop: 16 }}>📥 Importar desde Contifico</h3>
+              <ol style={{ marginLeft: 20 }}>
+                <li>Ir a <strong>Configuración &gt; Gestión de Datos</strong></li>
+                <li>Clic en <strong>Importar Excel Contifico</strong></li>
+                <li>Seleccionar archivo de Cartera por Cobrar</li>
+                <li>El sistema detecta automáticamente nuevos documentos y actualiza saldos</li>
+              </ol>
+              <p style={{ background: '#fef3c7', padding: 10, borderRadius: 6, fontSize: '0.9rem' }}>
+                💡 <strong>Tip:</strong> Importa regularmente para mantener la cartera actualizada. Los documentos pagados se cierran automáticamente.
+              </p>
+
+              <h3 style={{ color: '#2563eb', marginTop: 16 }}>🚨 Alertas</h3>
+              <p>Documentos críticos por días vencidos y monto. Usa filtros para priorizar tu cobranza.</p>
+
+              <h3 style={{ color: '#2563eb', marginTop: 16 }}>📈 Análisis y Tendencias</h3>
+              <p>Motivos de impago, productividad de gestores, tendencias históricas mensuales.</p>
+
+              <h3 style={{ color: '#2563eb', marginTop: 16 }}>⚙️ Configuración</h3>
+              <ul style={{ marginLeft: 20 }}>
+                <li><strong>Empresa:</strong> Datos, logo, RUC, meta mensual</li>
+                <li><strong>Temas:</strong> Personalización visual</li>
+                <li><strong>Respaldos:</strong> Exporta/importa base de datos</li>
+              </ul>
+
+              <div style={{ marginTop: 20, padding: 12, background: '#dbeafe', borderRadius: 8 }}>
+                <strong>📞 Soporte:</strong> j-mejiacastro1993@outlook.com | +593-962739443
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn primary" onClick={() => setShowModalDocumentacion(false)}>Entendido</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Historial de Cambios */}
+      {showModalHistorial && (
+        <div className="modal-overlay" onClick={() => setShowModalHistorial(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 650, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div className="modal-header">📝 Historial de Cambios</div>
+            <div className="modal-body">
+              
+              <div style={{ marginBottom: 20, padding: 12, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <strong style={{ color: '#15803d', fontSize: '1.1rem' }}>Versión 1.0.0</strong>
+                  <span style={{ fontSize: '0.85rem', color: '#16a34a' }}>Actual</span>
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#166534', marginBottom: 8 }}>Febrero 2026</div>
+                <ul style={{ margin: 0, paddingLeft: 20, color: '#15803d' }}>
+                  <li>✅ Sistema de gestión de carteras completo</li>
+                  <li>✅ Importación automática desde Contifico</li>
+                  <li>✅ Dashboard con KPIs en tiempo real</li>
+                  <li>✅ Gestión de clientes y seguimiento</li>
+                  <li>✅ Reportes exportables (Excel/PDF)</li>
+                  <li>✅ Sistema de alertas por aging</li>
+                  <li>✅ Análisis de morosidad y tendencias</li>
+                  <li>✅ Estados de cuenta automatizados</li>
+                  <li>✅ Protección de propiedad intelectual</li>
+                  <li>✅ Contador de actualizaciones</li>
+                  <li>✅ Logging de instalaciones</li>
+                  <li>✅ Copyright y términos integrados</li>
+                </ul>
+              </div>
+
+              <div style={{ padding: 10, background: '#f8fafc', borderRadius: 8, border: '1px dashed #cbd5e1' }}>
+                <strong style={{ color: '#475569' }}>🚀 Próximamente</strong>
+                <ul style={{ margin: '8px 0 0 20px', color: '#64748b', fontSize: '0.9rem' }}>
+                  <li>Integración con WhatsApp Business API</li>
+                  <li>Envío automático de estados de cuenta por email</li>
+                  <li>Dashboard móvil</li>
+                  <li>Roles y permisos de usuario</li>
+                  <li>Firma digital de documentos</li>
+                </ul>
+              </div>
+
+              <div style={{ marginTop: 20, padding: 12, background: '#fef3c7', borderRadius: 8, fontSize: '0.9rem' }}>
+                💡 <strong>Nota:</strong> Las actualizaciones preservan todos tus datos. Solo reinstala el .exe encima.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn primary" onClick={() => setShowModalHistorial(false)}>Cerrar</button>
             </div>
           </div>
         </div>

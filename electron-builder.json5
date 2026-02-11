@@ -1,7 +1,7 @@
 {
   appId: "com.mm.carteradashboard",
   productName: "CarteraDashBoardM&M",
-  copyright: "Copyright (c) 2026",
+  copyright: "© 2026 Jhon Franklin Mejia Castro (RUC: 0950998104001). All rights reserved.",
   directories: {
     output: "release",
     buildResources: "build"
@@ -9,7 +9,8 @@
   files: [
     "dist/**",
     "dist-electron/**",
-    "package.json"
+    "package.json",
+    "node_modules/**"
   ],
   asar: true,
   asarUnpack: [
@@ -18,7 +19,8 @@
   ],
   npmRebuild: true,
   win: {
-    target: ["nsis"]
+    target: ["nsis"],
+    signAndEditExecutable: false
   },
   nsis: {
     oneClick: false,

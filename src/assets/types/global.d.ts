@@ -102,6 +102,7 @@ declare global {
       getCloudflareUrl: () => Promise<{ ok: boolean; url: string }>;
       checkCloudflaredStatus: () => Promise<{ ok: boolean; status: "connected" | "disconnected" | "error" }>;
       restartCloudflared: () => Promise<{ ok: boolean; message: string }>;
+      getUpdateInfo: () => Promise<{ updateCount: number; currentVersion?: string; lastVersion?: string; updatedAt?: string; firstRunAt?: string }>;
       campanaCrear?: (data: CampanaData) => Promise<{ ok: boolean; message?: string }>;
       campanaEliminar?: (id: number) => Promise<{ ok: boolean; message?: string }>;
       reiniciarEstructuraExcel?: () => Promise<{ ok: boolean; message?: string }>;
