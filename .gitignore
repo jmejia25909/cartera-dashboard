@@ -13,6 +13,8 @@ dist-electron
 dist-ssr
 release
 *.local
+tsconfig.node.tsbuildinfo
+vite.config.js
 
 # Editor directories and files
 .vscode/*

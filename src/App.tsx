@@ -46,6 +46,11 @@ interface Alerta {
 // Utilidades básicas restauradas
 const fmtMoney = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
+const compactLabel = (label: string, maxChars = 22) => {
+  const clean = label.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean.length > maxChars ? `${clean.slice(0, maxChars)}...` : clean;
+};
+
 const toNumber = (value: unknown) => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
   if (value === null || value === undefined) return 0;
@@ -1108,7 +1113,8 @@ export default function App() {
               <RankingList
                 title="Por Vendedor"
                 items={Array.isArray(analisisPorVendedor) ? analisisPorVendedor.slice(0, 10).map((v) => ({
-                  label: v.vendedor,
+                  label: compactLabel(v.vendedor),
+                  fullLabel: v.vendedor,
                   value: v.totalPendiente,
                   color: v.porcentajeMorosidad > 30 ? '#ef4444' : v.porcentajeMorosidad > 15 ? '#f59e0b' : '#3b82f6'
                 })) : []}
@@ -1135,7 +1141,8 @@ export default function App() {
               <RankingList
                 title="Deudores Crónicos"
                 items={Array.isArray(deudoresCronicos) ? deudoresCronicos.slice(0, 10).map((d) => ({
-                  label: d.cliente,
+                  label: compactLabel(d.cliente),
+                  fullLabel: d.cliente,
                   value: d.totalVencido,
                   color: '#dc2626'
                 })) : []}

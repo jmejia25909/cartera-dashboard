@@ -141,6 +141,7 @@ body, #root {
   flex-direction: column;
   background: var(--bg-main);
   overflow: hidden;
+  min-height: 0;
 }
 
 .topbar {
@@ -197,6 +198,7 @@ body, #root {
   background: var(--bg-main) !important;
   border: none !important;
   position: relative;
+  min-height: 0;
 }
 
 /* Asegurar que todos los elementos de fondo usen el gradiente */
@@ -3546,8 +3548,6 @@ button:disabled {
   max-width: 1300px;
   margin: 0 auto;
   padding: 10px 16px;
-  max-height: calc(100vh - 70px);
-  overflow-y: auto;
 }
 
 .config-grid {
@@ -3813,28 +3813,6 @@ button:disabled {
 /* ==========================================
    OPTIMIZACIÓN CONFIGURACIÓN RESPONSIVE
    ========================================== */
-.config-container {
-  scroll-behavior: smooth;
-}
-
-.config-container::-webkit-scrollbar {
-  width: 8px;
-}
-
-.config-container::-webkit-scrollbar-track {
-  background: var(--bg-main);
-  border-radius: 4px;
-}
-
-.config-container::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
-}
-
-.config-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
 @media (max-height: 900px) {
   .config-grid {
     gap: 12px;
@@ -3853,5 +3831,32 @@ button:disabled {
 @media (max-width: 1200px) {
   .config-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 800px) {
+  .topbar {
+    padding: 0.7rem 1.2rem;
+  }
+
+  .brand h1 {
+    font-size: 1.4rem;
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .kpi-card {
+    padding: 0.7rem 0.6rem 0.08rem 0.6rem;
+  }
+
+  .kpi-title {
+    font-size: 0.58rem;
+    margin-bottom: 4px;
+  }
+
+  .kpi-value {
+    font-size: 1rem;
   }
 }
