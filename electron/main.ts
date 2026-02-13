@@ -1152,7 +1152,12 @@ function saveDocumentsToDb(db: any, docs: any[]) {
   const now = new Date();
   const importTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
 
-  const checkStmt = db.prepare("SELECT id FROM documentos WHERE documento = @documento AND cliente = @cliente AND tipo_documento = @tipo_documento LIMIT 1");
+  const checkStmt = db.prepare("SELECT id, total, cobros FROM documentos WHERE documento = @documento AND cliente = @cliente AND tipo_documento = @tipo_documento LIMIT 1");
+  const insertAbono = db.prepare(`
+    INSERT INTO abonos (documento, total_anterior, total_nuevo, fecha, observacion)
+    VALUES (@documento, @total_anterior, @total_nuevo, @fecha, @observacion)
+  `);
+  const hasPrevDocs = Boolean(db.prepare("SELECT 1 FROM documentos WHERE is_subtotal = 0 LIMIT 1").get());
   
   const insertDoc = db.prepare(`
     INSERT INTO documentos (
@@ -1213,6 +1218,21 @@ function saveDocumentsToDb(db: any, docs: any[]) {
         // Intentamos actualizar valores
         const info = updateDocValues.run({ ...docWithTime, id: existing.id });
         if (info.changes > 0) {
+          const prevTotal = Number(existing.total ?? 0);
+          const prevCobros = Number(existing.cobros ?? 0);
+          const totalBajo = Math.abs(prevTotal - doc.total) > 0.01 && doc.total < prevTotal;
+          const cobrosSubio = Math.abs(prevCobros - doc.cobros) > 0.01 && doc.cobros > prevCobros;
+          if (totalBajo || cobrosSubio) {
+            insertAbono.run({
+              documento: doc.documento,
+              total_anterior: prevTotal,
+              total_nuevo: doc.total,
+              fecha: now.toISOString(),
+              observacion: totalBajo
+                ? 'Abono detectado por cambio de total'
+                : 'Abono detectado por aumento de cobros'
+            });
+          }
           updatedDocs++;
         } else {
           // Si no cambiaron valores, solo actualizamos la fecha de "visto"
@@ -1222,6 +1242,15 @@ function saveDocumentsToDb(db: any, docs: any[]) {
         const info = insertDoc.run(docWithTime);
         insertedIds.push(Number(info.lastInsertRowid));
         insertedDocs++;
+        if (!hasPrevDocs && Number(doc.cobros) > 0) {
+          insertAbono.run({
+            documento: doc.documento,
+            total_anterior: Math.max(0, Number(doc.total) + Number(doc.cobros)),
+            total_nuevo: Number(doc.total),
+            fecha: now.toISOString(),
+            observacion: 'Abono detectado por cobros en primera importacion'
+          });
+        }
       }
     }
 
@@ -1237,6 +1266,27 @@ function saveDocumentsToDb(db: any, docs: any[]) {
     `).run({ importTimestamp });
     
     paidDocs = closeInfo.changes;
+
+    if (paidDocs > 0) {
+      const paidRows = db.prepare(`
+        SELECT documento, total, valor_documento, retenciones
+        FROM documentos
+        WHERE importado_en != @importTimestamp AND total = 0
+      `).all({ importTimestamp }) as Array<{ documento: string; total: number; valor_documento: number; retenciones: number }>;
+
+      for (const row of paidRows) {
+        const pago = Math.max(0, Number(row.valor_documento) - Number(row.retenciones));
+        if (pago > 0) {
+          insertAbono.run({
+            documento: row.documento,
+            total_anterior: pago,
+            total_nuevo: 0,
+            fecha: now.toISOString(),
+            observacion: 'Abono detectado por documento no presente en importacion'
+          });
+        }
+      }
+    }
   });
 
   transaction(docs);
@@ -1747,9 +1797,18 @@ ipcMain.handle("cuentaAplicarCrear", (_evt, data) => {
 
 ipcMain.handle("abonosListar", async () => {
   const data = db.prepare(`
-    SELECT id, documento, total_anterior, total_nuevo, fecha, observacion
-    FROM abonos
-    ORDER BY fecha DESC
+    SELECT 
+      a.id, 
+      a.documento, 
+      COALESCE(d.cliente, 'N/A') as cliente,
+      COALESCE(d.razon_social, 'N/A') as razon_social,
+      a.total_anterior, 
+      a.total_nuevo, 
+      a.fecha, 
+      a.observacion
+    FROM abonos a
+    LEFT JOIN documentos d ON a.documento = d.documento
+    ORDER BY a.fecha DESC
     LIMIT 50
   `).all();
   return data;

@@ -121,11 +121,21 @@ function getCell(row: unknown[], map: Record<string, number>, key: string): unkn
 // Import
 // -----------------------------
 export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Database): ImportResult {
+    const normalizeDocumento = (value: unknown): string => {
+      const raw = String(value ?? "").trim().toUpperCase();
+      if (!raw) return "";
+      const alnum = raw.replace(/[^A-Z0-9]/g, "");
+      if (!alnum) return raw;
+      if (/^[0-9]+$/.test(alnum)) return alnum.replace(/^0+/, "") || "0";
+      return alnum;
+    };
     // 1. Obtener documentos actuales para comparar
-    const docsPrevios: Record<string, { total: number }> = {};
-    for (const row of db.prepare("SELECT documento, total FROM documentos WHERE is_subtotal=0").all() as Array<{ documento: string; total: number }>) {
-      docsPrevios[row.documento] = { total: Number(row.total) };
+    const docsPrevios: Record<string, { documento: string; total: number; cobros: number }> = {};
+    for (const row of db.prepare("SELECT documento, total, cobros FROM documentos WHERE is_subtotal=0").all() as Array<{ documento: string; total: number; cobros: number }>) {
+      const key = normalizeDocumento(row.documento);
+      if (key) docsPrevios[key] = { documento: row.documento, total: Number(row.total), cobros: Number(row.cobros) };
     }
+    const isPrimeraImportacion = Object.keys(docsPrevios).length === 0;
 
     // 2. Llevar control de documentos importados en esta sesión
     const docsImportados = new Set<string>();
@@ -291,16 +301,32 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
 
       // Detectar abonos: si el documento ya existía y el total cambió
       if (!is_subtotal && documento) {
-        docsImportados.add(documento);
-        const previo = docsPrevios[documento];
-        if (previo && Math.abs(previo.total - total) > 0.01 && total < previo.total) {
-          // Registrar abono
+        const docKey = normalizeDocumento(documento);
+        if (docKey) docsImportados.add(docKey);
+        const previo = docKey ? docsPrevios[docKey] : undefined;
+        if (previo) {
+          const totalBajo = Math.abs(previo.total - total) > 0.01 && total < previo.total;
+          const cobrosSubio = Math.abs(cobros - previo.cobros) > 0.01 && cobros > previo.cobros;
+          if (totalBajo || cobrosSubio) {
+            // Registrar abono por comparacion con importacion previa
+            stmtInsertAbono.run({
+              documento,
+              total_anterior: previo.total,
+              total_nuevo: total,
+              fecha: new Date().toISOString(),
+              observacion: totalBajo
+                ? 'Abono detectado por cambio de total'
+                : 'Abono detectado por aumento de cobros',
+            });
+          }
+        } else if (isPrimeraImportacion && cobros > 0) {
+          // En primera importacion, registrar abonos si existe cobro
           stmtInsertAbono.run({
             documento,
-            total_anterior: previo.total,
+            total_anterior: Math.max(0, total + cobros),
             total_nuevo: total,
             fecha: new Date().toISOString(),
-            observacion: 'Abono detectado por importación',
+            observacion: 'Abono detectado por cobros en primera importacion',
           });
         }
       }
@@ -334,8 +360,9 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
     }
 
     // Marcar como pagados los documentos que ya no aparecen en la importación
-    for (const doc in docsPrevios) {
-      if (!docsImportados.has(doc)) {
+    for (const docKey in docsPrevios) {
+      if (!docsImportados.has(docKey)) {
+        const doc = docsPrevios[docKey].documento;
         // Insertar documento como pagado (total=0, estado='pagado')
         stmtInsertDoc.run({
           cliente: '',

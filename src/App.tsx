@@ -146,7 +146,7 @@ export default function App() {
   // Filtrar gestiones del cliente seleccionado desde allGestiones
   const gestiones = useMemo(() => {
     if (!selectedCliente || selectedCliente === 'Todos') return allGestiones;
-    return allGestiones.filter(g => g.cliente === selectedCliente);
+    return allGestiones.filter(g => g.cliente === selectedCliente || g.razon_social === selectedCliente);
   }, [allGestiones, selectedCliente]);
   
   const [tendencias, setTendencias] = useState<any[]>([]);
@@ -167,6 +167,9 @@ export default function App() {
   const [vistaAgrupada, setVistaAgrupada] = useState(false);
   const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
+  const [abonosFechaDesde, setAbonosFechaDesde] = useState("");
+  const [abonosFechaHasta, setAbonosFechaHasta] = useState("");
+  const [soloPendientes, setSoloPendientes] = useState(true);
   const [vistaAnalisis, setVistaAnalisis] = useState("motivos");
   const [mostrarGraficaTendencias, setMostrarGraficaTendencias] = useState(false);
 
@@ -176,8 +179,10 @@ export default function App() {
   const [showModalLimpiar, setShowModalLimpiar] = useState(false);
   const [showModalDocumentacion, setShowModalDocumentacion] = useState(false);
   const [showModalHistorial, setShowModalHistorial] = useState(false);
+  const [showModalEditarPromesa, setShowModalEditarPromesa] = useState(false);
+  const [promesaEditando, setPromesaEditando] = useState<any>(null);
   const [toasts, setToasts] = useState<any[]>([]);
-  const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: 0 });
+  const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: "" });
   
   // Configuración
   const [empresa, setEmpresa] = useState<any>({});
@@ -233,6 +238,51 @@ export default function App() {
   };
 
   const loadJsPDF = async () => { return { jsPDF: (await import('jspdf')).default, autoTable: (await import('jspdf-autotable')).default }; };
+  const renderPdfHeader = (
+    doc: any,
+    params: { title: string; lines: string[] }
+  ) => {
+    const headerHeight = 42;
+    const headerAccent = [59, 130, 246] as [number, number, number];
+    const headerMuted = [100, 116, 139] as [number, number, number];
+    const headerText = [15, 23, 42] as [number, number, number];
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const contentLeft = 14;
+
+    doc.setFillColor(241, 245, 249);
+    doc.rect(0, 0, pageWidth, headerHeight, 'F');
+    doc.setFillColor(headerAccent[0], headerAccent[1], headerAccent[2]);
+    doc.rect(0, 0, pageWidth, 3, 'F');
+
+    doc.setFillColor(219, 234, 254);
+    doc.circle(pageWidth - 28, 12, 18, 'F');
+    doc.setFillColor(191, 219, 254);
+    doc.circle(pageWidth - 50, 30, 24, 'F');
+
+    if (empresa.logo) {
+      try {
+        doc.addImage(empresa.logo, 'PNG', contentLeft, 9, 22, 22, undefined, 'FAST');
+      } catch (e) {
+        console.warn("Error cargando logo", e);
+      }
+    }
+
+    const titleX = empresa.logo ? contentLeft + 28 : contentLeft;
+    doc.setFontSize(16);
+    doc.setTextColor(headerText[0], headerText[1], headerText[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(params.title, titleX, 16);
+
+    doc.setFontSize(9);
+    doc.setTextColor(headerMuted[0], headerMuted[1], headerMuted[2]);
+    doc.setFont("helvetica", "normal");
+    const baseY = 22;
+    params.lines.filter(Boolean).slice(0, 3).forEach((line, idx) => {
+      doc.text(line, titleX, baseY + (idx * 5));
+    });
+
+    return { headerHeight, contentLeft, pageWidth, headerAccent, headerMuted, headerText };
+  };
   const loadXLSX = async () => { return await import('xlsx'); };
   const checkPermissions = async () => {
     if (window.api && window.api.hasWritePermissions) {
@@ -323,7 +373,27 @@ export default function App() {
   const docsVencidosCliente = useMemo(() => (!selectedCliente || selectedCliente === "Todos") ? [] : todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente), [todosDocsVencidos, selectedCliente]);
   const totalVencidoCliente = useMemo(() => docsVencidosCliente.reduce((sum, d) => sum + getDocAmount(d), 0), [docsVencidosCliente]);
   const clientesUnicos = useMemo(() => (selectedCliente && selectedCliente !== "Todos") ? [selectedCliente] : clientesConVencidos, [clientesConVencidos, selectedCliente]);
-  const filteredGestiones = useMemo(() => allGestiones, [allGestiones]);
+  const filteredGestiones = useMemo(() => {
+    if (!selectedCliente || selectedCliente === "Todos") return allGestiones;
+    return allGestiones.filter(g => g.cliente === selectedCliente || g.razon_social === selectedCliente);
+  }, [allGestiones, selectedCliente]);
+
+  const getWeekStartMonday = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const weekStartMonday = getWeekStartMonday(new Date());
+  const isInCurrentWeek = (fecha?: string) => {
+    if (!fecha) return false;
+    const date = new Date(fecha);
+    if (Number.isNaN(date.getTime())) return false;
+    return date >= weekStartMonday;
+  };
 
   // Effect para detectar tamaño de pantalla
   useEffect(() => {
@@ -428,13 +498,66 @@ export default function App() {
             console.error("Error cargando localStorage:", e);
           }
           
-          // Merge: prioridad a gestiones locales (ID string) sobre backend (ID numérico)
+          // Backend es la fuente de verdad - deduplicar contra él
           const gestionesBackend = Array.isArray(gestionesData) ? gestionesData : [];
-          const gestionesMerged = [
-            ...gestionesLocales.filter((g: any) => typeof g.id === 'string'), // Locales primero
-            ...gestionesBackend.filter((g: any) => typeof g.id === 'number')  // Backend después
-          ];
           
+          // Función para deduplicar: compara cliente + tipo + observación (exacto)
+          // También compara fecha con tolerancia de ±10 segundos (backends pueden tener pequeños offsets)
+          const deduplicateGestiones = (backend: any[], local: any[]) => {
+            const deduped = [...backend];
+            const localNoSincronizadas: any[] = [];
+            
+            for (const localGestion of local) {
+              // Buscar coincidencia en backend
+              const found = backend.some((bg) => {
+                const sameClient = bg.cliente === localGestion.cliente;
+                const sameType = bg.tipo === localGestion.tipo;
+                // Observación exacta es el identificador más confiable
+                const sameObs = bg.observacion === localGestion.observacion;
+                
+                // Comparar fechas con tolerancia: ±10 segundos
+                let sameDateish = false;
+                try {
+                  if (localGestion.fecha && bg.fecha) {
+                    const localTime = new Date(localGestion.fecha).getTime();
+                    const bgTime = new Date(bg.fecha).getTime();
+                    // Si ambas fechas son válidas, compararlas con tolerancia
+                    if (!isNaN(localTime) && !isNaN(bgTime)) {
+                      sameDateish = Math.abs(localTime - bgTime) < 10000; // ±10 segundos
+                    }
+                  }
+                } catch (e) {
+                  // Si hay error al parsear fechas, ignorar comparación de fecha
+                  sameDateish = false;
+                }
+                
+                // Criterio de duplicado: mismo cliente + tipo + observacion + fecha cercana
+                return sameClient && sameType && sameObs && sameDateish;
+              });
+              
+              // Solo incluir local si NO está en backend
+              if (!found) {
+                deduped.push(localGestion);
+                localNoSincronizadas.push(localGestion);
+              }
+            }
+            
+            // Limpiar localStorage de gestiones ya sincronizadas
+            try {
+              localStorage.setItem('cartera_gestiones_locales', JSON.stringify(localNoSincronizadas));
+            } catch (e) {
+              console.error("Error actualizando localStorage:", e);
+            }
+            
+            // Ordenar por fecha descendente
+            return deduped.sort((a: any, b: any) => {
+              const dateA = new Date(a.fecha).getTime();
+              const dateB = new Date(b.fecha).getTime();
+              return dateB - dateA;
+            });
+          };
+          
+          const gestionesMerged = deduplicateGestiones(gestionesBackend, gestionesLocales);
           setAllGestiones(gestionesMerged);
           // Filtrar promesas: buscar registros con "Promesa" en el resultado y que NO tengan "Cumplida"
           const promesasPendientes = gestionesMerged.filter((g: any) => 
@@ -726,10 +849,16 @@ export default function App() {
   async function guardarGestion() {
     if (isWeb || !selectedCliente) return;
     try {
+      // Convertir monto_promesa a número si es una promesa de pago
+      const gestionParaGuardar = {
+        ...gestionForm,
+        ...(gestionForm.resultado === "Promesa de Pago" && { monto_promesa: gestionForm.monto_promesa ? Number(gestionForm.monto_promesa) : 0 })
+      };
+      
       // Guardar en backend
       const result = await window.api.gestionGuardar({
         cliente: selectedCliente,
-        ...gestionForm
+        ...gestionParaGuardar
       });
       
       if (result?.ok) {
@@ -740,7 +869,7 @@ export default function App() {
           id: `manual_${Date.now()}`,
           cliente: selectedCliente,
           fecha: new Date().toISOString(),
-          ...gestionForm
+          ...gestionParaGuardar
         };
         const nuevasGestiones = [nuevaGestion, ...allGestiones];
         setAllGestiones(nuevasGestiones);
@@ -760,7 +889,7 @@ export default function App() {
           observacion: "",
           motivo: "",
           fecha_promesa: "",
-          monto_promesa: 0
+          monto_promesa: ""
         });
       } else {
         addToast(result?.message || "Error guardando gestión", "error");
@@ -818,6 +947,30 @@ export default function App() {
     }
   }
 
+  async function actualizarPromesa(promesaActualizada: any) {
+    if (isWeb) return;
+    try {
+      // Actualizar promesa en estado local
+      const nuevasPromesas = promesas.map(p => 
+        p.id === promesaActualizada.id ? promesaActualizada : p
+      );
+      setPromesas(nuevasPromesas);
+      setShowModalEditarPromesa(false);
+      setPromesaEditando(null);
+      addToast("Promesa actualizada correctamente", "success");
+      
+      // Persistir en localStorage
+      try {
+        localStorage.setItem('cartera_promesas_locales', JSON.stringify(nuevasPromesas));
+      } catch (e) {
+        console.error("Error guardando en localStorage:", e);
+      }
+    } catch (e) {
+      addToast("Error actualizando promesa", "error");
+      console.error("Error actualizando promesa:", e);
+    }
+  }
+
   async function guardarEmpresa() {
     if (isWeb) return;
     try {
@@ -851,6 +1004,360 @@ export default function App() {
       console.error("Error importando (frontend):", e);
     }
   }
+
+  const exportarAbonosPDF = async () => {
+    let abonosFiltrados = abonos;
+    if (abonosFechaDesde) {
+      abonosFiltrados = abonosFiltrados.filter(a => a.fecha && a.fecha >= abonosFechaDesde);
+    }
+    if (abonosFechaHasta) {
+      const hasta = abonosFechaHasta.length === 10 ? `${abonosFechaHasta}T23:59:59` : abonosFechaHasta;
+      abonosFiltrados = abonosFiltrados.filter(a => a.fecha && a.fecha <= hasta);
+    }
+    if (abonosFiltrados.length === 0) {
+      addToast("No hay abonos para reportar en el rango seleccionado", "info");
+      return;
+    }
+    try {
+      const { jsPDF, autoTable } = await loadJsPDF();
+      const doc = new jsPDF();
+      const accent = [59, 130, 246] as [number, number, number];
+      const muted = [100, 116, 139] as [number, number, number];
+      const text = [15, 23, 42] as [number, number, number];
+
+      const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+        title: 'Reporte de Abonos Detectados',
+        lines: [
+          `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+          `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+          empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+        ]
+      });
+      
+      const cardY = headerHeight + 6;
+      const cardH = 16;
+      const cardGap = 4;
+      const availableWidth = pageWidth - (contentLeft * 2);
+      const cardW = (availableWidth - (cardGap * 2)) / 3;
+      const startX = contentLeft;
+      
+      // Calcular KPIs
+      const totalAbonos = abonosFiltrados.length;
+      const montoTotalAbonado = abonosFiltrados.reduce((sum, a) => sum + ((a.total_anterior || 0) - (a.total_nuevo || 0)), 0);
+      const documentosUnicos = new Set(abonosFiltrados.map(a => a.documento)).size;
+      
+      const cards = [
+        { label: 'Total Abonos', value: `${totalAbonos}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+        { label: 'Monto Total', value: fmtMoney(montoTotalAbonado), color: [16, 185, 129] as [number, number, number], soft: [209, 250, 229] as [number, number, number] },
+        { label: 'Documentos', value: `${documentosUnicos}`, color: [107, 114, 128] as [number, number, number], soft: [243, 244, 246] as [number, number, number] }
+      ];
+      
+      cards.forEach((item, idx) => {
+        const x = startX + idx * (cardW + cardGap);
+        doc.setDrawColor(226, 232, 240);
+        doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+        doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+        doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+        doc.rect(x, cardY, cardW, 1.2, 'F');
+        doc.setFontSize(7);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+        doc.setFontSize(10);
+        doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+        doc.text(item.value, x + 4, cardY + 12);
+      });
+      
+      const tableData = abonosFiltrados.map(a => ([
+        a.fecha ? a.fecha.split('T')[0] : '-',
+        a.cliente || a.razon_social || '-',
+        a.documento || '-',
+        fmtMoney(a.total_anterior || 0),
+        fmtMoney((a.total_anterior || 0) - (a.total_nuevo || 0)),
+        fmtMoney(a.total_nuevo || 0),
+        a.observacion || '-'
+      ]));
+
+      autoTable(doc, {
+        head: [['Fecha', 'Cliente', 'Documento', 'Saldo Anterior', 'Pago', 'Nuevo Saldo', 'Observación']],
+        body: tableData,
+        startY: cardY + cardH + 8,
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 2, textColor: text, lineColor: [226, 232, 240], lineWidth: 0.2 },
+        headStyles: { 
+          fillColor: [219, 234, 254],
+          textColor: accent,
+          fontStyle: 'bold',
+          halign: 'left',
+          lineColor: accent,
+          lineWidth: 0.5
+        },
+        alternateRowStyles: {
+          fillColor: [249, 250, 251]
+        },
+        margin: { left: contentLeft, right: contentLeft },
+        columnStyles: {
+          3: { halign: 'right' },
+          4: { halign: 'right', textColor: [16, 185, 129] },
+          5: { halign: 'right' }
+        },
+        pageBreak: 'auto',
+        rowPageBreak: 'avoid'
+      });
+
+      // Pie de página
+      const pageSize = doc.internal.pageSize;
+      const pageHeight = pageSize.getHeight();
+      const totalPages = (doc as any).internal.getNumberOfPages?.() || 1;
+      
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.line(contentLeft, pageHeight - 14, pageWidth - contentLeft, pageHeight - 14);
+        
+        doc.setFontSize(7);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, contentLeft, pageHeight - 10);
+        doc.text(`Página ${i} de ${totalPages}`, pageWidth - contentLeft - 25, pageHeight - 10);
+      }
+
+      doc.save(`Abonos_${new Date().toISOString().split('T')[0]}.pdf`);
+      addToast("✅ Reporte de abonos generado", "success");
+    } catch (e) {
+      console.error(e);
+      addToast("Error generando reporte de abonos", "error");
+    }
+  };
+
+  const getAnalisisReportConfig = () => {
+    if (vistaAnalisis === 'motivos') {
+      const total = motivosData.reduce((sum, x) => sum + (x.total || 0), 0);
+      return {
+        key: 'motivos_impago',
+        title: 'Motivos de Impago',
+        head: ['Motivo', 'Casos', 'Monto Total', '%'],
+        alignRightIndices: [1, 2, 3],
+        rows: motivosData.map((m: any) => ([
+          m.label || '-',
+          `${m.count ?? 0}`,
+          fmtMoney(m.total || 0),
+          `${total > 0 ? ((m.total / total) * 100).toFixed(1) : '0'}%`
+        ]))
+      };
+    }
+
+    if (vistaAnalisis === 'productividad') {
+      return {
+        key: 'productividad',
+        title: 'Productividad de Gestores',
+        head: ['Gestor', 'Gestiones', 'Promesas', 'Pagos', 'Tasa Promesa', 'Saldo Recuperable'],
+        alignRightIndices: [1, 2, 3, 4, 5],
+        rows: productividadData.map((p: any) => ([
+          p.usuario || '-',
+          `${p.total_gestiones ?? 0}`,
+          `${p.promesas ?? 0}`,
+          `${p.pagos ?? 0}`,
+          `${p.tasa_promesa ?? 0}%`,
+          fmtMoney(p.saldo_recuperable || 0)
+        ]))
+      };
+    }
+
+    if (vistaAnalisis === 'riesgo') {
+      return {
+        key: 'riesgo',
+        title: 'Analisis de Riesgo',
+        head: ['Cliente', 'Deuda Total', 'Deuda Vencida', 'Dias Mora', 'Score', 'Prediccion'],
+        alignRightIndices: [1, 2, 3, 4],
+        rows: analisisRiesgo.map((a: any) => {
+          const prediccion = a.score < 30 ? 'Alto Riesgo' : a.score < 60 ? 'Riesgo Medio' : 'Bajo Riesgo';
+          return [
+            a.razon_social || '-',
+            fmtMoney(a.total_deuda || 0),
+            fmtMoney(a.deuda_vencida || 0),
+            `${a.max_dias_mora ?? 0}`,
+            `${a.score ?? 0}`,
+            prediccion
+          ];
+        })
+      };
+    }
+
+    return {
+      key: 'deudores_cronicos',
+      title: 'Deudores Cronicos',
+      head: ['#', 'Cliente', 'Vendedor', 'Deuda Total', 'Vencido (+90 dias)', 'Docs Vencidos'],
+      alignRightIndices: [0, 3, 4, 5],
+      rows: deudoresCronicos.map((d: any, idx: number) => ([
+        `${idx + 1}`,
+        d.razon_social || '-',
+        d.vendedor || '-',
+        fmtMoney(d.totalDeuda || 0),
+        fmtMoney(d.totalVencido || 0),
+        `${d.documentosVencidos ?? 0}`
+      ]))
+    };
+  };
+
+  const canExportAnalisis = useMemo(() => {
+    if (vistaAnalisis === 'motivos') return motivosData.length > 0;
+    if (vistaAnalisis === 'productividad') return productividadData.length > 0;
+    if (vistaAnalisis === 'riesgo') return analisisRiesgo.length > 0;
+    return deudoresCronicos.length > 0;
+  }, [vistaAnalisis, motivosData, productividadData, analisisRiesgo, deudoresCronicos]);
+
+  const getAnalisisSummary = () => {
+    if (vistaAnalisis === 'motivos') {
+      const totalCasos = motivosData.reduce((sum, x) => sum + (x.count || 0), 0);
+      const totalMonto = motivosData.reduce((sum, x) => sum + (x.total || 0), 0);
+      const topMotivo = motivosData[0]?.label || 'Sin datos';
+      return [
+        { label: 'Casos', value: `${totalCasos}` },
+        { label: 'Monto Total', value: fmtMoney(totalMonto) },
+        { label: 'Top Motivo', value: compactLabel(topMotivo, 20) }
+      ];
+    }
+
+    if (vistaAnalisis === 'productividad') {
+      const totalGestiones = productividadData.reduce((sum, x) => sum + (x.total_gestiones || 0), 0);
+      const totalPromesas = productividadData.reduce((sum, x) => sum + (x.promesas || 0), 0);
+      const tasaPromesa = totalGestiones > 0 ? ((totalPromesas / totalGestiones) * 100).toFixed(1) : '0.0';
+      return [
+        { label: 'Gestiones', value: `${totalGestiones}` },
+        { label: 'Promesas', value: `${totalPromesas}` },
+        { label: 'Tasa Promesa', value: `${tasaPromesa}%` }
+      ];
+    }
+
+    if (vistaAnalisis === 'riesgo') {
+      const clientes = analisisRiesgo.length;
+      const deudaTotal = analisisRiesgo.reduce((sum, x) => sum + (x.total_deuda || 0), 0);
+      const deudaVencida = analisisRiesgo.reduce((sum, x) => sum + (x.deuda_vencida || 0), 0);
+      return [
+        { label: 'Clientes', value: `${clientes}` },
+        { label: 'Deuda Total', value: fmtMoney(deudaTotal) },
+        { label: 'Deuda Vencida', value: fmtMoney(deudaVencida) }
+      ];
+    }
+
+    const totalCronicos = deudoresCronicos.length;
+    const deudaTotal = deudoresCronicos.reduce((sum, x) => sum + (x.totalDeuda || 0), 0);
+    const deudaVencida = deudoresCronicos.reduce((sum, x) => sum + (x.totalVencido || 0), 0);
+    return [
+      { label: 'Deudores', value: `${totalCronicos}` },
+      { label: 'Deuda Total', value: fmtMoney(deudaTotal) },
+      { label: 'Vencido +90', value: fmtMoney(deudaVencida) }
+    ];
+  };
+
+  const exportarAnalisisPDF = async () => {
+    const config = getAnalisisReportConfig();
+    if (!config.rows.length) {
+      addToast('No hay datos para reportar en esta vista', 'info');
+      return;
+    }
+
+    try {
+      const paletteBySection: Record<string, { accent: [number, number, number]; soft: [number, number, number] }> = {
+        motivos: { accent: [59, 130, 246], soft: [219, 234, 254] },
+        productividad: { accent: [16, 185, 129], soft: [209, 250, 229] },
+        riesgo: { accent: [239, 68, 68], soft: [254, 226, 226] },
+        cronicos: { accent: [220, 38, 38], soft: [254, 226, 226] }
+      };
+      const sectionPalette = paletteBySection[vistaAnalisis] || paletteBySection.motivos;
+      const { jsPDF, autoTable } = await loadJsPDF();
+      const doc = new jsPDF();
+
+      const accent = sectionPalette.accent;
+      const muted = [100, 116, 139] as [number, number, number];
+      const text = [15, 23, 42] as [number, number, number];
+
+      renderPdfHeader(doc, {
+        title: 'Panel de Analisis',
+        lines: [
+          `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+          `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+          `Seccion: ${config.title}`
+        ]
+      });
+
+      const summary = getAnalisisSummary();
+      const cardY = 46;
+      const cardH = 16;
+      const cardW = 58;
+      const cardGap = 6;
+
+      summary.forEach((item, idx) => {
+        const x = 14 + idx * (cardW + cardGap);
+        doc.setDrawColor(226, 232, 240);
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+        doc.setFillColor(accent[0], accent[1], accent[2]);
+        doc.rect(x, cardY, cardW, 1.2, 'F');
+        doc.setFontSize(7);
+        doc.setTextColor(muted[0], muted[1], muted[2]);
+        doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+        doc.setFontSize(10);
+        doc.setTextColor(accent[0], accent[1], accent[2]);
+        doc.text(item.value, x + 4, cardY + 12);
+      });
+
+      const columnStyles = (config.alignRightIndices || []).reduce((acc: Record<number, any>, idx: number) => {
+        acc[idx] = { halign: 'right' };
+        return acc;
+      }, {});
+
+      autoTable(doc, {
+        startY: cardY + cardH + 8,
+        head: [config.head],
+        body: config.rows,
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 2, textColor: text },
+        headStyles: {
+          fillColor: sectionPalette.soft,
+          textColor: accent,
+          fontStyle: 'bold',
+          halign: 'left'
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles,
+        didParseCell: (data) => {
+          if (data.section !== 'body') return;
+
+          if (vistaAnalisis === 'riesgo') {
+            const score = analisisRiesgo[data.row.index]?.score ?? 0;
+            const riskColor = score < 30 ? [254, 226, 226] : score < 60 ? [254, 243, 199] : [220, 252, 231];
+            data.cell.styles.fillColor = riskColor as any;
+            if (data.column.index === 5) {
+              data.cell.styles.textColor = score < 30 ? [185, 28, 28] : score < 60 ? [180, 83, 9] : [22, 101, 52];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+
+          if (vistaAnalisis === 'cronicos') {
+            data.cell.styles.fillColor = [254, 226, 226] as any;
+            if (data.column.index === 4) {
+              data.cell.styles.textColor = [185, 28, 28];
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        }
+      });
+
+      const filename = `Reporte_Analisis_${config.key}_${new Date().toISOString().split('T')[0]}.pdf`;
+      try {
+        const blobUrl = doc.output('bloburl');
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        console.warn('No se pudo abrir la vista previa del PDF:', e);
+      }
+      doc.save(filename);
+      addToast('✅ Reporte de analisis generado', 'success');
+    } catch (e) {
+      console.error(e);
+      addToast('Error generando reporte de analisis', 'error');
+    }
+  };
 
   async function exportarBackup() {
     if (isWeb) {
@@ -1173,10 +1680,25 @@ export default function App() {
       
       // Calcular gestiones de hoy
       const hoy = new Date().toISOString().split('T')[0];
-      const gestionesHoy = gestiones.filter(g => g.fecha && g.fecha.startsWith(hoy)).length;
       
-      // PDFs generados (placeholder - requiere tracking)
-      const pdfsGenerados = 0;
+      // EN GENERAL: clientes únicos / EN INDIVIDUAL: total de gestiones
+      const gestionesHoy = (selectedCliente && selectedCliente !== "Todos")
+        ? gestiones.filter(g => g.fecha && g.fecha.startsWith(hoy)).length  // Individual: todas las gestiones del cliente
+        : allGestiones
+            .filter(g => g.fecha && g.fecha.startsWith(hoy))
+            .map(g => g.cliente || g.razon_social)
+            .filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes únicos
+            .length;
+      
+      // PDFs generados hoy
+      // EN GENERAL: clientes únicos / EN INDIVIDUAL: total de PDFs
+      const pdfsGenerados = (selectedCliente && selectedCliente !== "Todos")
+        ? gestiones.filter(g => g.fecha && g.fecha.startsWith(hoy) && g.tipo === "PDF").length  // Individual: total de PDFs del cliente
+        : allGestiones
+            .filter(g => g.fecha && g.fecha.startsWith(hoy) && g.tipo === "PDF")
+            .map(g => g.cliente || g.razon_social)
+            .filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes únicos con PDF
+            .length;
       
       // Función para exportar PDF
       const exportarEstadoDeCuenta = async (clienteNombre: string) => {
@@ -1185,11 +1707,10 @@ export default function App() {
           return;
         }
         
-        // Obtener SOLO documentos VENCIDOS con saldo del cliente
+        // Obtener documentos con saldo (vencidos y vigentes)
         const docsCliente = docs.filter(d => 
           (d.razon_social === clienteNombre || d.cliente === clienteNombre) && 
-          (d.saldo || d.total) > 0.01 &&
-          (d.dias_vencidos || 0) > 0
+          (d.saldo || d.total) > 0.01
         ).sort((a, b) => new Date(a.fecha_vencimiento).getTime() - new Date(b.fecha_vencimiento).getTime());
 
         if (docsCliente.length === 0) {
@@ -1204,39 +1725,15 @@ export default function App() {
         try {
           const { jsPDF, autoTable } = await loadJsPDF();
           const doc = new jsPDF();
-          const pageWidth = doc.internal.pageSize.getWidth();
           const margin = 15;
-          // --- CABECERA MODERNA ---
-          doc.setFillColor(248, 250, 252); // Slate 50
-          doc.rect(0, 0, pageWidth, 55, 'F');
-          if (empresa.logo) {
-            try {
-              doc.addImage(empresa.logo, 'PNG', margin, 10, 25, 25, undefined, 'FAST');
-            } catch (e) { console.warn("Error cargando logo", e); }
-          }
-          doc.setFontSize(16);
-          doc.setTextColor(30, 41, 59); // Slate 800
-          doc.setFont("helvetica", "bold");
-          const titleX = empresa.logo ? margin + 35 : margin;
-          doc.text(empresa.nombre || "Mi Empresa", titleX, 18);
-          doc.setFontSize(10);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(71, 85, 105); // Slate 600
-          let yPos = 24;
-          if (empresa.ruc) { doc.text(`RUC: ${empresa.ruc}`, titleX, yPos); yPos += 5; }
-          if (empresa.email) { doc.text(empresa.email, titleX, yPos); yPos += 5; }
-          if (empresa.telefono) { doc.text(empresa.telefono, titleX, yPos); }
-          doc.setFontSize(22);
-          doc.setTextColor(37, 99, 235); // Blue 600
-          doc.setFont("helvetica", "bold");
-          doc.text("ESTADO DE CUENTA", pageWidth - margin, 20, { align: 'right' });
-          doc.setFontSize(10);
-          doc.setTextColor(100, 116, 139); // Slate 500
-          doc.setFont("helvetica", "normal");
-          doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, pageWidth - margin, 30, { align: 'right' });
-          if (empresa.administrador) {
-            doc.text(`Responsable: ${empresa.administrador}`, pageWidth - margin, 35, { align: 'right' });
-          }
+          const { pageWidth } = renderPdfHeader(doc, {
+            title: 'ESTADO DE CUENTA',
+            lines: [
+              `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+              `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+              empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+            ]
+          });
           // --- INFORMACIÓN DEL CLIENTE ---
           const startYInfo = 65;
           doc.setDrawColor(226, 232, 240);
@@ -1270,17 +1767,19 @@ export default function App() {
           drawKpi(margin, "TOTAL DEUDA", totalDeuda, [59, 130, 246]);
           drawKpi(margin + kpiWidth + 5, "VENCIDO", totalVencido, [239, 68, 68]);
           drawKpi(margin + (kpiWidth + 5) * 2, "POR VENCER", totalPorVencer, [16, 185, 129]);
-          // --- TABLA ---
-          const tableData = docsCliente.map(d => {
-            const dias = d.dias_vencidos || 0;
-            return [
-              d.documento || d.numero,
-              d.fecha_emision,
-              d.fecha_vencimiento,
-              dias > 0 ? `${dias} días` : 'Vigente',
-              fmtMoney(d.total)
-            ];
-          });
+          // --- TABLA (SOLO DOCUMENTOS VENCIDOS) ---
+          const tableData = docsCliente
+            .filter(d => (d.dias_vencidos || 0) > 0)  // Solo vencidos para la tabla
+            .map(d => {
+              const dias = d.dias_vencidos || 0;
+              return [
+                d.documento || d.numero,
+                d.fecha_emision,
+                d.fecha_vencimiento,
+                `${dias} días`,
+                fmtMoney(getDocAmount(d))
+              ];
+            });
           autoTable(doc, {
             head: [['Documento', 'Emisión', 'Vencimiento', 'Estado', 'Saldo']],
             body: tableData,
@@ -1299,7 +1798,7 @@ export default function App() {
           });
         } catch (e) {
           console.error(e);
-          addToast("Error generando PDF", "error");
+          addToast("Error generando estado de cuenta", "error");
         }
       };
 
@@ -1333,7 +1832,7 @@ export default function App() {
         addToast("Gestión de Email registrada", "success");
       };
 
-      // Función para generar Reporte de Gestión (Evidencia)
+      // Función para generar Reporte de Gestión (Evidencia) - VISTA AGRUPADA COMPACTA
       const exportarReporteGestion = async () => {
         // Filtrar gestiones por fecha si hay filtro
         let gestionesFiltradas = filteredGestiones;
@@ -1341,7 +1840,6 @@ export default function App() {
           gestionesFiltradas = gestionesFiltradas.filter(g => g.fecha && g.fecha >= filtroFechaDesde);
         }
         if (filtroFechaHasta) {
-          // Incluir todo el día hasta 23:59:59
           const hasta = filtroFechaHasta.length === 10 ? filtroFechaHasta + 'T23:59:59' : filtroFechaHasta;
           gestionesFiltradas = gestionesFiltradas.filter(g => g.fecha && g.fecha <= hasta);
         }
@@ -1353,52 +1851,176 @@ export default function App() {
           const { jsPDF, autoTable } = await loadJsPDF();
           const doc = new jsPDF();
 
-          // Header
-          doc.setFillColor(241, 245, 249);
-          doc.rect(0, 0, 210, 40, 'F');
+          const accent = [59, 130, 246] as [number, number, number];
+          const muted = [100, 116, 139] as [number, number, number];
+          const text = [15, 23, 42] as [number, number, number];
+          const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+            title: 'Reporte de Gestion de Cobranza',
+            lines: [
+              `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+              `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+              `Alcance: ${selectedCliente === "Todos" || !selectedCliente ? "General (Todos los clientes)" : selectedCliente}`
+            ]
+          });
 
-          doc.setFontSize(18);
-          doc.setTextColor(30, 41, 59);
-          doc.text("REPORTE DE GESTIÓN DE COBRANZA", 14, 18);
+          const totalGestiones = gestionesFiltradas.length;
+          const totalContactos = gestionesFiltradas.filter(g =>
+            ['Llamada', 'Visita'].some(t => g.tipo.includes(t)) || g.resultado?.includes('Contactado')
+          ).length;
+          const totalPromesas = gestionesFiltradas.filter(g => g.promesa || g.monto_promesa).length;
+          const totalPdfs = gestionesFiltradas.filter(g => g.tipo.includes('PDF')).length;
 
-          doc.setFontSize(10);
-          doc.setTextColor(100, 116, 139);
-          doc.text(`Empresa: ${empresa.nombre || 'Mi Empresa'}`, 14, 26);
-          doc.text(`Fecha de Reporte: ${new Date().toLocaleDateString()}`, 14, 32);
-          doc.text(`Alcance: ${selectedCliente === "Todos" || !selectedCliente ? "General (Todos los clientes)" : selectedCliente}`, 14, 38);
+          const cardY = headerHeight + 6;
+          const cardH = 16;
+          const cardGap = 4;
+          const availableWidth = pageWidth - (contentLeft * 2);
+          const cardW = (availableWidth - (cardGap * 3)) / 4;
+          const cards = [
+            { label: 'Gestiones', value: `${totalGestiones}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+            { label: 'Contactos', value: `${totalContactos}`, color: [14, 116, 144] as [number, number, number], soft: [204, 251, 241] as [number, number, number] },
+            { label: 'Promesas', value: `${totalPromesas}`, color: [245, 158, 11] as [number, number, number], soft: [254, 243, 199] as [number, number, number] },
+            { label: 'PDFs', value: `${totalPdfs}`, color: [99, 102, 241] as [number, number, number], soft: [224, 231, 255] as [number, number, number] }
+          ];
 
-          // Construir filas detalladas (una por gestión) para el reporte
-          const tableData = gestionesFiltradas.map(g => [
-            g.razon_social || g.cliente,
-            g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-',
-            ['Llamada', 'Visita'].some(t => g.tipo.includes(t)) ? 'X' : '',
-            g.tipo.includes('Email') ? 'X' : '',
-            g.tipo.includes('WhatsApp') ? 'X' : '',
-            g.tipo.includes('PDF') ? 'X' : '',
-            g.resultado,
-            g.observacion || '-',
-            g.monto_promesa ? fmtMoney(g.monto_promesa) : '-'
-          ]);
+          cards.forEach((item, idx) => {
+            const x = contentLeft + idx * (cardW + cardGap);
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+            doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+            doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+            doc.rect(x, cardY, cardW, 1.2, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(muted[0], muted[1], muted[2]);
+            doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+            doc.setFontSize(10);
+            doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+            doc.text(item.value, x + 4, cardY + 12);
+          });
 
-          autoTable(doc, {
-            startY: 45,
-            head: [['Cliente', 'Fecha', 'Telf', 'Mail', 'WApp', 'PDF', 'Resultado', 'Observación', 'Promesa']],
-            body: tableData,
-            theme: 'grid',
-            styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
-            headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold', halign: 'center' },
-            columnStyles: {
-              0: { cellWidth: 40 }, // Cliente
-              1: { cellWidth: 25 }, // Fecha
-              2: { cellWidth: 10, halign: 'center' }, // Telf
-              3: { cellWidth: 10, halign: 'center' }, // Mail
-              4: { cellWidth: 10, halign: 'center' }, // WApp
-              5: { cellWidth: 10, halign: 'center' }, // PDF
-              6: { cellWidth: 25 }, // Resultado
-              7: { cellWidth: 'auto' }, // Obs
-              8: { cellWidth: 20, halign: 'right' } // Promesa
-            },
-            alternateRowStyles: { fillColor: [248, 250, 252] }
+          // Agrupar gestiones por cliente
+          const clientesMap = new Map<string, any[]>();
+          gestionesFiltradas.forEach(g => {
+            const cliente = g.razon_social || g.cliente;
+            if (!clientesMap.has(cliente)) clientesMap.set(cliente, []);
+            clientesMap.get(cliente)!.push(g);
+          });
+
+          // Ordenar clientes alfabéticamente
+          const clientesSorted = Array.from(clientesMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+
+          // Función para obtener color según resultado y fecha alternada - COLORES ALTERNADOS POR FECHA
+          const getResultadoColorWithDate = (resultado: string, dateIndex: number) => {
+            // Dos sets de colores alternados por fecha
+            const colorMap = {
+              0: { // Fechas pares - Colores normales (más saturados)
+                Contactado: [187, 247, 208],
+                Promesa: [253, 224, 71],
+                NoContesta: [252, 165, 165],
+                Enviado: [191, 219, 255],
+                Default: [248, 250, 252]
+              },
+              1: { // Fechas impares - Colores más claros/suaves
+                Contactado: [210, 248, 225],
+                Promesa: [254, 235, 131],
+                NoContesta: [253, 195, 195],
+                Enviado: [212, 230, 255],
+                Default: [240, 245, 250]
+              }
+            };
+
+            const colors = colorMap[dateIndex % 2];
+            if (resultado?.includes('Contactado')) return colors.Contactado;
+            if (resultado?.includes('Promesa')) return colors.Promesa;
+            if (resultado?.includes('No Contesta')) return colors.NoContesta;
+            if (resultado?.includes('Enviado') || resultado?.includes('Generado')) return colors.Enviado;
+            return colors.Default;
+          };
+
+          let startY = cardY + cardH + 18;
+
+          // Crear tabla separada por cada cliente
+          clientesSorted.forEach(([cliente, gestiones], clienteIdx) => {
+            // Ordenar gestiones por fecha y crear mapa de índices
+            const gestionesOrdenadas = [...gestiones].sort((a, b) => {
+              const dateA = a.fecha ? a.fecha.split('T')[0] : '';
+              const dateB = b.fecha ? b.fecha.split('T')[0] : '';
+              return dateB.localeCompare(dateA); // Más recientes primero
+            });
+
+            // Crear mapa de fecha -> índice para alternar colores
+            const fechaIndexMap = new Map<string, number>();
+            let fechaCounter = 0;
+            gestionesOrdenadas.forEach(g => {
+              const fecha = g.fecha ? g.fecha.split('T')[0] : 'sin-fecha';
+              if (!fechaIndexMap.has(fecha)) {
+                fechaIndexMap.set(fecha, fechaCounter);
+                fechaCounter++;
+              }
+            });
+
+            // Calcular subtotales del cliente
+            const totalClienteGestiones = gestionesOrdenadas.length;
+            const totalClientePromesas = gestionesOrdenadas.filter(g => g.promesa || g.monto_promesa).length;
+            const totalMontoPromesas = gestionesOrdenadas.reduce((sum, g) => sum + (g.monto_promesa || 0), 0);
+            const contactosCliente = gestionesOrdenadas.filter(g =>
+              ['Llamada', 'Visita'].some(t => g.tipo.includes(t)) || g.resultado?.includes('Contactado')
+            ).length;
+
+            // Construir datos para este cliente
+            const clienteTableData: any[] = [];
+
+            // Filas de gestiones del cliente - CON COLORES ALTERNADOS POR FECHA
+            gestionesOrdenadas.forEach(g => {
+              const fechaKey = g.fecha ? g.fecha.split('T')[0] : 'sin-fecha';
+              const dateIndex = fechaIndexMap.get(fechaKey) || 0;
+              const bgColor = getResultadoColorWithDate(g.resultado, dateIndex);
+
+              clienteTableData.push([
+                { content: g.fecha ? g.fecha.replace('T', ' ').substring(0, 16) : '-', styles: { fillColor: bgColor } },
+                { content: ['Llamada', 'Visita'].some(t => g.tipo.includes(t)) ? 'X' : '', styles: { halign: 'center', fillColor: bgColor } },
+                { content: g.tipo.includes('Email') ? 'X' : '', styles: { halign: 'center', fillColor: bgColor } },
+                { content: g.tipo.includes('WhatsApp') ? 'X' : '', styles: { halign: 'center', fillColor: bgColor } },
+                { content: g.tipo.includes('PDF') ? 'X' : '', styles: { halign: 'center', fillColor: bgColor } },
+                { content: g.resultado || '-', styles: { fillColor: bgColor } },
+                { content: g.observacion || '-', styles: { fillColor: bgColor } },
+                { content: g.monto_promesa ? fmtMoney(g.monto_promesa) : '-', styles: { fontStyle: g.monto_promesa ? 'bold' : 'normal', halign: 'right', textColor: g.monto_promesa ? [245, 158, 11] : text, fillColor: bgColor } }
+              ]);
+            });
+
+            // Subtotal por cliente - FILA COMPACTA
+            const montoStr = totalMontoPromesas > 0 ? fmtMoney(totalMontoPromesas) : '-';
+            clienteTableData.push([
+              { content: `SUBTOTAL: ${totalClienteGestiones} gest. | ${contactosCliente} contactos | ${totalClientePromesas} promesas | ${montoStr}`, styles: { fontStyle: 'bold', fontSize: 7, textColor: text, fillColor: [243, 244, 246], cellPadding: [2, 4] }, colSpan: 8 }
+            ]);
+
+            // Crear tabla para este cliente con encabezado arriba
+            const clienteHead = [
+              [{ content: `${cliente.toUpperCase()}`, styles: { fontStyle: 'bold', fontSize: 8, textColor: accent, fillColor: [219, 234, 254], cellPadding: [3, 4], halign: 'center' }, colSpan: 8 }],
+              ['Fecha', 'Telf', 'Mail', 'WApp', 'PDF', 'Resultado', 'Observación', 'Monto']
+            ];
+
+            autoTable(doc, {
+              startY: startY,
+              head: clienteHead,
+              body: clienteTableData,
+              theme: 'plain',
+              styles: { fontSize: 8, cellPadding: [2, 3], valign: 'middle', textColor: text },
+              headStyles: { fillColor: [219, 234, 254], textColor: accent, fontStyle: 'bold', halign: 'center', fontSize: 8 },
+              margin: { left: contentLeft, right: contentLeft },
+              columnStyles: {
+                0: { cellWidth: 25 },
+                1: { cellWidth: 14, halign: 'center' },
+                2: { cellWidth: 14, halign: 'center' },
+                3: { cellWidth: 14, halign: 'center' },
+                4: { cellWidth: 14, halign: 'center' },
+                5: { cellWidth: 35 },
+                6: { cellWidth: 56 },
+                7: { cellWidth: 21, halign: 'right' }
+              }
+            });
+
+            // Actualizar startY para la siguiente tabla
+            startY = (doc as any).lastAutoTable.finalY + 8;
           });
 
           const safeName = (selectedCliente === "Todos" || !selectedCliente ? "General" : selectedCliente).replace(/[^a-z0-9]/gi, '_');
@@ -1595,11 +2217,11 @@ export default function App() {
                     flexWrap: 'wrap'
                   }}>
                     <span>💰 Vencido: <strong style={{color: '#ef4444', fontSize: '1.1rem'}}>{fmtMoney(totalVencidoCliente)}</strong></span>
-                    {todosDocsVencidos.find(d => d.cliente === selectedCliente) && (
-                      <span>⏰ Máx Días Venc.: <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>{Math.max(...todosDocsVencidos.filter(d => d.cliente === selectedCliente).map(d => d.dias_vencidos || 0))} días</strong></span>
+                    {todosDocsVencidos.find(d => d.razon_social === selectedCliente || d.cliente === selectedCliente) && (
+                      <span>⏰ Máx Días Venc.: <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>{Math.max(...todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente).map(d => d.dias_vencidos || 0))} días</strong></span>
                     )}
-                    {gestiones.length > 0 && (
-                      <span>📞 Última contacto: <strong style={{color: '#3b82f6'}}>{gestiones[0].fecha ? gestiones[0].fecha.substring(0, 10) : 'N/A'}</strong></span>
+                    {gestiones.filter(g => isInCurrentWeek(g.fecha)).length > 0 && (
+                      <span>📞 Última contacto: <strong style={{color: '#3b82f6'}}>{gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha ? gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha.substring(0, 10) : 'N/A'}</strong></span>
                     )}
                   </div>
                 </div>
@@ -1720,7 +2342,7 @@ export default function App() {
                   onClick={() => exportarEstadoDeCuenta(selectedCliente)}
                 >
                   <span style={{fontSize: '1.4rem'}}>📄</span>
-                  Generar PDF
+                  Estado de Cuenta
                 </button>
               </div>
 
@@ -1899,7 +2521,7 @@ export default function App() {
                         <th className="text-center" title="Última llamada">📞</th>
                         <th className="text-center" title="Último email">📧</th>
                         <th className="text-center" title="Último WhatsApp">💬</th>
-                        <th className="text-center" title="Último PDF">📄</th>
+                        <th className="text-center" title="Último estado de cuenta">📄</th>
                         <th style={{width: '100px'}}>Acción</th>
                       </tr>
                     </thead>
@@ -1918,14 +2540,15 @@ export default function App() {
                             return { cliente, docsCliente, totalCliente };
                           })
                           .sort((a, b) => b.totalCliente - a.totalCliente)
-                          .slice(0, 100)
                           .map(({ cliente, docsCliente, totalCliente }) => {
                             const maxDias = docsCliente.length > 0 ? Math.max(...docsCliente.map(d => d.dias_vencidos || 0)) : 0;
-                            const gestionesCliente = allGestiones.filter(g => (g.razon_social || g.cliente) === cliente);
-                            const lastCall = gestionesCliente.find(g => g.tipo === 'Llamada' || g.tipo === 'Visita');
-                            const lastEmail = gestionesCliente.find(g => g.tipo === 'Email');
-                            const lastWhatsapp = gestionesCliente.find(g => g.tipo === 'WhatsApp');
-                            const lastPdf = gestionesCliente.find(g => g.tipo === 'PDF');
+                            const gestionesSemana = allGestiones.filter(g =>
+                              (g.razon_social || g.cliente) === cliente && isInCurrentWeek(g.fecha)
+                            );
+                            const lastCall = gestionesSemana.find(g => g.tipo === 'Llamada' || g.tipo === 'Visita');
+                            const lastEmail = gestionesSemana.find(g => g.tipo === 'Email');
+                            const lastWhatsapp = gestionesSemana.find(g => g.tipo === 'WhatsApp');
+                            const lastPdf = gestionesSemana.find(g => g.tipo === 'PDF');
                             const colorIndicador = maxDias > 90 ? '#ef4444' : maxDias > 60 ? '#f59e0b' : '#10b981';
 
                             return (
@@ -1947,7 +2570,7 @@ export default function App() {
                                 <td className="text-center" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envío'}>
                                   {lastWhatsapp ? <span style={{color:'#22c55e', fontSize: '1.1rem'}}>✅</span> : '○'}
                                 </td>
-                                <td className="text-center" title={lastPdf ? lastPdf.fecha : 'Sin PDF'}>
+                                <td className="text-center" title={lastPdf ? lastPdf.fecha : 'Sin estado de cuenta'}>
                                   {lastPdf ? <span style={{color:'#6366f1', fontSize: '1.1rem'}}>✅</span> : '○'}
                                 </td>
                                 <td>
@@ -1967,9 +2590,6 @@ export default function App() {
                   </table>
                 </div>
               </div>
-              {clientesConVencidos.length > 100 && (
-                <p className="table-footnote">Mostrando 100 de {clientesConVencidos.length} clientes</p>
-              )}
             </div>
           )}
         </div>
@@ -2141,6 +2761,7 @@ export default function App() {
         const matchCliente = !selectedCliente || d.cliente === selectedCliente || d.razon_social === selectedCliente;
         const matchVendedor = !selectedVendedor || d.vendedor === selectedVendedor;
         const matchCentro = filtroCentroCosto === "Todos" || d.centro_costo === filtroCentroCosto;
+        const matchPendiente = !soloPendientes || getDocAmount(d) > 0;
 
         let matchAging = true;
         const dias = d.dias_vencidos ?? 0;
@@ -2154,7 +2775,7 @@ export default function App() {
           || (d.cliente || '').toLowerCase().includes(normalizedSearch)
           || (d.documento || d.numero || '').toLowerCase().includes(normalizedSearch);
 
-        return matchCliente && matchVendedor && matchCentro && matchAging && matchSearch;
+        return matchCliente && matchVendedor && matchCentro && matchAging && matchSearch && matchPendiente;
       });
 
       const exportarExcel = async () => {
@@ -2179,7 +2800,16 @@ export default function App() {
           const ws = XLSX.utils.json_to_sheet(dataExport);
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
-          XLSX.writeFile(wb, `Cartera_${new Date().toISOString().split('T')[0]}.xlsx`);
+          
+          // Nombre del archivo según tipo de reporte
+          let nombreArchivoExcel = 'Cartera_GENERAL';
+          if (selectedVendedor) {
+            nombreArchivoExcel = `Cartera_${selectedVendedor.replace(/[^a-z0-9]/gi, '_')}`;
+          } else if (selectedCliente && selectedCliente !== 'Todos') {
+            nombreArchivoExcel = `Cartera_${selectedCliente.replace(/[^a-z0-9]/gi, '_')}`;
+          }
+          
+          XLSX.writeFile(wb, `${nombreArchivoExcel}_${new Date().toISOString().split('T')[0]}.xlsx`);
           addToast('✅ Reporte Excel generado', 'success');
         } catch (error) {
           addToast('❌ Error al generar Excel', 'error');
@@ -2190,30 +2820,132 @@ export default function App() {
         try {
           const { jsPDF, autoTable } = await loadJsPDF();
           const doc = new jsPDF();
-          doc.setFontSize(16);
-          doc.text('Reporte de Cartera', 14, 15);
-          doc.setFontSize(10);
-          doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 22);
-          
-          const tableData = docsFiltrados.map((d: any) => {
-            const aging = d.aging || getAgingLabel(d);
-            return [
-            d.documento,
-            d.razon_social,
-            d.dias_vencidos || 0,
-            aging,
-            fmtMoney(d.total)
-          ]});
-          
-          autoTable(doc, {
-            head: [['Documento', 'Cliente', 'Días Venc.', 'Aging', 'Saldo']],
-            body: tableData,
-            startY: 28,
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: [59, 130, 246] }
+          const accent = [59, 130, 246] as [number, number, number];
+          const muted = [100, 116, 139] as [number, number, number];
+          const text = [15, 23, 42] as [number, number, number];
+          // Título con diferenciación: GENERAL, CLIENTE o VENDEDOR
+          let tituloReporte = 'Reporte de Cartera - GENERAL';
+          if (selectedVendedor) {
+            tituloReporte = `Reporte de Cartera ${selectedVendedor}`;
+          } else if (selectedCliente && selectedCliente !== 'Todos') {
+            tituloReporte = `Reporte de Cartera - ${selectedCliente}`;
+          }
+
+          const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+            title: tituloReporte,
+            lines: [
+              `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+              `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+              empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+            ]
+          });
+
+          const totalDocs = docsFiltrados.length;
+          const totalMonto = docsFiltrados.reduce((sum: number, d: any) => sum + getDocAmount(d), 0);
+          const docsVencidos = docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0);
+          const totalVencido = docsVencidos.reduce((sum: number, d: any) => sum + getDocAmount(d), 0);
+
+          const cardY = headerHeight + 6;
+          const cardH = 16;
+          const cardGap = 4;
+          const availableWidth = pageWidth - (contentLeft * 2);
+          const cardW = (availableWidth - (cardGap * 3)) / 4;
+          const startX = contentLeft;
+          const cards = [
+            { label: 'Documentos', value: `${totalDocs}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+            { label: 'Monto Total', value: fmtMoney(totalMonto), color: [14, 116, 144] as [number, number, number], soft: [204, 251, 241] as [number, number, number] },
+            { label: 'Docs Vencidos', value: `${docsVencidos.length}`, color: [245, 158, 11] as [number, number, number], soft: [254, 243, 199] as [number, number, number] },
+            { label: 'Monto Vencido', value: fmtMoney(totalVencido), color: [239, 68, 68] as [number, number, number], soft: [254, 226, 226] as [number, number, number] }
+          ];
+
+          cards.forEach((item, idx) => {
+            const x = startX + idx * (cardW + cardGap);
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+            doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+            doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+            doc.rect(x, cardY, cardW, 1.2, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(muted[0], muted[1], muted[2]);
+            doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+            doc.setFontSize(10);
+            doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+            doc.text(item.value, x + 4, cardY + 12);
           });
           
-          doc.save(`Cartera_${new Date().toISOString().split('T')[0]}.pdf`);
+          const groupedRows: Array<[string, string, string | number, string, string]> = [];
+          const rowMeta: Array<{ isGroup: boolean; doc?: Documento }> = [];
+          const grouped = new Map<string, Documento[]>();
+          docsFiltrados.forEach((d: any) => {
+            const key = d.razon_social || d.cliente || '-';
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key)!.push(d as Documento);
+          });
+
+          Array.from(grouped.entries()).forEach(([clienteNombre, docsCliente]) => {
+            const subtotal = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
+            groupedRows.push(['', clienteNombre, '', '', fmtMoney(subtotal)]);
+            rowMeta.push({ isGroup: true });
+
+            docsCliente.forEach((d) => {
+              const aging = (d as any).aging || getAgingLabel(d);
+              groupedRows.push([
+                d.documento || d.numero || '-',
+                '',
+                d.dias_vencidos || 0,
+                aging,
+                fmtMoney(getDocAmount(d))
+              ]);
+              rowMeta.push({ isGroup: false, doc: d });
+            });
+          });
+          
+          const getRowFill = (agingValue: string, dias: number) => {
+            if (dias > 180 || agingValue === '>360' || agingValue === '360') return [254, 226, 226];
+            if (dias > 90 || agingValue === '180' || agingValue === '150' || agingValue === '120') return [254, 243, 199];
+            if (dias > 0) return [220, 252, 231];
+            return [248, 250, 252];
+          };
+
+          autoTable(doc, {
+            head: [['Documento', 'Cliente', 'Dias Venc.', 'Aging', 'Saldo']],
+            body: groupedRows,
+            startY: cardY + cardH + 8,
+            theme: 'plain',
+            styles: { fontSize: 8, cellPadding: 2, textColor: text },
+            headStyles: { fillColor: [219, 234, 254], textColor: accent, fontStyle: 'bold' },
+            margin: { left: contentLeft, right: contentLeft },
+            columnStyles: {
+              2: { halign: 'right' },
+              4: { halign: 'right' }
+            },
+            didParseCell: (data) => {
+              if (data.section !== 'body') return;
+              const meta = rowMeta[data.row.index];
+              if (meta?.isGroup) {
+                data.cell.styles.fillColor = [241, 245, 249] as any;
+                data.cell.styles.fontStyle = 'bold';
+                if (data.column.index === 4) {
+                  data.cell.styles.textColor = accent as any;
+                }
+                return;
+              }
+              const rowDoc = meta?.doc;
+              const dias = rowDoc?.dias_vencidos || 0;
+              const agingValue = (rowDoc as any)?.aging || (rowDoc ? getAgingLabel(rowDoc) : '');
+              data.cell.styles.fillColor = getRowFill(agingValue, dias) as any;
+            }
+          });
+          
+          // Nombre del archivo según tipo de reporte
+          let nombreArchivo = 'Cartera_GENERAL';
+          if (selectedVendedor) {
+            nombreArchivo = `Cartera_${selectedVendedor.replace(/[^a-z0-9]/gi, '_')}`;
+          } else if (selectedCliente && selectedCliente !== 'Todos') {
+            nombreArchivo = `Cartera_${selectedCliente.replace(/[^a-z0-9]/gi, '_')}`;
+          }
+          
+          doc.save(`${nombreArchivo}_${new Date().toISOString().split('T')[0]}.pdf`);
           addToast('✅ Reporte PDF generado', 'success');
         } catch (error) {
           addToast('❌ Error al generar PDF', 'error');
@@ -2312,6 +3044,10 @@ export default function App() {
                 <input type="checkbox" checked={vistaAgrupada} onChange={e => setVistaAgrupada(e.target.checked)} />
                 <span>Vista Agrupada con Subtotales</span>
               </label>
+              <label className="field field-wrapper">
+                <input type="checkbox" checked={soloPendientes} onChange={e => setSoloPendientes(e.target.checked)} />
+                <span>Solo saldo pendiente</span>
+              </label>
             </div>
             <div className="flex-row" style={{ flexWrap: 'wrap' }}>
               <button className="btn primary" onClick={exportarExcel}>📥 Exportar a Excel</button>
@@ -2321,7 +3057,7 @@ export default function App() {
 
             {!vistaAgrupada ? (
               <div className="table-wrapper">
-                <table className="data-table">
+                <table className="data-table retenciones-table">
                   <thead>
                     <tr>
                       <th>Cliente</th>
@@ -2417,17 +3153,17 @@ export default function App() {
           {/* NUEVO: Análisis por Vendedor */}
           <div className="card" style={{ marginBottom: 0 }}>
             <div className="card-title">👤 Análisis por Vendedor</div>
-            <div className="table-wrapper">
+            <div className="table-wrapper wide-table">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Vendedor</th>
-                    <th className="num">Documentos</th>
+                    <th className="num">Docs</th>
                     <th className="num">Clientes</th>
-                    <th className="num">Total Facturado</th>
+                    <th className="num">Facturado</th>
                     <th className="num">Cobrado</th>
                     <th className="num">Pendiente</th>
-                    <th className="num">% Morosidad</th>
+                    <th className="num">% Mora</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2473,11 +3209,11 @@ export default function App() {
                   <div className="kpi-value">{fmtMoney(analisisRetenciones.promedioPorDoc)}</div>
                 </div>
               </div>
-              <div className="table-wrapper">
-                <table className="data-table">
+              <div className="table-wrapper wide-table">
+                <table className="data-table retenciones-table">
                   <thead>
                     <tr>
-                      <th>Documento</th>
+                      <th>Doc</th>
                       <th>Cliente</th>
                       <th className="num">Total</th>
                       <th className="num">Retención</th>
@@ -2505,10 +3241,21 @@ export default function App() {
     }
 
     if (tab === "crm") {
+      // Normalizar hoy a las 00:00:00
       const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      
+      // Función para calcular diferencia en días correctamente
+      const calcularDiasDiferencia = (fechaStr: string): number => {
+        const [año, mes, día] = fechaStr.split('-').map(Number);
+        const fecha = new Date(año, mes - 1, día, 0, 0, 0, 0);
+        const diffMs = fecha.getTime() - hoy.getTime();
+        return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      };
+      
       const promesasFiltradas = promesas.filter(p => {
-        const fechaPromesa = new Date(p.fecha_promesa || '');
-        const diffDias = Math.ceil((fechaPromesa.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        if (!p.fecha_promesa) return true;
+        const diffDias = calcularDiasDiferencia(p.fecha_promesa);
         
         let cumpleFecha = true;
         if (filtroFecha === "Hoy") cumpleFecha = diffDias === 0;
@@ -2525,8 +3272,7 @@ export default function App() {
 
       const getSemaforo = (fechaPromesa: string | undefined) => {
         if (!fechaPromesa) return { color: '#9ca3af', label: 'Sin fecha' };
-        const fecha = new Date(fechaPromesa);
-        const diffDias = Math.ceil((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        const diffDias = calcularDiasDiferencia(fechaPromesa);
         
         if (diffDias < 0) return { color: '#e63946', label: '🔴 Vencida' };
         if (diffDias === 0) return { color: '#f59e0b', label: '🟡 Hoy' };
@@ -2537,9 +3283,106 @@ export default function App() {
       const totalPromesas = promesas.length;
       const montoTotal = promesas.reduce((sum, p) => sum + (p.monto_promesa || 0), 0);
       const vencidas = promesas.filter(p => {
-        const diffDias = Math.ceil((new Date(p.fecha_promesa || '').getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+        if (!p.fecha_promesa) return false;
+        const diffDias = calcularDiasDiferencia(p.fecha_promesa);
         return diffDias < 0;
       }).length;
+
+      const exportarReportePromesas = async () => {
+        try {
+          const { jsPDF, autoTable } = await loadJsPDF();
+          const doc = new jsPDF();
+          const accent = [59, 130, 246] as [number, number, number];
+          const muted = [100, 116, 139] as [number, number, number];
+          const text = [15, 23, 42] as [number, number, number];
+
+          const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+            title: 'Reporte de Promesas de Pago',
+            lines: [
+              `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+              `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+              empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+            ]
+          });
+          
+          const cardY = headerHeight + 6;
+          const cardH = 16;
+          const cardGap = 4;
+          const availableWidth = pageWidth - (contentLeft * 2);
+          const cardW = (availableWidth - (cardGap * 3)) / 4;
+          const startX = contentLeft;
+          
+          const cards = [
+            { label: 'Total Promesas', value: `${totalPromesas}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+            { label: 'Monto Total', value: fmtMoney(montoTotal), color: [14, 116, 144] as [number, number, number], soft: [204, 251, 241] as [number, number, number] },
+            { label: 'Vencidas', value: `${vencidas}`, color: [239, 68, 68] as [number, number, number], soft: [254, 226, 226] as [number, number, number] },
+            { label: 'Vigentes', value: `${totalPromesas - vencidas}`, color: [16, 185, 129] as [number, number, number], soft: [209, 250, 229] as [number, number, number] }
+          ];
+          
+          cards.forEach((item, idx) => {
+            const x = startX + idx * (cardW + cardGap);
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+            doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+            doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+            doc.rect(x, cardY, cardW, 1.2, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(muted[0], muted[1], muted[2]);
+            doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+            doc.setFontSize(10);
+            doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+            doc.text(item.value, x + 4, cardY + 12);
+          });
+          
+          const tableData = promesasFiltradas.map(p => {
+            const montoPagado = p.monto_pagado || 0;
+            const montoPrometido = p.monto_promesa || 0;
+            const falta = montoPrometido - montoPagado;
+            const difDias = p.fecha_promesa ? calcularDiasDiferencia(p.fecha_promesa) : 0;
+            
+            const rawEstado = p.estado_promesa || '';
+            const estadoLimpio = rawEstado.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+            let estadoLabel = estadoLimpio || 'Pendiente';
+            if (!estadoLimpio) {
+              if (difDias < 0) estadoLabel = 'Vencida';
+              else if (difDias === 0) estadoLabel = 'Hoy';
+              else if (difDias > 0 && difDias <= 3) estadoLabel = 'Proxima';
+              else estadoLabel = 'Vigente';
+            }
+            
+            return [
+              p.razon_social || p.cliente,
+              p.fecha_promesa,
+              fmtMoney(montoPrometido),
+              fmtMoney(montoPagado),
+              fmtMoney(falta),
+              estadoLabel,
+              p.observacion || '-'
+            ];
+          });
+          
+          autoTable(doc, {
+            head: [['Cliente', 'Fecha Promesa', 'Prometido', 'Pagado', 'Falta', 'Estado', 'Observación']],
+            body: tableData,
+            startY: cardY + cardH + 8,
+            theme: 'plain',
+            styles: { fontSize: 8, cellPadding: 2, textColor: text },
+            headStyles: { fillColor: [219, 234, 254], textColor: accent, fontStyle: 'bold' },
+            margin: { left: contentLeft, right: contentLeft },
+            columnStyles: {
+              2: { halign: 'right' },
+              3: { halign: 'right' },
+              4: { halign: 'right' }
+            }
+          });
+          
+          doc.save(`Promesas_${new Date().toISOString().split('T')[0]}.pdf`);
+          addToast("✅ Reporte de promesas generado", "success");
+        } catch (e) {
+          console.error(e);
+          addToast("❌ Error generando reporte", "error");
+        }
+      };
 
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -2592,6 +3435,15 @@ export default function App() {
                 </select>
               </label>
             </div>
+            <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn primary" 
+                onClick={exportarReportePromesas}
+                style={{ padding: '6px 12px' }}
+              >
+                📊 Generar Reporte PDF
+              </button>
+            </div>
           </div>
           </div>
 
@@ -2603,7 +3455,9 @@ export default function App() {
                   <tr>
                     <th>Cliente</th>
                     <th>Fecha Promesa</th>
-                    <th className="num">Monto</th>
+                    <th className="num">Prometido</th>
+                    <th className="num">Pagado</th>
+                    <th className="num">Falta</th>
                     <th>Estado</th>
                     <th>Observación</th>
                     <th style={{textAlign: 'center'}}>Acciones</th>
@@ -2613,21 +3467,69 @@ export default function App() {
                   {promesasFiltradas.length > 0 ? (
                     promesasFiltradas.map(p => {
                       const semaforo = getSemaforo(p.fecha_promesa);
+                      const montoPagado = p.monto_pagado || 0;
+                      const montoPrometido = p.monto_promesa || 0;
+                      const falta = montoPrometido - montoPagado;
+                      const difDias = p.fecha_promesa ? calcularDiasDiferencia(p.fecha_promesa) : 0;
+                      
+                      // Determinar estado sin emojis y limpiar texto corrupto
+                      let estadoPromesa = 'Pendiente';
+                      let colorEstado = '#9ca3af';
+                      const rawEstado = p.estado_promesa || '';
+                      const estadoLimpio = rawEstado.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+                      const estadoNormalizado = estadoLimpio || '';
+
+                      if (!estadoNormalizado) {
+                        if (difDias < 0) {
+                          estadoPromesa = 'Vencida';
+                          colorEstado = '#ef4444';
+                        } else if (difDias === 0) {
+                          estadoPromesa = 'Hoy';
+                          colorEstado = '#f59e0b';
+                        } else if (difDias > 0 && difDias <= 3) {
+                          estadoPromesa = 'Proxima';
+                          colorEstado = '#f59e0b';
+                        } else {
+                          estadoPromesa = 'Vigente';
+                          colorEstado = '#10b981';
+                        }
+                      } else {
+                        estadoPromesa = estadoNormalizado;
+                        if (estadoNormalizado === 'Cumplida' || falta <= 0) {
+                          colorEstado = '#10b981';
+                        } else if (estadoNormalizado === 'Parcialmente Cumplida') {
+                          colorEstado = '#f59e0b';
+                        } else if (estadoNormalizado === 'Incumplida') {
+                          colorEstado = '#ef4444';
+                        } else if (estadoNormalizado === 'Reprogramada') {
+                          colorEstado = '#3b82f6';
+                        } else if (estadoNormalizado === 'Vencida') {
+                          colorEstado = '#ef4444';
+                        } else if (estadoNormalizado === 'Hoy' || estadoNormalizado === 'Proxima') {
+                          colorEstado = '#f59e0b';
+                        } else if (estadoNormalizado === 'Vigente') {
+                          colorEstado = '#10b981';
+                        }
+                      }
+                      
                       return (
-                        <tr key={p.id} style={{ borderLeft: `4px solid ${semaforo.color}` }}>
+                        <tr key={p.id} style={{ borderLeft: `4px solid ${colorEstado}` }}>
                           <td><strong>{p.razon_social || p.cliente}</strong></td>
                           <td>{p.fecha_promesa}</td>
-                          <td className="num" style={{ fontWeight: 'bold' }}>{fmtMoney(p.monto_promesa || 0)}</td>
+                          <td className="num" style={{ fontWeight: 'bold', color: '#3b82f6' }}>{fmtMoney(montoPrometido)}</td>
+                          <td className="num" style={{ fontWeight: 'bold', color: '#10b981' }}>{fmtMoney(montoPagado)}</td>
+                          <td className="num" style={{ fontWeight: 'bold', color: falta > 0 ? '#ef4444' : '#10b981' }}>{fmtMoney(falta)}</td>
                           <td>
-                            <span className="status-label" style={{ color: semaforo.color, background: 'var(--bg-nav)', padding: '2px 8px', borderRadius: '4px' }}>
-                              {semaforo.label}
+                            <span className="status-label" style={{ color: colorEstado, background: 'var(--bg-nav)', padding: '2px 8px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: colorEstado, display: 'inline-block' }}></span>
+                              {estadoPromesa}
                             </span>
                           </td>
                           <td style={{ maxWidth: '300px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{p.observacion || '-'}</td>
                           <td style={{ textAlign: 'center' }}>
-                            <div className="action-buttons" style={{ justifyContent: 'center' }}>
-                              <button className="btn primary" style={{ padding: '4px 8px' }} onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
-                              <button className="btn secondary" style={{ padding: '4px 8px' }} onClick={() => alert('Recordatorio configurado (simulado)')} title="Agregar recordatorio">🔔</button>
+                            <div className="action-buttons" style={{ justifyContent: 'center', gap: '4px' }}>
+                              <button className="btn primary" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => cumplirPromesa(p.id)} disabled={!hasWritePermissions} title="Marcar como cumplida">✓</button>
+                              <button className="btn secondary" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => { setPromesaEditando(p); setShowModalEditarPromesa(true); }} title="Editar promesa">✏️</button>
                               <button className="promesa-eliminar" onClick={() => eliminarGestion(p.id)} disabled={!hasWritePermissions} title="Eliminar">✕</button>
                             </div>
                           </td>
@@ -2636,7 +3538,7 @@ export default function App() {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary)' }}>
                         No hay promesas de pago {filtroFecha !== 'Todas' ? `para: ${filtroFecha}` : 'pendientes'}
                       </td>
                     </tr>
@@ -2654,11 +3556,16 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="card">
             <div className="card-title">📊 Panel de Análisis</div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
-              <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
-              <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
-              <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>
-              <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>⚠️ Deudores Crónicos</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
+                <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
+                <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>
+                <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>⚠️ Deudores Crónicos</button>
+              </div>
+              <button className="btn primary" onClick={exportarAnalisisPDF} disabled={!canExportAnalisis}>
+                Generar reporte
+              </button>
             </div>
 
             {vistaAnalisis === 'motivos' && (
@@ -2802,9 +3709,134 @@ export default function App() {
     }
 
     if (tab === "alertas") {
+      const exportarAlertas = async () => {
+        if (filteredAlertas.length === 0) {
+          addToast("No hay alertas para exportar", "info");
+          return;
+        }
+        try {
+          const { jsPDF, autoTable } = await loadJsPDF();
+          const doc = new jsPDF();
+          const accent = [59, 130, 246] as [number, number, number];
+          const muted = [100, 116, 139] as [number, number, number];
+          const text = [15, 23, 42] as [number, number, number];
+
+          const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+            title: 'Alertas de Incumplimiento',
+            lines: [
+              `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+              `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+              empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+            ]
+          });
+          
+          // KPIs
+          const totalVencidos = filteredAlertas.length;
+          const montoVencido = filteredAlertas.reduce((sum: number, a: any) => sum + (a.monto || 0), 0);
+          const promedioDias = totalVencidos > 0 ? Math.round(filteredAlertas.reduce((sum: number, a: any) => sum + (a.diasVencidos || 0), 0) / totalVencidos) : 0;
+          
+          const cardY = headerHeight + 6;
+          const cardH = 16;
+          const cardGap = 4;
+          const availableWidth = pageWidth - (contentLeft * 2);
+          const cardW = (availableWidth - (cardGap * 2)) / 3;
+          const startX = contentLeft;
+          
+          const cards = [
+            { label: 'Documentos Vencidos', value: String(totalVencidos), color: [239, 68, 68] as [number, number, number], soft: [254, 226, 226] as [number, number, number] },
+            { label: 'Monto Vencido', value: fmtMoney(montoVencido), color: [234, 88, 12] as [number, number, number], soft: [254, 237, 213] as [number, number, number] },
+            { label: 'Promedio Días', value: String(promedioDias), color: [107, 114, 128] as [number, number, number], soft: [243, 244, 246] as [number, number, number] }
+          ];
+          
+          cards.forEach((item, idx) => {
+            const x = startX + idx * (cardW + cardGap);
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+            doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+            doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+            doc.rect(x, cardY, cardW, 1.2, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(muted[0], muted[1], muted[2]);
+            doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+            doc.setFontSize(10);
+            doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+            doc.text(item.value, x + 4, cardY + 12);
+          });
+          
+          const tableData = filteredAlertas.map((a: any) => [
+            a.cliente,
+            a.documento,
+            fmtMoney(a.monto),
+            String(a.diasVencidos),
+            normalizeSeveridad(a.severidad).label
+          ]);
+          
+          autoTable(doc, {
+            head: [['Cliente', 'Documento', 'Monto', 'Días Vencido', 'Severidad']],
+            body: tableData,
+            startY: cardY + cardH + 8,
+            theme: 'plain',
+            headStyles: { fillColor: [219, 234, 254], textColor: text, fontSize: 9, fontStyle: 'bold', lineColor: [226, 232, 240], lineWidth: 0.2 },
+            bodyStyles: { textColor: text, fontSize: 8, lineColor: [226, 232, 240], lineWidth: 0.2 },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } },
+            margin: { left: contentLeft, right: contentLeft }
+          });
+          
+          doc.save(`Alertas-Incumplimiento-${new Date().toISOString().split('T')[0]}.pdf`);
+          addToast("PDF exportado exitosamente", "success");
+        } catch (e) {
+          console.error(e);
+          addToast("Error al exportar PDF", "error");
+        }
+      };
+
+      // Contar por severidad para gráfico
+      const conteoSeveridad = {
+        'Crítico': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Crítico').length,
+        'Alta': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Alta').length,
+        'Media': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Media').length,
+        'Baja': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Baja').length
+      };
+      
       return (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div className="card">
           <div className="card-title">🚨 Alertas de Incumplimiento</div>
+          
+          {/* KPIs Resumen */}
+          {filteredAlertas.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+              {(() => {
+                const totalVencidos = filteredAlertas.length;
+                const montoVencido = filteredAlertas.reduce((sum: number, a: any) => sum + (a.monto || 0), 0);
+                const promedioDias = totalVencidos > 0 ? Math.round(filteredAlertas.reduce((sum: number, a: any) => sum + (a.diasVencidos || 0), 0) / totalVencidos) : 0;
+
+                const kpis = [
+                  { label: 'Documentos Vencidos', value: String(totalVencidos), color: '#ef4444', bg: '#fee2e2' },
+                  { label: 'Monto Vencido', value: fmtMoney(montoVencido), color: '#ea580c', bg: '#ffedd5' },
+                  { label: 'Promedio Días', value: String(promedioDias), color: '#6b7280', bg: '#f3f4f6' }
+                ];
+
+                return kpis.map((kpi, idx) => (
+                  <div key={idx} style={{ 
+                    background: kpi.bg, 
+                    padding: '12px 14px', 
+                    borderRadius: '8px',
+                    borderLeft: `4px solid ${kpi.color}`
+                  }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '4px' }}>
+                      {kpi.label.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: kpi.color }}>
+                      {kpi.value}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
+          
           <div className="row">
             <label className="field">
               <span>Búsqueda</span>
@@ -2820,9 +3852,17 @@ export default function App() {
                 <option value="Baja">Baja</option>
               </select>
             </label>
+            <button
+              className="btn secondary"
+              onClick={() => exportarAlertas()}
+              disabled={filteredAlertas.length === 0}
+              style={{ alignSelf: 'flex-end' }}
+            >
+              📄 Exportar PDF
+            </button>
           </div>
           <div className="table-wrapper">
-            <table className="data-table">
+            <table className="data-table no-sticky-header">
               <thead>
                 <tr>
                   <th>Cliente</th>
@@ -2857,17 +3897,129 @@ export default function App() {
             </table>
           </div>
         </div>
+        </div>
       );
     }
 
     if (tab === "tendencias") {
       const maxEmision = Math.max(1, ...tendencias.map((t: any) => t.emision || 0));
       const maxCobrado = Math.max(1, ...tendencias.map((t: any) => t.cobrado || 0));
+      
+      const exportarReporteTendencias = async () => {
+        if (tendencias.length === 0) {
+          addToast("No hay datos de tendencias para exportar", "info");
+          return;
+        }
+        try {
+          const { jsPDF, autoTable } = await loadJsPDF();
+          const doc = new jsPDF();
+          const accent = [59, 130, 246] as [number, number, number];
+          const muted = [100, 116, 139] as [number, number, number];
+          const text = [15, 23, 42] as [number, number, number];
+
+          const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+            title: 'Tendencias Históricas',
+            lines: [
+              `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+              `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+              'Periodo: Ultimos 12 meses'
+            ]
+          });
+          
+          const cardY = headerHeight + 6;
+          const cardH = 16;
+          const cardGap = 4;
+          const availableWidth = pageWidth - (contentLeft * 2);
+          const cardW = (availableWidth - (cardGap * 2)) / 3;
+          const startX = contentLeft;
+          
+          // Calcular KPIs
+          const totalEmision = tendencias.reduce((sum: number, t: any) => sum + (t.emision || 0), 0);
+          const totalCobrado = tendencias.reduce((sum: number, t: any) => sum + (t.cobrado || 0), 0);
+          const totalDocumentos = tendencias.reduce((sum: number, t: any) => sum + (t.documentos || 0), 0);
+          const totalVencidos = tendencias.reduce((sum: number, t: any) => sum + (t.vencidos || 0), 0);
+          const tasaCobro = totalDocumentos > 0 ? Math.round(((totalDocumentos - totalVencidos) / totalDocumentos) * 100) : 0;
+          
+          const cards = [
+            { label: 'Total Emitido', value: fmtMoney(totalEmision), color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+            { label: 'Total Cobrado', value: fmtMoney(totalCobrado), color: [16, 185, 129] as [number, number, number], soft: [209, 250, 229] as [number, number, number] },
+            { label: 'Tasa de Cobro', value: `${tasaCobro}%`, color: [107, 114, 128] as [number, number, number], soft: [243, 244, 246] as [number, number, number] }
+          ];
+          
+          cards.forEach((item, idx) => {
+            const x = startX + idx * (cardW + cardGap);
+            doc.setDrawColor(226, 232, 240);
+            doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+            doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+            doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+            doc.rect(x, cardY, cardW, 1.2, 'F');
+            doc.setFontSize(7);
+            doc.setTextColor(muted[0], muted[1], muted[2]);
+            doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+            doc.setFontSize(10);
+            doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+            doc.text(item.value, x + 4, cardY + 12);
+          });
+          
+          const tableData = tendencias.map((t: any) => {
+            const tasaCobro = t.documentos > 0 ? Math.round(((t.documentos - (t.vencidos || 0)) / t.documentos) * 100) : 0;
+            return [
+              t.mes,
+              String(t.documentos || 0),
+              fmtMoney(t.emision || 0),
+              fmtMoney(t.cobrado || 0),
+              `${tasaCobro}%`,
+              String(t.vencidos || 0)
+            ];
+          });
+
+          autoTable(doc, {
+            head: [['Mes', 'Documentos', 'Emisión', 'Cobrado', 'Tasa Cobro', 'Vencidos']],
+            body: tableData,
+            startY: cardY + cardH + 8,
+            theme: 'plain',
+            styles: { fontSize: 8, cellPadding: 2, textColor: text, lineColor: [226, 232, 240], lineWidth: 0.2 },
+            headStyles: { 
+              fillColor: [219, 234, 254],
+              textColor: accent,
+              fontStyle: 'bold',
+              halign: 'center',
+              lineColor: accent,
+              lineWidth: 0.5
+            },
+            alternateRowStyles: {
+              fillColor: [249, 250, 251]
+            },
+            margin: { left: contentLeft, right: contentLeft },
+            columnStyles: {
+              1: { halign: 'right' },
+              2: { halign: 'right' },
+              3: { halign: 'right', textColor: [16, 185, 129] },
+              4: { halign: 'right' },
+              5: { halign: 'right' }
+            }
+          });
+
+          doc.save(`Tendencias_${new Date().toISOString().split('T')[0]}.pdf`);
+          addToast("✅ Reporte de tendencias generado", "success");
+        } catch (e) {
+          console.error(e);
+          addToast("Error generando reporte de tendencias", "error");
+        }
+      };
+      
       return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '10px' }}>
+            <button
+              className="btn secondary"
+              onClick={() => exportarReporteTendencias()}
+              disabled={tendencias.length === 0}
+            >
+              📄 Exportar PDF
+            </button>
             <button
               className="btn secondary"
               onClick={() => setMostrarGraficaTendencias(prev => !prev)}
@@ -2876,6 +4028,42 @@ export default function App() {
               {mostrarGraficaTendencias ? '📋 Tabla' : '📊 Gráfica'}
             </button>
           </div>
+
+          {/* KPIs Resumen */}
+          {tendencias.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+              {(() => {
+                const totalEmision = tendencias.reduce((sum: number, t: any) => sum + (t.emision || 0), 0);
+                const totalCobrado = tendencias.reduce((sum: number, t: any) => sum + (t.cobrado || 0), 0);
+                const totalDocumentos = tendencias.reduce((sum: number, t: any) => sum + (t.documentos || 0), 0);
+                const totalVencidos = tendencias.reduce((sum: number, t: any) => sum + (t.vencidos || 0), 0);
+                const tasaCobro = totalDocumentos > 0 ? Math.round(((totalDocumentos - totalVencidos) / totalDocumentos) * 100) : 0;
+
+                const kpis = [
+                  { label: 'Total Emitido', value: fmtMoney(totalEmision), color: '#3b82f6', bg: '#dbeafe' },
+                  { label: 'Total Cobrado', value: fmtMoney(totalCobrado), color: '#10b981', bg: '#d1fae5' },
+                  { label: 'Tasa Cobro', value: `${tasaCobro}%`, color: '#6b7280', bg: '#f3f4f6' },
+                  { label: 'Documentos Vencidos', value: String(totalVencidos), color: '#ef4444', bg: '#fee2e2' }
+                ];
+
+                return kpis.map((kpi, idx) => (
+                  <div key={idx} style={{ 
+                    background: kpi.bg, 
+                    padding: '12px 14px', 
+                    borderRadius: '8px',
+                    borderLeft: `4px solid ${kpi.color}`
+                  }}>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '4px' }}>
+                      {kpi.label.toUpperCase()}
+                    </div>
+                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: kpi.color }}>
+                      {kpi.value}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          )}
 
           {mostrarGraficaTendencias && tendencias.length > 0 ? (
             <div style={{ display: 'grid', gap: '10px', paddingBottom: '10px' }}>
@@ -2914,19 +4102,26 @@ export default function App() {
                   <th className="num">Documentos</th>
                   <th className="num">Emisión</th>
                   <th className="num">Cobrado</th>
+                  <th className="num">Tasa Cobro</th>
                   <th className="num">Vencidos</th>
                 </tr>
               </thead>
               <tbody>
-                {tendencias.length > 0 ? tendencias.map((t, i) => (
-                  <tr key={i}>
-                    <td><strong>{t.mes}</strong></td>
-                    <td className="num">{t.documentos}</td>
-                    <td className="num">{fmtMoney(t.emision)}</td>
-                    <td className="num">{fmtMoney(t.cobrado)}</td>
-                    <td className="num">{t.vencidos}</td>
-                  </tr>
-                )) : <tr><td colSpan={5}>Sin datos</td></tr>}
+                {tendencias.length > 0 ? tendencias.map((t, i) => {
+                  const tasaCobro = t.documentos > 0 ? Math.round(((t.documentos - (t.vencidos || 0)) / t.documentos) * 100) : 0;
+                  return (
+                    <tr key={i}>
+                      <td><strong>{t.mes}</strong></td>
+                      <td className="num">{t.documentos}</td>
+                      <td className="num">{fmtMoney(t.emision)}</td>
+                      <td className="num">{fmtMoney(t.cobrado)}</td>
+                      <td className="num" style={{ color: tasaCobro >= 50 ? '#10b981' : tasaCobro >= 25 ? '#f59e0b' : '#ef4444' }}>
+                        <strong>{tasaCobro}%</strong>
+                      </td>
+                      <td className="num">{t.vencidos}</td>
+                    </tr>
+                  );
+                }) : <tr><td colSpan={6}>Sin datos</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2937,20 +4132,39 @@ export default function App() {
     }
 
     if (tab === "cuentas") {
+      const abonosFiltrados = abonos.filter(a => {
+        if (abonosFechaDesde && (!a.fecha || a.fecha < abonosFechaDesde)) return false;
+        if (abonosFechaHasta) {
+          const hasta = abonosFechaHasta.length === 10 ? `${abonosFechaHasta}T23:59:59` : abonosFechaHasta;
+          if (!a.fecha || a.fecha > hasta) return false;
+        }
+        return true;
+      });
       return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
           <div className="card-title">📜 Historial de Abonos Detectados</div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}>
-            <button className="btn primary" onClick={importarExcel} disabled={!hasWritePermissions}>
-              📥 Importar Excel
-            </button>
+          <div className="row" style={{ marginBottom: '10px' }}>
+            <label className="field">
+              <span>Desde</span>
+              <input type="date" value={abonosFechaDesde} onChange={e => setAbonosFechaDesde(e.target.value)} />
+            </label>
+            <label className="field">
+              <span>Hasta</span>
+              <input type="date" value={abonosFechaHasta} onChange={e => setAbonosFechaHasta(e.target.value)} />
+            </label>
+            <div className="field" style={{ alignSelf: 'flex-end' }}>
+              <button className="btn secondary" onClick={exportarAbonosPDF}>
+                📄 Exportar PDF
+              </button>
+            </div>
           </div>
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
                 <tr>
                   <th>Fecha Detección</th>
+                  <th>Cliente</th>
                   <th>Documento</th>
                   <th className="num">Saldo Anterior</th>
                   <th className="num">Pago Aplicado</th>
@@ -2959,10 +4173,11 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {abonos.length > 0 ? (
-                  abonos.map(a => (
+                {abonosFiltrados.length > 0 ? (
+                  abonosFiltrados.map(a => (
                     <tr key={a.id}>
                       <td>{a.fecha.split('T')[0]}</td>
+                      <td><strong>{a.cliente || a.razon_social || '-'}</strong></td>
                       <td><strong>{a.documento}</strong></td>
                       <td className="num">{fmtMoney(a.total_anterior)}</td>
                       <td className="num kpi-positive">{fmtMoney(a.total_anterior - a.total_nuevo)}</td>
@@ -2972,7 +4187,7 @@ export default function App() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
+                    <td colSpan={7} style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
                       <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
                       <div style={{ fontSize: '1rem', marginBottom: '8px' }}>No hay abonos detectados aún</div>
                       <div style={{ fontSize: '0.85rem' }}>Importa el Excel para detectar cambios en los saldos</div>
@@ -3228,7 +4443,7 @@ export default function App() {
                   </label>
                   <label className="field">
                     <span>Monto Promesa</span>
-                    <input type="number" value={gestionForm.monto_promesa} onChange={e => setGestionForm({...gestionForm, monto_promesa: Number(e.target.value)})} />
+                    <input type="number" value={gestionForm.monto_promesa} onChange={e => setGestionForm({...gestionForm, monto_promesa: e.target.value})} placeholder="0" />
                   </label>
                 </>
               )}
@@ -3236,6 +4451,94 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalGestion(false)}>Cancelar</button>
               <button className="btn primary" onClick={guardarGestion}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Editar Promesa */}
+      {showModalEditarPromesa && promesaEditando && (
+        <div className="modal-overlay" onClick={() => { setShowModalEditarPromesa(false); setPromesaEditando(null); }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">Editar Promesa de Pago</div>
+            <div className="modal-body">
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', marginBottom: '4px' }}>Cliente</label>
+                <div style={{ padding: '8px', background: 'var(--bg-nav)', borderRadius: '4px', fontWeight: '600' }}>
+                  {promesaEditando.razon_social || promesaEditando.cliente}
+                </div>
+              </div>
+              
+              <label className="field">
+                <span>Fecha Promesa</span>
+                <input 
+                  type="date" 
+                  value={promesaEditando.fecha_promesa || ''} 
+                  onChange={e => setPromesaEditando({...promesaEditando, fecha_promesa: e.target.value})}
+                />
+              </label>
+              
+              <label className="field">
+                <span>Monto Prometido</span>
+                <input 
+                  type="number" 
+                  value={promesaEditando.monto_promesa || ''} 
+                  onChange={e => setPromesaEditando({...promesaEditando, monto_promesa: Number(e.target.value)})}
+                  placeholder="0"
+                />
+              </label>
+              
+              <label className="field">
+                <span>Monto Pagado</span>
+                <input 
+                  type="number" 
+                  value={promesaEditando.monto_pagado || ''} 
+                  onChange={e => setPromesaEditando({...promesaEditando, monto_pagado: Number(e.target.value)})}
+                  placeholder="0"
+                />
+              </label>
+              
+              <label className="field">
+                <span>Fecha Pago</span>
+                <input 
+                  type="date" 
+                  value={promesaEditando.fecha_pago || ''} 
+                  onChange={e => setPromesaEditando({...promesaEditando, fecha_pago: e.target.value})}
+                />
+              </label>
+              
+              <label className="field">
+                <span>Estado</span>
+                <select 
+                  value={promesaEditando.estado_promesa || 'Pendiente'} 
+                  onChange={e => setPromesaEditando({...promesaEditando, estado_promesa: e.target.value})}
+                  style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
+                >
+                  <option value="Pendiente">⏳ Pendiente</option>
+                  <option value="Parcialmente Cumplida">⚠️ Parcialmente Cumplida</option>
+                  <option value="Cumplida">✅ Cumplida</option>
+                  <option value="Incumplida">❌ Incumplida</option>
+                  <option value="Reprogramada">🔄 Reprogramada</option>
+                </select>
+              </label>
+              
+              <label className="field">
+                <span>Observación</span>
+                <textarea 
+                  value={promesaEditando.observacion || ''} 
+                  onChange={e => setPromesaEditando({...promesaEditando, observacion: e.target.value})} 
+                  rows={3} 
+                  placeholder="Detalles, cambios o notas..."
+                />
+              </label>
+              
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-nav)', padding: '8px', borderRadius: '4px', marginBottom: '12px' }}>
+                <strong>ℹ️ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica únicamente con importaciones.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={() => { setShowModalEditarPromesa(false); setPromesaEditando(null); }}>Cancelar</button>
+              <button className="btn primary" onClick={() => actualizarPromesa(promesaEditando)}>Guardar Cambios</button>
             </div>
           </div>
         </div>

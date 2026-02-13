@@ -3738,6 +3738,21 @@ button:disabled {
   min-height: 0;
 }
 
+.table-wrapper.wide-table .data-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.table-wrapper.wide-table .data-table th,
+.table-wrapper.wide-table .data-table td {
+  white-space: normal;
+}
+
+.table-wrapper.wide-table .data-table th.num,
+.table-wrapper.wide-table .data-table td.num {
+  white-space: nowrap;
+}
+
 /* ==========================================
    MEJORAS TABLA GESTIÓN (RESPONSIVE)
    ========================================== */
@@ -3762,6 +3777,12 @@ button:disabled {
   z-index: 10;
 }
 
+.data-table.no-sticky-header th {
+  position: static;
+  top: auto;
+  z-index: auto;
+}
+
 .data-table td {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
@@ -3769,10 +3790,6 @@ button:disabled {
   color: var(--text-main);
   vertical-align: middle;
   white-space: nowrap;
-}
-
-.data-table tbody tr:hover {
-  background-color: var(--bg-hover);
 }
 
 .data-table .btn {
@@ -3810,6 +3827,62 @@ button:disabled {
   min-width: 100px;
 }
 
+/* Ajustes específicos para Detalle de Retenciones */
+.retenciones-table th:nth-child(1),
+.retenciones-table td:nth-child(1) {
+  width: 170px;
+  min-width: 170px;
+  max-width: 170px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.retenciones-table th:nth-child(2),
+.retenciones-table td:nth-child(2) {
+  min-width: 240px;
+  padding-left: 12px;
+  white-space: normal;
+  word-break: normal;
+  font-size: 0.78rem;
+  line-height: 1.1;
+}
+
+.retenciones-table td:nth-child(2) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.table-wrapper.wide-table .data-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.retenciones-table th.num,
+.retenciones-table td.num {
+  min-width: 70px;
+  font-size: 0.78rem;
+}
+
+.retenciones-table th:nth-child(3),
+.retenciones-table td:nth-child(3) {
+  min-width: 72px;
+}
+
+.retenciones-table th:nth-child(4),
+.retenciones-table td:nth-child(4) {
+  min-width: 78px;
+}
+
+.retenciones-table th:nth-child(5),
+.retenciones-table td:nth-child(5) {
+  min-width: 60px;
+}
+
 /* ==========================================
    OPTIMIZACIÓN CONFIGURACIÓN RESPONSIVE
    ========================================== */
@@ -3817,11 +3890,11 @@ button:disabled {
   .config-grid {
     gap: 12px;
   }
-  
+
   .config-card {
     padding: 14px;
   }
-  
+
   .theme-options {
     gap: 16px;
     margin-top: 8px;
@@ -3859,4 +3932,13 @@ button:disabled {
   .kpi-value {
     font-size: 1rem;
   }
+}
+
+/* Scrollbar oculto pero funcional */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
 }
