@@ -1,0 +1,33 @@
+{
+  appId: "com.mm.carteradashboard",
+  productName: "CarteraDashBoardM&M",
+  copyright: "© 2026 Jhon Franklin Mejia Castro (RUC: 0950998104001). All rights reserved.",
+  directories: {
+    output: "release",
+    buildResources: "build"
+  },
+  files: [
+    "dist/**",
+    "dist-electron/**",
+    "package.json",
+    "node_modules/**"
+  ],
+  asar: true,
+  asarUnpack: [
+    "node_modules/better-sqlite3/**",
+    "node_modules/@ngrok/**"
+  ],
+  npmRebuild: true,
+  win: {
+    target: ["nsis"],
+    signAndEditExecutable: false
+  },
+  nsis: {
+    oneClick: false,
+    perMachine: false,
+    allowElevation: true,
+    allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true,
+    createStartMenuShortcut: true
+  }
+}

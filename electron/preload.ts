@@ -1,0 +1,50 @@
+import { contextBridge, ipcRenderer } from "electron";
+
+const apiMethods = {
+  cambiarLogo: () => {
+    console.log("🔄 Preload: Iniciando cambio de logo...");
+    return ipcRenderer.invoke("cambiarLogo");
+  },
+  ping: () => ipcRenderer.invoke("ping"),
+  getDbPath: () => ipcRenderer.invoke("getDbPath"),
+  getDesktopToken: () => ipcRenderer.invoke("getDesktopToken"),
+  hasWritePermissions: () => ipcRenderer.invoke("hasWritePermissions"),
+  statsObtener: () => ipcRenderer.invoke("statsObtener"),
+  filtrosListar: () => ipcRenderer.invoke("filtrosListar"),
+  topClientes: (limit?: number) => ipcRenderer.invoke("topClientes", limit),
+  documentosListar: (args: unknown) => ipcRenderer.invoke("documentosListar", args),
+  importarContifico: () => ipcRenderer.invoke("importarContifico"),
+  limpiarBaseDatos: () => ipcRenderer.invoke("limpiarBaseDatos"),
+  actualizarDiasCredito: (id: number, dias: number) => ipcRenderer.invoke("actualizarDiasCredito", { id, dias }),
+  generarPDF: (filename: string) => ipcRenderer.invoke("generarPDF", filename),
+  empresaObtener: () => ipcRenderer.invoke("empresaObtener"),
+  empresaGuardar: (data: unknown) => ipcRenderer.invoke("empresaGuardar", data),
+  clientesAnalisis: () => ipcRenderer.invoke("clientesAnalisis"),
+  getNetworkInfo: () => ipcRenderer.invoke("getNetworkInfo"),
+  clienteObtenerInfo: (codigo: string) => ipcRenderer.invoke("clienteObtenerInfo", codigo),
+  clienteGuardarInfo: (data: unknown) => ipcRenderer.invoke("clienteGuardarInfo", data),
+  gestionGuardar: (data: unknown) => ipcRenderer.invoke("gestionGuardar", data),
+  gestionesListar: (cliente: string) => ipcRenderer.invoke("gestionesListar", cliente),
+  gestionCumplir: (id: number) => ipcRenderer.invoke("gestionCumplir", id),
+  gestionEliminar: (id: number) => ipcRenderer.invoke("gestionEliminar", id),
+  gestionesReporte: (args: unknown) => ipcRenderer.invoke("gestionesReporte", args),
+  campanasListar: () => ipcRenderer.invoke("campanasListar"),
+  campanasGuardar: (data: unknown) => ipcRenderer.invoke("campanasGuardar", data),
+  motivosImpago: () => ipcRenderer.invoke("motivosImpago"),
+  productividadGestor: () => ipcRenderer.invoke("productividadGestor"),
+  alertasIncumplimiento: () => ipcRenderer.invoke("alertasIncumplimiento"),
+  pronosticoFlujoCaja: () => ipcRenderer.invoke("pronosticoFlujoCaja"),
+  tendenciasHistoricas: () => ipcRenderer.invoke("tendenciasHistoricas"),
+  disputasListar: () => ipcRenderer.invoke("disputasListar"),
+  disputaCrear: (data: unknown) => ipcRenderer.invoke("disputaCrear", data),
+  cuentasAplicarListar: () => ipcRenderer.invoke("cuentasAplicarListar"),
+  cuentaAplicarCrear: (data: unknown) => ipcRenderer.invoke("cuentaAplicarCrear", data),
+  cuentaAplicarActualizar: (data: unknown) => ipcRenderer.invoke("cuentaAplicarActualizar", data),
+  abonosListar: () => ipcRenderer.invoke("abonosListar"),
+  clientesListar: () => ipcRenderer.invoke("clientesListar"),
+  getGitRemoteUrl: () => ipcRenderer.invoke("getGitRemoteUrl"),
+  getUpdateInfo: () => ipcRenderer.invoke("getUpdateInfo"),
+};
+
+contextBridge.exposeInMainWorld("carteraApi", apiMethods);
+contextBridge.exposeInMainWorld("api", apiMethods);

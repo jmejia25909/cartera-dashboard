@@ -1,0 +1,18 @@
+/* src/index.css */
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: #f6f7fb;
+}
+
+#root {
+  min-height: 100vh;
+}

@@ -1,0 +1,1031 @@
+﻿ARCHIVO ORIGINAL: src\App.tsx
+
+============================================================
+LÍNEAS 960 - 1140
+============================================================
+  960:       setShowModalEmpresa(false);
+  961:       addToast("Datos de empresa guardados", "success");
+  962:       await cargarDatos();
+  963:     } catch (e) {
+  964:       addToast("Error guardando empresa", "error");
+  965:       console.error("Error guardando empresa:", e);
+  966:     }
+  967:   }
+  968: 
+  969:   const [descuadresDetectados, setDescuadresDetectados] = useState<number>(0);
+  970: 
+  971:   async function importarExcel() {
+  972:   if (isWeb) return;
+  973:   try {
+  974:     const result = await window.api.importarContifico();
+  975:     const resultTyped = result as { 
+  976:       ok?: boolean; 
+  977:       insertedDocs?: number; 
+  978:       descuadresDetectados?: number; 
+  979:       message?: string 
+  980:     };
+  981: 
+  982:     if (resultTyped?.ok) {
+  983:       const descuadres = resultTyped.descuadresDetectados || 0;
+  984:       setDescuadresDetectados(descuadres);
+  985: 
+  986:       if (descuadres > 0) {
+  987:         addToast(`âš ï¸ Importado: ${resultTyped.insertedDocs} docs (${descuadres} con descuadres en tramos)`, "warning");
+  988:       } else {
+  989:         addToast(`âœ… ImportaciÃ³n exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, "success");
+  990:       }
+  991: 
+  992:       await cargarDatos();
+  993:       await cargarDocumentos();
+  994:     } else {
+  995:       const errorMsg = resultTyped?.message || "Error desconocido";
+  996:       addToast("Error en importaciÃ³n: " + errorMsg, "error");
+  997:     }
+  998:   } catch (e) {
+  999:     const errorMsg = e instanceof Error ? e.message : String(e);
+ 1000:     addToast("Error importando Excel: " + errorMsg, "error");
+ 1001:   }
+ 1002: }
+ 1003: 
+ 1004:   const exportarAbonosPDF = async () => {
+ 1005:     let abonosFiltrados = abonos;
+ 1006:     if (abonosFechaDesde) {
+ 1007:       abonosFiltrados = abonosFiltrados.filter(a => a.fecha && a.fecha >= abonosFechaDesde);
+ 1008:     }
+ 1009:     if (abonosFechaHasta) {
+ 1010:       const hasta = abonosFechaHasta.length === 10 ? `${abonosFechaHasta}T23:59:59` : abonosFechaHasta;
+ 1011:       abonosFiltrados = abonosFiltrados.filter(a => a.fecha && a.fecha <= hasta);
+ 1012:     }
+ 1013:     if (abonosFiltrados.length === 0) {
+ 1014:       addToast("No hay abonos para reportar en el rango seleccionado", "info");
+ 1015:       return;
+ 1016:     }
+ 1017:     try {
+ 1018:       const { jsPDF, autoTable } = await loadJsPDF();
+ 1019:       const doc = new jsPDF();
+ 1020:       const accent = [59, 130, 246] as [number, number, number];
+ 1021:       const muted = [100, 116, 139] as [number, number, number];
+ 1022:       const text = [15, 23, 42] as [number, number, number];
+ 1023: 
+ 1024:       const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+ 1025:         title: 'Reporte de Abonos Detectados',
+ 1026:         lines: [
+ 1027:           `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+ 1028:           `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+ 1029:           empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+ 1030:         ]
+ 1031:       });
+ 1032:       
+ 1033:       const cardY = headerHeight + 6;
+ 1034:       const cardH = 16;
+ 1035:       const cardGap = 4;
+ 1036:       const availableWidth = pageWidth - (contentLeft * 2);
+ 1037:       const cardW = (availableWidth - (cardGap * 2)) / 3;
+ 1038:       const startX = contentLeft;
+ 1039:       
+ 1040:       // Calcular KPIs
+ 1041:       const totalAbonos = abonosFiltrados.length;
+ 1042:       const montoTotalAbonado = abonosFiltrados.reduce((sum, a) => sum + ((a.total_anterior || 0) - (a.total_nuevo || 0)), 0);
+ 1043:       const documentosUnicos = new Set(abonosFiltrados.map(a => a.documento)).size;
+ 1044:       
+ 1045:       const cards = [
+ 1046:         { label: 'Total Abonos', value: `${totalAbonos}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+ 1047:         { label: 'Monto Total', value: fmtMoney(montoTotalAbonado), color: [16, 185, 129] as [number, number, number], soft: [209, 250, 229] as [number, number, number] },
+ 1048:         { label: 'Documentos', value: `${documentosUnicos}`, color: [107, 114, 128] as [number, number, number], soft: [243, 244, 246] as [number, number, number] }
+ 1049:       ];
+ 1050:       
+ 1051:       cards.forEach((item, idx) => {
+ 1052:         const x = startX + idx * (cardW + cardGap);
+ 1053:         doc.setDrawColor(226, 232, 240);
+ 1054:         doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+ 1055:         doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+ 1056:         doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+ 1057:         doc.rect(x, cardY, cardW, 1.2, 'F');
+ 1058:         doc.setFontSize(7);
+ 1059:         doc.setTextColor(muted[0], muted[1], muted[2]);
+ 1060:         doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+ 1061:         doc.setFontSize(10);
+ 1062:         doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+ 1063:         doc.text(item.value, x + 4, cardY + 12);
+ 1064:       });
+ 1065:       
+ 1066:       const tableData = abonosFiltrados.map(a => ([
+ 1067:         a.fecha ? a.fecha.split('T')[0] : '-',
+ 1068:         a.cliente || a.razon_social || '-',
+ 1069:         a.documento || '-',
+ 1070:         fmtMoney(a.total_anterior || 0),
+ 1071:         fmtMoney((a.total_anterior || 0) - (a.total_nuevo || 0)),
+ 1072:         fmtMoney(a.total_nuevo || 0),
+ 1073:         a.observacion || '-'
+ 1074:       ]));
+ 1075: 
+ 1076:       autoTable(doc, {
+ 1077:         head: [['Fecha', 'Cliente', 'Documento', 'Saldo Anterior', 'Pago', 'Nuevo Saldo', 'ObservaciÃ³n']],
+ 1078:         body: tableData,
+ 1079:         startY: cardY + cardH + 8,
+ 1080:         theme: 'plain',
+ 1081:         styles: { fontSize: 8, cellPadding: 2, textColor: text, lineColor: [226, 232, 240], lineWidth: 0.2 },
+ 1082:         headStyles: { 
+ 1083:           fillColor: [219, 234, 254],
+ 1084:           textColor: accent,
+ 1085:           fontStyle: 'bold',
+ 1086:           halign: 'left',
+ 1087:           lineColor: accent,
+ 1088:           lineWidth: 0.5
+ 1089:         },
+ 1090:         alternateRowStyles: {
+ 1091:           fillColor: [249, 250, 251]
+ 1092:         },
+ 1093:         margin: { left: contentLeft, right: contentLeft },
+ 1094:         columnStyles: {
+ 1095:           3: { halign: 'right' },
+ 1096:           4: { halign: 'right', textColor: [16, 185, 129] },
+ 1097:           5: { halign: 'right' }
+ 1098:         },
+ 1099:         pageBreak: 'auto',
+ 1100:         rowPageBreak: 'avoid'
+ 1101:       });
+ 1102: 
+ 1103:       // Pie de pÃ¡gina
+ 1104:       const pageSize = doc.internal.pageSize;
+ 1105:       const pageHeight = pageSize.getHeight();
+ 1106:       const totalPages = (doc as any).internal.getNumberOfPages?.() || 1;
+ 1107:       
+ 1108:       for (let i = 1; i <= totalPages; i++) {
+ 1109:         doc.setPage(i);
+ 1110:         doc.setDrawColor(226, 232, 240);
+ 1111:         doc.setLineWidth(0.3);
+ 1112:         doc.line(contentLeft, pageHeight - 14, pageWidth - contentLeft, pageHeight - 14);
+ 1113:         
+ 1114:         doc.setFontSize(7);
+ 1115:         doc.setTextColor(muted[0], muted[1], muted[2]);
+ 1116:         doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, contentLeft, pageHeight - 10);
+ 1117:         doc.text(`PÃ¡gina ${i} de ${totalPages}`, pageWidth - contentLeft - 25, pageHeight - 10);
+ 1118:       }
+ 1119: 
+ 1120:       doc.save(`Abonos_${new Date().toISOString().split('T')[0]}.pdf`);
+ 1121:       addToast("âœ… Reporte de abonos generado", "success");
+ 1122:     } catch (e) {
+ 1123:       console.error(e);
+ 1124:       addToast("Error generando reporte de abonos", "error");
+ 1125:     }
+ 1126:   };
+ 1127: 
+ 1128:   const getAnalisisReportConfig = () => {
+ 1129:     if (vistaAnalisis === 'motivos') {
+ 1130:       const total = motivosData.reduce((sum, x) => sum + (x.total || 0), 0);
+ 1131:       return {
+ 1132:         key: 'motivos_impago',
+ 1133:         title: 'Motivos de Impago',
+ 1134:         head: ['Motivo', 'Casos', 'Monto Total', '%'],
+ 1135:         alignRightIndices: [1, 2, 3],
+ 1136:         rows: motivosData.map((m: any) => ([
+ 1137:           m.label || '-',
+ 1138:           `${m.count ?? 0}`,
+ 1139:           fmtMoney(m.total || 0),
+ 1140:           `${total > 0 ? ((m.total / total) * 100).toFixed(1) : '0'}%`
+
+============================================================
+LÍNEAS 1210 - 1370
+============================================================
+ 1210:       return [
+ 1211:         { label: 'Casos', value: `${totalCasos}` },
+ 1212:         { label: 'Monto Total', value: fmtMoney(totalMonto) },
+ 1213:         { label: 'Top Motivo', value: compactLabel(topMotivo, 20) }
+ 1214:       ];
+ 1215:     }
+ 1216: 
+ 1217:     if (vistaAnalisis === 'productividad') {
+ 1218:       const totalGestiones = productividadData.reduce((sum, x) => sum + (x.total_gestiones || 0), 0);
+ 1219:       const totalPromesas = productividadData.reduce((sum, x) => sum + (x.promesas || 0), 0);
+ 1220:       const tasaPromesa = totalGestiones > 0 ? ((totalPromesas / totalGestiones) * 100).toFixed(1) : '0.0';
+ 1221:       return [
+ 1222:         { label: 'Gestiones', value: `${totalGestiones}` },
+ 1223:         { label: 'Promesas', value: `${totalPromesas}` },
+ 1224:         { label: 'Tasa Promesa', value: `${tasaPromesa}%` }
+ 1225:       ];
+ 1226:     }
+ 1227: 
+ 1228:     if (vistaAnalisis === 'riesgo') {
+ 1229:       const clientes = analisisRiesgo.length;
+ 1230:       const deudaTotal = analisisRiesgo.reduce((sum, x) => sum + (x.total_deuda || 0), 0);
+ 1231:       const deudaVencida = analisisRiesgo.reduce((sum, x) => sum + (x.deuda_vencida || 0), 0);
+ 1232:       return [
+ 1233:         { label: 'Clientes', value: `${clientes}` },
+ 1234:         { label: 'Deuda Total', value: fmtMoney(deudaTotal) },
+ 1235:         { label: 'Deuda Vencida', value: fmtMoney(deudaVencida) }
+ 1236:       ];
+ 1237:     }
+ 1238: 
+ 1239:     const totalCronicos = deudoresCronicos.length;
+ 1240:     const deudaTotal = deudoresCronicos.reduce((sum, x) => sum + (x.totalDeuda || 0), 0);
+ 1241:     const deudaVencida = deudoresCronicos.reduce((sum, x) => sum + (x.totalVencido || 0), 0);
+ 1242:     return [
+ 1243:       { label: 'Deudores', value: `${totalCronicos}` },
+ 1244:       { label: 'Deuda Total', value: fmtMoney(deudaTotal) },
+ 1245:       { label: 'Vencido +90', value: fmtMoney(deudaVencida) }
+ 1246:     ];
+ 1247:   };
+ 1248: 
+ 1249:   const exportarAnalisisPDF = async () => {
+ 1250:     const config = getAnalisisReportConfig();
+ 1251:     if (!config.rows.length) {
+ 1252:       addToast('No hay datos para reportar en esta vista', 'info');
+ 1253:       return;
+ 1254:     }
+ 1255: 
+ 1256:     try {
+ 1257:       const paletteBySection: Record<string, { accent: [number, number, number]; soft: [number, number, number] }> = {
+ 1258:         motivos: { accent: [59, 130, 246], soft: [219, 234, 254] },
+ 1259:         productividad: { accent: [16, 185, 129], soft: [209, 250, 229] },
+ 1260:         riesgo: { accent: [239, 68, 68], soft: [254, 226, 226] },
+ 1261:         cronicos: { accent: [220, 38, 38], soft: [254, 226, 226] }
+ 1262:       };
+ 1263:       const sectionPalette = paletteBySection[vistaAnalisis] || paletteBySection.motivos;
+ 1264:       const { jsPDF, autoTable } = await loadJsPDF();
+ 1265:       const doc = new jsPDF();
+ 1266: 
+ 1267:       const accent = sectionPalette.accent;
+ 1268:       const muted = [100, 116, 139] as [number, number, number];
+ 1269:       const text = [15, 23, 42] as [number, number, number];
+ 1270: 
+ 1271:       renderPdfHeader(doc, {
+ 1272:         title: 'Panel de Analisis',
+ 1273:         lines: [
+ 1274:           `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+ 1275:           `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+ 1276:           `Seccion: ${config.title}`
+ 1277:         ]
+ 1278:       });
+ 1279: 
+ 1280:       const summary = getAnalisisSummary();
+ 1281:       const cardY = 46;
+ 1282:       const cardH = 16;
+ 1283:       const cardW = 58;
+ 1284:       const cardGap = 6;
+ 1285: 
+ 1286:       summary.forEach((item, idx) => {
+ 1287:         const x = 14 + idx * (cardW + cardGap);
+ 1288:         doc.setDrawColor(226, 232, 240);
+ 1289:         doc.setFillColor(255, 255, 255);
+ 1290:         doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+ 1291:         doc.setFillColor(accent[0], accent[1], accent[2]);
+ 1292:         doc.rect(x, cardY, cardW, 1.2, 'F');
+ 1293:         doc.setFontSize(7);
+ 1294:         doc.setTextColor(muted[0], muted[1], muted[2]);
+ 1295:         doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+ 1296:         doc.setFontSize(10);
+ 1297:         doc.setTextColor(accent[0], accent[1], accent[2]);
+ 1298:         doc.text(item.value, x + 4, cardY + 12);
+ 1299:       });
+ 1300: 
+ 1301:       const columnStyles = (config.alignRightIndices || []).reduce((acc: Record<number, any>, idx: number) => {
+ 1302:         acc[idx] = { halign: 'right' };
+ 1303:         return acc;
+ 1304:       }, {});
+ 1305: 
+ 1306:       autoTable(doc, {
+ 1307:         startY: cardY + cardH + 8,
+ 1308:         head: [config.head],
+ 1309:         body: config.rows,
+ 1310:         theme: 'plain',
+ 1311:         styles: { fontSize: 8, cellPadding: 2, textColor: text },
+ 1312:         headStyles: {
+ 1313:           fillColor: sectionPalette.soft,
+ 1314:           textColor: accent,
+ 1315:           fontStyle: 'bold',
+ 1316:           halign: 'left'
+ 1317:         },
+ 1318:         alternateRowStyles: { fillColor: [248, 250, 252] },
+ 1319:         columnStyles,
+ 1320:         didParseCell: (data) => {
+ 1321:           if (data.section !== 'body') return;
+ 1322: 
+ 1323:           if (vistaAnalisis === 'riesgo') {
+ 1324:             const score = analisisRiesgo[data.row.index]?.score ?? 0;
+ 1325:             const riskColor = score < 30 ? [254, 226, 226] : score < 60 ? [254, 243, 199] : [220, 252, 231];
+ 1326:             data.cell.styles.fillColor = riskColor as any;
+ 1327:             if (data.column.index === 5) {
+ 1328:               data.cell.styles.textColor = score < 30 ? [185, 28, 28] : score < 60 ? [180, 83, 9] : [22, 101, 52];
+ 1329:               data.cell.styles.fontStyle = 'bold';
+ 1330:             }
+ 1331:           }
+ 1332: 
+ 1333:           if (vistaAnalisis === 'cronicos') {
+ 1334:             data.cell.styles.fillColor = [254, 226, 226] as any;
+ 1335:             if (data.column.index === 4) {
+ 1336:               data.cell.styles.textColor = [185, 28, 28];
+ 1337:               data.cell.styles.fontStyle = 'bold';
+ 1338:             }
+ 1339:           }
+ 1340:         }
+ 1341:       });
+ 1342: 
+ 1343:       const filename = `Reporte_Analisis_${config.key}_${new Date().toISOString().split('T')[0]}.pdf`;
+ 1344:       try {
+ 1345:         const blobUrl = doc.output('bloburl');
+ 1346:         window.open(blobUrl, '_blank', 'noopener,noreferrer');
+ 1347:       } catch (e) {
+ 1348:         console.warn('No se pudo abrir la vista previa del PDF:', e);
+ 1349:       }
+ 1350:       doc.save(filename);
+ 1351:       addToast('âœ… Reporte de analisis generado', 'success');
+ 1352:     } catch (e) {
+ 1353:       console.error(e);
+ 1354:       addToast('Error generando reporte de analisis', 'error');
+ 1355:     }
+ 1356:   };
+ 1357: 
+ 1358:   async function exportarBackup() {
+ 1359:     if (isWeb) {
+ 1360:       addToast("Esta funciÃ³n solo estÃ¡ disponible en la versiÃ³n de escritorio", "info");
+ 1361:       return;
+ 1362:     }
+ 1363:     try {
+ 1364:       const result = await window.api!.exportarBackup();
+ 1365:       if (result.ok) {
+ 1366:         addToast("Respaldo exportado correctamente", "success");
+ 1367:       } else {
+ 1368:         addToast("Error: " + result.message, "error");
+ 1369:       }
+ 1370:     } catch (e) {
+
+============================================================
+LÍNEAS 2800 - 3010
+============================================================
+ 2800:           || (d.cliente || '').toLowerCase().includes(normalizedSearch)
+ 2801:           || (d.documento || d.numero || '').toLowerCase().includes(normalizedSearch);
+ 2802: 
+ 2803:         return matchCliente && matchVendedor && matchCentro && matchAging && matchSearch && matchPendiente;
+ 2804:       });
+ 2805: 
+ 2806:       const exportarExcel = async () => {
+ 2807:         try {
+ 2808:           const XLSX = await loadXLSX();
+ 2809:           const dataExport = docsFiltrados.map((d: any) => {
+ 2810:             const aging = d.aging || getAgingLabel(d);
+ 2811:             return {
+ 2812:             'Documento': d.documento,
+ 2813:             'Cliente': d.cliente,
+ 2814:             'RazÃ³n Social': d.razon_social,
+ 2815:             'Vendedor': d.vendedor || '-',
+ 2816:             'EmisiÃ³n': d.fecha_emision,
+ 2817:             'Vencimiento': d.fecha_vencimiento,
+ 2818:             'DÃ­as Vencidos': d.dias_vencidos || 0,
+ 2819:             'Aging': aging,
+ 2820:             'Total': d.total,
+ 2821:             'Valordocumento': d.valor_documento,
+ 2822:             'Retenciones': d.retenciones || 0
+ 2823:           }});
+ 2824:           
+ 2825:           const ws = XLSX.utils.json_to_sheet(dataExport);
+ 2826:           const wb = XLSX.utils.book_new();
+ 2827:           XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
+ 2828:           
+ 2829:           // Nombre del archivo segÃºn tipo de reporte
+ 2830:           let nombreArchivoExcel = 'Cartera_GENERAL';
+ 2831:           if (selectedVendedor) {
+ 2832:             nombreArchivoExcel = `Cartera_${selectedVendedor.replace(/[^a-z0-9]/gi, '_')}`;
+ 2833:           } else if (selectedCliente && selectedCliente !== 'Todos') {
+ 2834:             nombreArchivoExcel = `Cartera_${selectedCliente.replace(/[^a-z0-9]/gi, '_')}`;
+ 2835:           }
+ 2836:           
+ 2837:           XLSX.writeFile(wb, `${nombreArchivoExcel}_${new Date().toISOString().split('T')[0]}.xlsx`);
+ 2838:           addToast('âœ… Reporte Excel generado', 'success');
+ 2839:         } catch (error) {
+ 2840:           addToast('âŒ Error al generar Excel', 'error');
+ 2841:         }
+ 2842:       };
+ 2843: 
+ 2844:       const exportarPDF = async () => {
+ 2845:         try {
+ 2846:           const { jsPDF, autoTable } = await loadJsPDF();
+ 2847:           const doc = new jsPDF();
+ 2848:           const accent = [59, 130, 246] as [number, number, number];
+ 2849:           const muted = [100, 116, 139] as [number, number, number];
+ 2850:           const text = [15, 23, 42] as [number, number, number];
+ 2851:           // TÃ­tulo con diferenciaciÃ³n: GENERAL, CLIENTE o VENDEDOR
+ 2852:           let tituloReporte = 'Reporte de Cartera - GENERAL';
+ 2853:           if (selectedVendedor) {
+ 2854:             tituloReporte = `Reporte de Cartera ${selectedVendedor}`;
+ 2855:           } else if (selectedCliente && selectedCliente !== 'Todos') {
+ 2856:             tituloReporte = `Reporte de Cartera - ${selectedCliente}`;
+ 2857:           }
+ 2858: 
+ 2859:           const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+ 2860:             title: tituloReporte,
+ 2861:             lines: [
+ 2862:               `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+ 2863:               `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+ 2864:               empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+ 2865:             ]
+ 2866:           });
+ 2867: 
+ 2868:           const totalDocs = docsFiltrados.length;
+ 2869:           const totalMonto = docsFiltrados.reduce((sum: number, d: any) => sum + getDocAmount(d), 0);
+ 2870:           const docsVencidos = docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0);
+ 2871:           const totalVencido = docsVencidos.reduce((sum: number, d: any) => sum + getDocAmount(d), 0);
+ 2872: 
+ 2873:           const cardY = headerHeight + 6;
+ 2874:           const cardH = 16;
+ 2875:           const cardGap = 4;
+ 2876:           const availableWidth = pageWidth - (contentLeft * 2);
+ 2877:           const cardW = (availableWidth - (cardGap * 3)) / 4;
+ 2878:           const startX = contentLeft;
+ 2879:           const cards = [
+ 2880:             { label: 'Documentos', value: `${totalDocs}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+ 2881:             { label: 'Monto Total', value: fmtMoney(totalMonto), color: [14, 116, 144] as [number, number, number], soft: [204, 251, 241] as [number, number, number] },
+ 2882:             { label: 'Docs Vencidos', value: `${docsVencidos.length}`, color: [245, 158, 11] as [number, number, number], soft: [254, 243, 199] as [number, number, number] },
+ 2883:             { label: 'Monto Vencido', value: fmtMoney(totalVencido), color: [239, 68, 68] as [number, number, number], soft: [254, 226, 226] as [number, number, number] }
+ 2884:           ];
+ 2885: 
+ 2886:           cards.forEach((item, idx) => {
+ 2887:             const x = startX + idx * (cardW + cardGap);
+ 2888:             doc.setDrawColor(226, 232, 240);
+ 2889:             doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+ 2890:             doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+ 2891:             doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+ 2892:             doc.rect(x, cardY, cardW, 1.2, 'F');
+ 2893:             doc.setFontSize(7);
+ 2894:             doc.setTextColor(muted[0], muted[1], muted[2]);
+ 2895:             doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+ 2896:             doc.setFontSize(10);
+ 2897:             doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+ 2898:             doc.text(item.value, x + 4, cardY + 12);
+ 2899:           });
+ 2900:           
+ 2901:           const groupedRows: Array<[string, string, string | number, string, string]> = [];
+ 2902:           const rowMeta: Array<{ isGroup: boolean; doc?: Documento }> = [];
+ 2903:           const grouped = new Map<string, Documento[]>();
+ 2904:           docsFiltrados.forEach((d: any) => {
+ 2905:             const key = d.razon_social || d.cliente || '-';
+ 2906:             if (!grouped.has(key)) grouped.set(key, []);
+ 2907:             grouped.get(key)!.push(d as Documento);
+ 2908:           });
+ 2909: 
+ 2910:           Array.from(grouped.entries()).forEach(([clienteNombre, docsCliente]) => {
+ 2911:             const subtotal = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
+ 2912:             groupedRows.push(['', clienteNombre, '', '', fmtMoney(subtotal)]);
+ 2913:             rowMeta.push({ isGroup: true });
+ 2914: 
+ 2915:             docsCliente.forEach((d) => {
+ 2916:               const aging = (d as any).aging || getAgingLabel(d);
+ 2917:               groupedRows.push([
+ 2918:                 d.documento || d.numero || '-',
+ 2919:                 '',
+ 2920:                 d.dias_vencidos || 0,
+ 2921:                 aging,
+ 2922:                 fmtMoney(getDocAmount(d))
+ 2923:               ]);
+ 2924:               rowMeta.push({ isGroup: false, doc: d });
+ 2925:             });
+ 2926:           });
+ 2927:           
+ 2928:           const getRowFill = (agingValue: string, dias: number) => {
+ 2929:             if (dias > 180 || agingValue === '>360' || agingValue === '360') return [254, 226, 226];
+ 2930:             if (dias > 90 || agingValue === '180' || agingValue === '150' || agingValue === '120') return [254, 243, 199];
+ 2931:             if (dias > 0) return [220, 252, 231];
+ 2932:             return [248, 250, 252];
+ 2933:           };
+ 2934: 
+ 2935:           autoTable(doc, {
+ 2936:             head: [['Documento', 'Cliente', 'Dias Venc.', 'Aging', 'Saldo']],
+ 2937:             body: groupedRows,
+ 2938:             startY: cardY + cardH + 8,
+ 2939:             theme: 'plain',
+ 2940:             styles: { fontSize: 8, cellPadding: 2, textColor: text },
+ 2941:             headStyles: { fillColor: [219, 234, 254], textColor: accent, fontStyle: 'bold' },
+ 2942:             margin: { left: contentLeft, right: contentLeft },
+ 2943:             columnStyles: {
+ 2944:               2: { halign: 'right' },
+ 2945:               4: { halign: 'right' }
+ 2946:             },
+ 2947:             didParseCell: (data) => {
+ 2948:               if (data.section !== 'body') return;
+ 2949:               const meta = rowMeta[data.row.index];
+ 2950:               if (meta?.isGroup) {
+ 2951:                 data.cell.styles.fillColor = [241, 245, 249] as any;
+ 2952:                 data.cell.styles.fontStyle = 'bold';
+ 2953:                 if (data.column.index === 4) {
+ 2954:                   data.cell.styles.textColor = accent as any;
+ 2955:                 }
+ 2956:                 return;
+ 2957:               }
+ 2958:               const rowDoc = meta?.doc;
+ 2959:               const dias = rowDoc?.dias_vencidos || 0;
+ 2960:               const agingValue = (rowDoc as any)?.aging || (rowDoc ? getAgingLabel(rowDoc) : '');
+ 2961:               data.cell.styles.fillColor = getRowFill(agingValue, dias) as any;
+ 2962:             }
+ 2963:           });
+ 2964:           
+ 2965:           // Nombre del archivo segÃºn tipo de reporte
+ 2966:           let nombreArchivo = 'Cartera_GENERAL';
+ 2967:           if (selectedVendedor) {
+ 2968:             nombreArchivo = `Cartera_${selectedVendedor.replace(/[^a-z0-9]/gi, '_')}`;
+ 2969:           } else if (selectedCliente && selectedCliente !== 'Todos') {
+ 2970:             nombreArchivo = `Cartera_${selectedCliente.replace(/[^a-z0-9]/gi, '_')}`;
+ 2971:           }
+ 2972:           
+ 2973:           doc.save(`${nombreArchivo}_${new Date().toISOString().split('T')[0]}.pdf`);
+ 2974:           addToast('âœ… Reporte PDF generado', 'success');
+ 2975:         } catch (error) {
+ 2976:           addToast('âŒ Error al generar PDF', 'error');
+ 2977:         }
+ 2978:       };
+ 2979: 
+ 2980:       return (
+ 2981:         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+ 2982:           <div className="card">
+ 2983:             <div className="card-title">ðŸ“Š Resumen Ejecutivo</div>
+ 2984:             <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+ 2985:               <div className="kpi-card">
+ 2986:                 <div className="kpi-title">Total Documentos</div>
+ 2987:                 <div className="kpi-value">{docsFiltrados.length}</div>
+ 2988:               </div>
+ 2989:               <div className="kpi-card">
+ 2990:                 <div className="kpi-title">Monto Total</div>
+ 2991:                 <div className="kpi-value">{fmtMoney(docsFiltrados.reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
+ 2992:               </div>
+ 2993:               <div className="kpi-card">
+ 2994:                 <div className="kpi-title">Docs Vencidos</div>
+ 2995:                 <div className="kpi-value kpi-negative">{docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).length}</div>
+ 2996:                 <div className="kpi-subtitle">{docsFiltrados.length > 0 ? ((docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).length / docsFiltrados.length) * 100).toFixed(1) : 0}% del total</div>
+ 2997:               </div>
+ 2998:               <div className="kpi-card">
+ 2999:                 <div className="kpi-title">Monto Vencido</div>
+ 3000:                 <div className="kpi-value kpi-negative">{fmtMoney(docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0))}</div>
+ 3001:                 <div className="kpi-subtitle">{docsFiltrados.length > 0 ? ((docsFiltrados.filter((d: any) => (d.dias_vencidos || 0) > 0).reduce((sum: number, d: any) => sum + (d.total || 0), 0) / docsFiltrados.reduce((sum: number, d: any) => sum + (d.total || 0), 0)) * 100).toFixed(1) : 0}% del total</div>
+ 3002:               </div>
+ 3003:               <div className="kpi-card">
+ 3004:                 <div className="kpi-title">Clientes Ãšnicos</div>
+ 3005:                 <div className="kpi-value">{new Set(docsFiltrados.map((d: any) => d.cliente)).size}</div>
+ 3006:               </div>
+ 3007:             </div>
+ 3008:           </div>
+ 3009: 
+ 3010:           <div className="card">
+
+============================================================
+LÍNEAS 3280 - 3430
+============================================================
+ 3280:       
+ 3281:       const promesasFiltradas = promesas.filter(p => {
+ 3282:         if (!p.fecha_promesa) return true;
+ 3283:         const diffDias = calcularDiasDiferencia(p.fecha_promesa);
+ 3284:         
+ 3285:         let cumpleFecha = true;
+ 3286:         if (filtroFecha === "Hoy") cumpleFecha = diffDias === 0;
+ 3287:         else if (filtroFecha === "Esta Semana") cumpleFecha = diffDias >= 0 && diffDias <= 7;
+ 3288:         else if (filtroFecha === "Vencidas") cumpleFecha = diffDias < 0;
+ 3289:         
+ 3290:         let cumpleMonto = true;
+ 3291:         if (filtroMonto === "Menor 1000") cumpleMonto = (p.monto_promesa || 0) < 1000;
+ 3292:         else if (filtroMonto === "1000-5000") cumpleMonto = (p.monto_promesa || 0) >= 1000 && (p.monto_promesa || 0) <= 5000;
+ 3293:         else if (filtroMonto === "Mayor 5000") cumpleMonto = (p.monto_promesa || 0) > 5000;
+ 3294:         
+ 3295:         return cumpleFecha && cumpleMonto;
+ 3296:       });
+ 3297: 
+ 3298:       const getSemaforo = (fechaPromesa: string | undefined) => {
+ 3299:         if (!fechaPromesa) return { color: '#9ca3af', label: 'Sin fecha' };
+ 3300:         const diffDias = calcularDiasDiferencia(fechaPromesa);
+ 3301:         
+ 3302:         if (diffDias < 0) return { color: '#e63946', label: 'ðŸ”´ Vencida' };
+ 3303:         if (diffDias === 0) return { color: '#f59e0b', label: 'ðŸŸ¡ Hoy' };
+ 3304:         if (diffDias <= 3) return { color: '#f59e0b', label: 'ðŸŸ¡ PrÃ³xima' };
+ 3305:         return { color: '#2ea44f', label: 'ðŸŸ¢ Vigente' };
+ 3306:       };
+ 3307: 
+ 3308:       const totalPromesas = promesas.length;
+ 3309:       const montoTotal = promesas.reduce((sum, p) => sum + (p.monto_promesa || 0), 0);
+ 3310:       const vencidas = promesas.filter(p => {
+ 3311:         if (!p.fecha_promesa) return false;
+ 3312:         const diffDias = calcularDiasDiferencia(p.fecha_promesa);
+ 3313:         return diffDias < 0;
+ 3314:       }).length;
+ 3315: 
+ 3316:       const exportarReportePromesas = async () => {
+ 3317:         try {
+ 3318:           const { jsPDF, autoTable } = await loadJsPDF();
+ 3319:           const doc = new jsPDF();
+ 3320:           const accent = [59, 130, 246] as [number, number, number];
+ 3321:           const muted = [100, 116, 139] as [number, number, number];
+ 3322:           const text = [15, 23, 42] as [number, number, number];
+ 3323: 
+ 3324:           const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+ 3325:             title: 'Reporte de Promesas de Pago',
+ 3326:             lines: [
+ 3327:               `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+ 3328:               `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+ 3329:               empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+ 3330:             ]
+ 3331:           });
+ 3332:           
+ 3333:           const cardY = headerHeight + 6;
+ 3334:           const cardH = 16;
+ 3335:           const cardGap = 4;
+ 3336:           const availableWidth = pageWidth - (contentLeft * 2);
+ 3337:           const cardW = (availableWidth - (cardGap * 3)) / 4;
+ 3338:           const startX = contentLeft;
+ 3339:           
+ 3340:           const cards = [
+ 3341:             { label: 'Total Promesas', value: `${totalPromesas}`, color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+ 3342:             { label: 'Monto Total', value: fmtMoney(montoTotal), color: [14, 116, 144] as [number, number, number], soft: [204, 251, 241] as [number, number, number] },
+ 3343:             { label: 'Vencidas', value: `${vencidas}`, color: [239, 68, 68] as [number, number, number], soft: [254, 226, 226] as [number, number, number] },
+ 3344:             { label: 'Vigentes', value: `${totalPromesas - vencidas}`, color: [16, 185, 129] as [number, number, number], soft: [209, 250, 229] as [number, number, number] }
+ 3345:           ];
+ 3346:           
+ 3347:           cards.forEach((item, idx) => {
+ 3348:             const x = startX + idx * (cardW + cardGap);
+ 3349:             doc.setDrawColor(226, 232, 240);
+ 3350:             doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+ 3351:             doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+ 3352:             doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+ 3353:             doc.rect(x, cardY, cardW, 1.2, 'F');
+ 3354:             doc.setFontSize(7);
+ 3355:             doc.setTextColor(muted[0], muted[1], muted[2]);
+ 3356:             doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+ 3357:             doc.setFontSize(10);
+ 3358:             doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+ 3359:             doc.text(item.value, x + 4, cardY + 12);
+ 3360:           });
+ 3361:           
+ 3362:           const tableData = promesasFiltradas.map(p => {
+ 3363:             const montoPagado = p.monto_pagado || 0;
+ 3364:             const montoPrometido = p.monto_promesa || 0;
+ 3365:             const falta = montoPrometido - montoPagado;
+ 3366:             const difDias = p.fecha_promesa ? calcularDiasDiferencia(p.fecha_promesa) : 0;
+ 3367:             
+ 3368:             const rawEstado = p.estado_promesa || '';
+ 3369:             const estadoLimpio = rawEstado.replace(/[^\x20-\x7E]/g, '').replace(/\s+/g, ' ').trim();
+ 3370:             let estadoLabel = estadoLimpio || 'Pendiente';
+ 3371:             if (!estadoLimpio) {
+ 3372:               if (difDias < 0) estadoLabel = 'Vencida';
+ 3373:               else if (difDias === 0) estadoLabel = 'Hoy';
+ 3374:               else if (difDias > 0 && difDias <= 3) estadoLabel = 'Proxima';
+ 3375:               else estadoLabel = 'Vigente';
+ 3376:             }
+ 3377:             
+ 3378:             return [
+ 3379:               p.razon_social || p.cliente,
+ 3380:               p.fecha_promesa,
+ 3381:               fmtMoney(montoPrometido),
+ 3382:               fmtMoney(montoPagado),
+ 3383:               fmtMoney(falta),
+ 3384:               estadoLabel,
+ 3385:               p.observacion || '-'
+ 3386:             ];
+ 3387:           });
+ 3388:           
+ 3389:           autoTable(doc, {
+ 3390:             head: [['Cliente', 'Fecha Promesa', 'Prometido', 'Pagado', 'Falta', 'Estado', 'ObservaciÃ³n']],
+ 3391:             body: tableData,
+ 3392:             startY: cardY + cardH + 8,
+ 3393:             theme: 'plain',
+ 3394:             styles: { fontSize: 8, cellPadding: 2, textColor: text },
+ 3395:             headStyles: { fillColor: [219, 234, 254], textColor: accent, fontStyle: 'bold' },
+ 3396:             margin: { left: contentLeft, right: contentLeft },
+ 3397:             columnStyles: {
+ 3398:               2: { halign: 'right' },
+ 3399:               3: { halign: 'right' },
+ 3400:               4: { halign: 'right' }
+ 3401:             }
+ 3402:           });
+ 3403:           
+ 3404:           doc.save(`Promesas_${new Date().toISOString().split('T')[0]}.pdf`);
+ 3405:           addToast("âœ… Reporte de promesas generado", "success");
+ 3406:         } catch (e) {
+ 3407:           console.error(e);
+ 3408:           addToast("âŒ Error generando reporte", "error");
+ 3409:         }
+ 3410:       };
+ 3411: 
+ 3412:       return (
+ 3413:         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+ 3414:           <div style={gridTwoCol}>
+ 3415:           <div className="card" style={{ marginBottom: 0 }}>
+ 3416:             <div className="card-title">ðŸ’¼ Resumen</div>
+ 3417:             <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+ 3418:               <div className="kpi-card">
+ 3419:                 <div className="kpi-title">Total Promesas</div>
+ 3420:                 <div className="kpi-value">{totalPromesas}</div>
+ 3421:               </div>
+ 3422:               <div className="kpi-card">
+ 3423:                 <div className="kpi-title">Monto Total</div>
+ 3424:                 <div className="kpi-value">{fmtMoney(montoTotal)}</div>
+ 3425:               </div>
+ 3426:               <div className="kpi-card">
+ 3427:                 <div className="kpi-title">Vencidas</div>
+ 3428:                 <div className="kpi-value kpi-negative">{vencidas}</div>
+ 3429:               </div>
+ 3430:               <div className="kpi-card">
+
+============================================================
+LÍNEAS 3700 - 3840
+============================================================
+ 3700:                       <th>#</th>
+ 3701:                       <th>Cliente</th>
+ 3702:                       <th>Vendedor</th>
+ 3703:                       <th className="num">Deuda Total</th>
+ 3704:                       <th className="num">Vencido (+90 dÃ­as)</th>
+ 3705:                       <th className="num">Docs Vencidos</th>
+ 3706:                     </tr>
+ 3707:                   </thead>
+ 3708:                   <tbody>
+ 3709:                     {deudoresCronicos.length > 0 ? (
+ 3710:                       deudoresCronicos.map((d, idx) => (
+ 3711:                         <tr key={idx} style={{ borderLeft: '4px solid #dc2626' }}>
+ 3712:                           <td><strong>{idx + 1}</strong></td>
+ 3713:                           <td>{d.razon_social}</td>
+ 3714:                           <td>{d.vendedor}</td>
+ 3715:                           <td className="num">{fmtMoney(d.totalDeuda)}</td>
+ 3716:                           <td className="num kpi-negative">{fmtMoney(d.totalVencido)}</td>
+ 3717:                           <td className="num">{d.documentosVencidos}</td>
+ 3718:                         </tr>
+ 3719:                       ))
+ 3720:                     ) : (
+ 3721:                       <tr>
+ 3722:                         <td colSpan={6} style={{textAlign: 'center', color: '#9ca3af', padding: '20px'}}>
+ 3723:                           âœ… No hay deudores crÃ³nicos (mora mayor a 90 dÃ­as)
+ 3724:                         </td>
+ 3725:                       </tr>
+ 3726:                     )}
+ 3727:                   </tbody>
+ 3728:                 </table>
+ 3729:               </div>
+ 3730:             )}
+ 3731:         </div>
+ 3732:         </div>
+ 3733:       );
+ 3734:     }
+ 3735: 
+ 3736:     if (tab === "alertas") {
+ 3737:       const exportarAlertas = async () => {
+ 3738:         if (filteredAlertas.length === 0) {
+ 3739:           addToast("No hay alertas para exportar", "info");
+ 3740:           return;
+ 3741:         }
+ 3742:         try {
+ 3743:           const { jsPDF, autoTable } = await loadJsPDF();
+ 3744:           const doc = new jsPDF();
+ 3745:           const accent = [59, 130, 246] as [number, number, number];
+ 3746:           const muted = [100, 116, 139] as [number, number, number];
+ 3747:           const text = [15, 23, 42] as [number, number, number];
+ 3748: 
+ 3749:           const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+ 3750:             title: 'Alertas de Incumplimiento',
+ 3751:             lines: [
+ 3752:               `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+ 3753:               `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+ 3754:               empresa.ruc ? `RUC: ${empresa.ruc}` : ''
+ 3755:             ]
+ 3756:           });
+ 3757:           
+ 3758:           // KPIs
+ 3759:           const totalVencidos = filteredAlertas.length;
+ 3760:           const montoVencido = filteredAlertas.reduce((sum: number, a: any) => sum + (a.monto || 0), 0);
+ 3761:           const promedioDias = totalVencidos > 0 ? Math.round(filteredAlertas.reduce((sum: number, a: any) => sum + (a.diasVencidos || 0), 0) / totalVencidos) : 0;
+ 3762:           
+ 3763:           const cardY = headerHeight + 6;
+ 3764:           const cardH = 16;
+ 3765:           const cardGap = 4;
+ 3766:           const availableWidth = pageWidth - (contentLeft * 2);
+ 3767:           const cardW = (availableWidth - (cardGap * 2)) / 3;
+ 3768:           const startX = contentLeft;
+ 3769:           
+ 3770:           const cards = [
+ 3771:             { label: 'Documentos Vencidos', value: String(totalVencidos), color: [239, 68, 68] as [number, number, number], soft: [254, 226, 226] as [number, number, number] },
+ 3772:             { label: 'Monto Vencido', value: fmtMoney(montoVencido), color: [234, 88, 12] as [number, number, number], soft: [254, 237, 213] as [number, number, number] },
+ 3773:             { label: 'Promedio DÃ­as', value: String(promedioDias), color: [107, 114, 128] as [number, number, number], soft: [243, 244, 246] as [number, number, number] }
+ 3774:           ];
+ 3775:           
+ 3776:           cards.forEach((item, idx) => {
+ 3777:             const x = startX + idx * (cardW + cardGap);
+ 3778:             doc.setDrawColor(226, 232, 240);
+ 3779:             doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+ 3780:             doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+ 3781:             doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+ 3782:             doc.rect(x, cardY, cardW, 1.2, 'F');
+ 3783:             doc.setFontSize(7);
+ 3784:             doc.setTextColor(muted[0], muted[1], muted[2]);
+ 3785:             doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+ 3786:             doc.setFontSize(10);
+ 3787:             doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+ 3788:             doc.text(item.value, x + 4, cardY + 12);
+ 3789:           });
+ 3790:           
+ 3791:           const tableData = filteredAlertas.map((a: any) => [
+ 3792:             a.cliente,
+ 3793:             a.documento,
+ 3794:             fmtMoney(a.monto),
+ 3795:             String(a.diasVencidos),
+ 3796:             normalizeSeveridad(a.severidad).label
+ 3797:           ]);
+ 3798:           
+ 3799:           autoTable(doc, {
+ 3800:             head: [['Cliente', 'Documento', 'Monto', 'DÃ­as Vencido', 'Severidad']],
+ 3801:             body: tableData,
+ 3802:             startY: cardY + cardH + 8,
+ 3803:             theme: 'plain',
+ 3804:             headStyles: { fillColor: [219, 234, 254], textColor: text, fontSize: 9, fontStyle: 'bold', lineColor: [226, 232, 240], lineWidth: 0.2 },
+ 3805:             bodyStyles: { textColor: text, fontSize: 8, lineColor: [226, 232, 240], lineWidth: 0.2 },
+ 3806:             alternateRowStyles: { fillColor: [248, 250, 252] },
+ 3807:             columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' } },
+ 3808:             margin: { left: contentLeft, right: contentLeft }
+ 3809:           });
+ 3810:           
+ 3811:           doc.save(`Alertas-Incumplimiento-${new Date().toISOString().split('T')[0]}.pdf`);
+ 3812:           addToast("PDF exportado exitosamente", "success");
+ 3813:         } catch (e) {
+ 3814:           console.error(e);
+ 3815:           addToast("Error al exportar PDF", "error");
+ 3816:         }
+ 3817:       };
+ 3818: 
+ 3819:       // Contar por severidad para grÃ¡fico
+ 3820:       const conteoSeveridad = {
+ 3821:         'CrÃ­tico': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'CrÃ­tico').length,
+ 3822:         'Alta': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Alta').length,
+ 3823:         'Media': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Media').length,
+ 3824:         'Baja': filteredAlertas.filter(a => normalizeSeveridad(a.severidad).label === 'Baja').length
+ 3825:       };
+ 3826:       
+ 3827:       return (
+ 3828:         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+ 3829:         <div className="card">
+ 3830:           <div className="card-title">ðŸš¨ Alertas de Incumplimiento</div>
+ 3831:           
+ 3832:           {/* KPIs Resumen */}
+ 3833:           {filteredAlertas.length > 0 && (
+ 3834:             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+ 3835:               {(() => {
+ 3836:                 const totalVencidos = filteredAlertas.length;
+ 3837:                 const montoVencido = filteredAlertas.reduce((sum: number, a: any) => sum + (a.monto || 0), 0);
+ 3838:                 const promedioDias = totalVencidos > 0 ? Math.round(filteredAlertas.reduce((sum: number, a: any) => sum + (a.diasVencidos || 0), 0) / totalVencidos) : 0;
+ 3839: 
+ 3840:                 const kpis = [
+
+============================================================
+LÍNEAS 3900 - 4060
+============================================================
+ 3900:               <tbody>
+ 3901:                 {filteredAlertas.length > 0 ? (
+ 3902:                   filteredAlertas.map((a, i) => {
+ 3903:                     const sevInfo = normalizeSeveridad(a.severidad);
+ 3904:                     return (
+ 3905:                       <tr key={i}>
+ 3906:                         <td>{a.cliente}</td>
+ 3907:                         <td>{a.documento}</td>
+ 3908:                         <td className="num">{fmtMoney(a.monto)}</td>
+ 3909:                         <td className="num">{a.diasVencidos}</td>
+ 3910:                         <td>
+ 3911:                           <span className={`status-label status-${sevInfo.level}`}>
+ 3912:                             {sevInfo.label}
+ 3913:                           </span>
+ 3914:                         </td>
+ 3915:                       </tr>
+ 3916:                     );
+ 3917:                   })
+ 3918:                 ) : (
+ 3919:                   <tr><td colSpan={5} style={{textAlign: 'center', padding: '20px', color: '#9ca3af'}}>No hay alertas activas</td></tr>
+ 3920:                 )}
+ 3921:               </tbody>
+ 3922:             </table>
+ 3923:           </div>
+ 3924:         </div>
+ 3925:         </div>
+ 3926:       );
+ 3927:     }
+ 3928: 
+ 3929:     if (tab === "tendencias") {
+ 3930:       const maxEmision = Math.max(1, ...tendencias.map((t: any) => t.emision || 0));
+ 3931:       const maxCobrado = Math.max(1, ...tendencias.map((t: any) => t.cobrado || 0));
+ 3932:       
+ 3933:       const exportarReporteTendencias = async () => {
+ 3934:         if (tendencias.length === 0) {
+ 3935:           addToast("No hay datos de tendencias para exportar", "info");
+ 3936:           return;
+ 3937:         }
+ 3938:         try {
+ 3939:           const { jsPDF, autoTable } = await loadJsPDF();
+ 3940:           const doc = new jsPDF();
+ 3941:           const accent = [59, 130, 246] as [number, number, number];
+ 3942:           const muted = [100, 116, 139] as [number, number, number];
+ 3943:           const text = [15, 23, 42] as [number, number, number];
+ 3944: 
+ 3945:           const { headerHeight, contentLeft, pageWidth } = renderPdfHeader(doc, {
+ 3946:             title: 'Tendencias HistÃ³ricas',
+ 3947:             lines: [
+ 3948:               `Empresa: ${empresa.nombre || 'Mi Empresa'}`,
+ 3949:               `Fecha: ${new Date().toLocaleDateString('es-ES')}`,
+ 3950:               'Periodo: Ultimos 12 meses'
+ 3951:             ]
+ 3952:           });
+ 3953:           
+ 3954:           const cardY = headerHeight + 6;
+ 3955:           const cardH = 16;
+ 3956:           const cardGap = 4;
+ 3957:           const availableWidth = pageWidth - (contentLeft * 2);
+ 3958:           const cardW = (availableWidth - (cardGap * 2)) / 3;
+ 3959:           const startX = contentLeft;
+ 3960:           
+ 3961:           // Calcular KPIs
+ 3962:           const totalEmision = tendencias.reduce((sum: number, t: any) => sum + (t.emision || 0), 0);
+ 3963:           const totalCobrado = tendencias.reduce((sum: number, t: any) => sum + (t.cobrado || 0), 0);
+ 3964:           const totalDocumentos = tendencias.reduce((sum: number, t: any) => sum + (t.documentos || 0), 0);
+ 3965:           const totalVencidos = tendencias.reduce((sum: number, t: any) => sum + (t.vencidos || 0), 0);
+ 3966:           const tasaCobro = totalDocumentos > 0 ? Math.round(((totalDocumentos - totalVencidos) / totalDocumentos) * 100) : 0;
+ 3967:           
+ 3968:           const cards = [
+ 3969:             { label: 'Total Emitido', value: fmtMoney(totalEmision), color: [59, 130, 246] as [number, number, number], soft: [219, 234, 254] as [number, number, number] },
+ 3970:             { label: 'Total Cobrado', value: fmtMoney(totalCobrado), color: [16, 185, 129] as [number, number, number], soft: [209, 250, 229] as [number, number, number] },
+ 3971:             { label: 'Tasa de Cobro', value: `${tasaCobro}%`, color: [107, 114, 128] as [number, number, number], soft: [243, 244, 246] as [number, number, number] }
+ 3972:           ];
+ 3973:           
+ 3974:           cards.forEach((item, idx) => {
+ 3975:             const x = startX + idx * (cardW + cardGap);
+ 3976:             doc.setDrawColor(226, 232, 240);
+ 3977:             doc.setFillColor(item.soft[0], item.soft[1], item.soft[2]);
+ 3978:             doc.roundedRect(x, cardY, cardW, cardH, 3, 3, 'FD');
+ 3979:             doc.setFillColor(item.color[0], item.color[1], item.color[2]);
+ 3980:             doc.rect(x, cardY, cardW, 1.2, 'F');
+ 3981:             doc.setFontSize(7);
+ 3982:             doc.setTextColor(muted[0], muted[1], muted[2]);
+ 3983:             doc.text(item.label.toUpperCase(), x + 4, cardY + 6);
+ 3984:             doc.setFontSize(10);
+ 3985:             doc.setTextColor(item.color[0], item.color[1], item.color[2]);
+ 3986:             doc.text(item.value, x + 4, cardY + 12);
+ 3987:           });
+ 3988:           
+ 3989:           const tableData = tendencias.map((t: any) => {
+ 3990:             const tasaCobro = t.documentos > 0 ? Math.round(((t.documentos - (t.vencidos || 0)) / t.documentos) * 100) : 0;
+ 3991:             return [
+ 3992:               t.mes,
+ 3993:               String(t.documentos || 0),
+ 3994:               fmtMoney(t.emision || 0),
+ 3995:               fmtMoney(t.cobrado || 0),
+ 3996:               `${tasaCobro}%`,
+ 3997:               String(t.vencidos || 0)
+ 3998:             ];
+ 3999:           });
+ 4000: 
+ 4001:           autoTable(doc, {
+ 4002:             head: [['Mes', 'Documentos', 'EmisiÃ³n', 'Cobrado', 'Tasa Cobro', 'Vencidos']],
+ 4003:             body: tableData,
+ 4004:             startY: cardY + cardH + 8,
+ 4005:             theme: 'plain',
+ 4006:             styles: { fontSize: 8, cellPadding: 2, textColor: text, lineColor: [226, 232, 240], lineWidth: 0.2 },
+ 4007:             headStyles: { 
+ 4008:               fillColor: [219, 234, 254],
+ 4009:               textColor: accent,
+ 4010:               fontStyle: 'bold',
+ 4011:               halign: 'center',
+ 4012:               lineColor: accent,
+ 4013:               lineWidth: 0.5
+ 4014:             },
+ 4015:             alternateRowStyles: {
+ 4016:               fillColor: [249, 250, 251]
+ 4017:             },
+ 4018:             margin: { left: contentLeft, right: contentLeft },
+ 4019:             columnStyles: {
+ 4020:               1: { halign: 'right' },
+ 4021:               2: { halign: 'right' },
+ 4022:               3: { halign: 'right', textColor: [16, 185, 129] },
+ 4023:               4: { halign: 'right' },
+ 4024:               5: { halign: 'right' }
+ 4025:             }
+ 4026:           });
+ 4027: 
+ 4028:           doc.save(`Tendencias_${new Date().toISOString().split('T')[0]}.pdf`);
+ 4029:           addToast("âœ… Reporte de tendencias generado", "success");
+ 4030:         } catch (e) {
+ 4031:           console.error(e);
+ 4032:           addToast("Error generando reporte de tendencias", "error");
+ 4033:         }
+ 4034:       };
+ 4035:       
+ 4036:       return (
+ 4037:         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+ 4038:         <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+ 4039:           <div className="card-title">ðŸ“ˆ Tendencias HistÃ³ricas (12 meses)</div>
+ 4040:           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '10px' }}>
+ 4041:             <button
+ 4042:               className="btn secondary"
+ 4043:               onClick={() => exportarReporteTendencias()}
+ 4044:               disabled={tendencias.length === 0}
+ 4045:             >
+ 4046:               ðŸ“„ Exportar PDF
+ 4047:             </button>
+ 4048:             <button
+ 4049:               className="btn secondary"
+ 4050:               onClick={() => setMostrarGraficaTendencias(prev => !prev)}
+ 4051:               disabled={tendencias.length === 0}
+ 4052:             >
+ 4053:               {mostrarGraficaTendencias ? 'ðŸ“‹ Tabla' : 'ðŸ“Š GrÃ¡fica'}
+ 4054:             </button>
+ 4055:           </div>
+ 4056: 
+ 4057:           {/* KPIs Resumen */}
+ 4058:           {tendencias.length > 0 && (
+ 4059:             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '15px' }}>
+ 4060:               {(() => {

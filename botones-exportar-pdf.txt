@@ -1,0 +1,36 @@
+﻿
+                <label className="field">
+                  <span>BÃºsqueda</span>
+                  <input type="text" value={searchDocumentos} onChange={e => setSearchDocumentos(e.target.value)} placeholder="Buscar 
+por cliente o documento..." />
+                </label>
+                <label className="field field-wrapper">
+                  <input type="checkbox" checked={vistaAgrupada} onChange={e => setVistaAgrupada(e.target.checked)} />
+                  <span>Vista Agrupada con Subtotales</span>
+                </label>
+                <label className="field field-wrapper">
+                  <input type="checkbox" checked={soloPendientes} onChange={e => setSoloPendientes(e.target.checked)} />
+                  <span>Solo saldo pendiente</span>
+                </label>
+              </div>
+              <div className="flex-row" style={{ flexWrap: 'wrap' }}>
+                <button className="btn primary" onClick={exportarExcel}>ðŸ“¥ Exportar a Excel</button>
+>               <button className="btn primary" onClick={exportarPDF}>ðŸ“„ Exportar a PDF</button>
+                <button className="btn secondary" onClick={() => alert('Comparativa mensual: funciÃ³n en desarrollo')}>ðŸ“ˆ Comparar 
+PerÃodos</button>
+              </div>
+  
+              {!vistaAgrupada ? (
+                <div className="table-wrapper">
+                  <table className="data-table retenciones-table">
+                    <thead>
+                      <tr>
+                        <th>Cliente</th>
+                        <th>Documento</th>
+                        <th>Vendedor</th>
+                        <th className="th-fvenc">Fecha Vencimiento</th>
+                        <th>Aging</th>
+                        <th className="num">Total</th>
+                      </tr>
+
+
