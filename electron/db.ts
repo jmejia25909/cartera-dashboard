@@ -1,7 +1,12 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import Database from "better-sqlite3";
+import {
+  assertDatabaseIntegrity,
+  initializeDataSafety,
+  restoreDatabaseFile,
+} from "./databaseSafety";
 
 function ensureDir(p: string) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
@@ -13,7 +18,7 @@ function tableHasColumn(db: Database.Database, table: string, col: string): bool
 }
 
 function ensureSchema(db: Database.Database) {
-      // Tabla de campañas de cobranza
+      // Tabla de campaÃ±as de cobranza
       db.exec(`
         CREATE TABLE IF NOT EXISTS campanas (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,26 +52,16 @@ function ensureSchema(db: Database.Database) {
       );
       CREATE INDEX IF NOT EXISTS idx_abonos_documento ON abonos(documento);
     `);
-  // Migración: Si detectamos la columna antigua 'fecha', borramos la tabla para recrearla
-  // con el nuevo esquema (fecha_emision, fecha_vencimiento).
-  if (tableHasColumn(db, "documentos", "fecha")) {
-    db.exec("DROP TABLE IF EXISTS documentos");
-  }
 
-  // Migración: Si la tabla clientes existe pero no tiene la columna 'cliente' (versión corrupta), recrearla.
-  // Esto soluciona el error "no such column: c.cliente"
-  if (tableHasColumn(db, "clientes", "id") && !tableHasColumn(db, "clientes", "cliente")) {
-    db.exec("DROP TABLE IF EXISTS clientes");
-  }
 
-  // LIMPIEZA: Eliminar columnas de aging estático si existen (ahora se calculan dinámicamente)
+  // LIMPIEZA: Eliminar columnas de aging estÃ¡tico si existen (ahora se calculan dinÃ¡micamente)
   const agingCols = ["por_vencer", "dias_30", "dias_60", "dias_90", "dias_120", "dias_mas_120"];
   for (const col of agingCols) {
     if (tableHasColumn(db, "documentos", col)) {
       try {
         db.exec(`ALTER TABLE documentos DROP COLUMN ${col}`);
       } catch {
-        // Ignorar si la versión de SQLite no soporta DROP COLUMN o si falla
+        // Ignorar si la versiÃ³n de SQLite no soporta DROP COLUMN o si falla
       }
     }
   }
@@ -89,7 +84,7 @@ function ensureSchema(db: Database.Database) {
 
     /*
       Tabla principal: cartera importada desde Contifico (CarteraPorCobrar).
-      Nota: en el Excel existen filas "subtotal" por cliente donde "Tipo Documento" viene vacío.
+      Nota: en el Excel existen filas "subtotal" por cliente donde "Tipo Documento" viene vacÃ­o.
       Esas filas se guardan con is_subtotal=1 para poder usarlas (opcionalmente) en reportes,
       pero la vista de "Documentos" debe filtrar is_subtotal=0.
     */
@@ -152,9 +147,9 @@ function ensureSchema(db: Database.Database) {
       documento TEXT NOT NULL,
       cliente TEXT NOT NULL,
       monto REAL DEFAULT 0,
-      motivo TEXT, -- Error facturación, Producto defectuoso, Servicio no prestado, etc.
+      motivo TEXT, -- Error facturaciÃ³n, Producto defectuoso, Servicio no prestado, etc.
       fecha_creacion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-      estado TEXT DEFAULT 'Abierta', -- Abierta, En revisión, Resuelta, Rechazada
+      estado TEXT DEFAULT 'Abierta', -- Abierta, En revisiÃ³n, Resuelta, Rechazada
       fecha_resolucion TEXT,
       observacion TEXT,
       usuario_creador TEXT DEFAULT 'sistema'
@@ -169,7 +164,7 @@ function ensureSchema(db: Database.Database) {
       documento TEXT,
       cliente TEXT NOT NULL,
       monto REAL DEFAULT 0,
-      tipo TEXT, -- Adelanto, Abono sin factura, Nota crédito, Devolución
+      tipo TEXT, -- Adelanto, Abono sin factura, Nota crÃ©dito, DevoluciÃ³n
       fecha_recepcion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
       estado TEXT DEFAULT 'Pendiente', -- Pendiente, Aplicada, Rechazada
       fecha_aplicacion TEXT,
@@ -182,7 +177,7 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cuentas_estado ON cuentas_aplicar(estado);
   `);
 
-  // Migración suave: agregar columnas de auditoría si faltan
+  // MigraciÃ³n suave: agregar columnas de auditorÃ­a si faltan
   const gestionCols = [
     { name: "usuario", type: "TEXT DEFAULT 'sistema'" },
     { name: "creado_en", type: "TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))" },
@@ -236,35 +231,35 @@ function ensureSchema(db: Database.Database) {
     }
   }
 
-  // Migración: Agregar columna administrador si no existe
+  // MigraciÃ³n: Agregar columna administrador si no existe
   if (!tableHasColumn(db, "empresa", "administrador")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN administrador TEXT DEFAULT ''");
     } catch (e) { console.warn("Error al agregar columna administrador a empresa:", e); }
   }
 
-  // Migración: Agregar columna iva_percent si no existe
+  // MigraciÃ³n: Agregar columna iva_percent si no existe
   if (!tableHasColumn(db, "empresa", "iva_percent")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN iva_percent REAL DEFAULT 15.0");
     } catch (e) { console.warn("Error al agregar columna iva_percent a empresa:", e); }
   }
 
-  // Migración: Agregar columna meta_mensual si no existe
+  // MigraciÃ³n: Agregar columna meta_mensual si no existe
   if (!tableHasColumn(db, "empresa", "meta_mensual")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN meta_mensual REAL DEFAULT 100000");
     } catch (e) { console.warn("Error al agregar columna meta_mensual a empresa:", e); }
   }
 
-  // Migración: Agregar columna excel_headers_json para guardar estructura esperada
+  // MigraciÃ³n: Agregar columna excel_headers_json para guardar estructura esperada
   if (!tableHasColumn(db, "empresa", "excel_headers_json")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN excel_headers_json TEXT DEFAULT ''");
     } catch (e) { console.warn("Error al agregar columna excel_headers_json a empresa:", e); }
   }
 
-  // Migración: Agregar columnas a clientes si no existen
+  // MigraciÃ³n: Agregar columnas a clientes si no existen
   const clientCols = ["telefono", "email", "direccion", "contacto"];
   for (const c of clientCols) {
     if (!tableHasColumn(db, "clientes", c)) {
@@ -272,7 +267,7 @@ function ensureSchema(db: Database.Database) {
     }
   }
 
-  // Migración: Agregar columna logo si no existe
+  // MigraciÃ³n: Agregar columna logo si no existe
   if (!tableHasColumn(db, "empresa", "logo")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN logo TEXT");
@@ -291,21 +286,37 @@ export function openDb() {
   const dbPath = path.join(dataDir, "cartera.db");
   const db = new Database(dbPath);
 
-  // Configuración de SQLite para permitir múltiples lectores
+  // ConfiguraciÃ³n de SQLite para permitir mÃºltiples lectores
   db.pragma("journal_mode = WAL");  // Write-Ahead Logging
   db.pragma("synchronous = NORMAL"); // Balance entre velocidad y seguridad
   db.pragma("cache_size = -64000");  // 64MB cache
   db.pragma("foreign_keys = ON");    // Integridad referencial
   db.pragma("temp_store = MEMORY");  // Tablas temp en memoria
 
-  ensureSchema(db);
+  const safety = initializeDataSafety(db, dbPath, app.getVersion());
+
+  try {
+    ensureSchema(db);
+    assertDatabaseIntegrity(db);
+  } catch (error) {
+    db.close();
+    if (safety.backupPath) {
+      restoreDatabaseFile(dbPath, safety.backupPath);
+      console.error(`Base restaurada desde: ${safety.backupPath}`);
+    }
+    throw error;
+  }
+
+  if (safety.backupPath) {
+    console.log(`Respaldo previo a actualizacion: ${safety.backupPath}`);
+  }
 
   return { db, dbPath };
 }
 
 /**
- * Devuelve la ruta absoluta del archivo SQLite sin necesidad de abrir la conexión.
- * Útil para mostrar la "Ruta DB" en el renderer.
+ * Devuelve la ruta absoluta del archivo SQLite sin necesidad de abrir la conexiÃ³n.
+ * Ãštil para mostrar la "Ruta DB" en el renderer.
  */
 export function getDbFilePath(): string {
   try {
@@ -316,3 +327,4 @@ export function getDbFilePath(): string {
     return path.join(process.cwd(), "data", "cartera.db");
   }
 }
+

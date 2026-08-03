@@ -28,7 +28,9 @@
     "postinstall": "electron-builder install-app-deps",
     "health": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/doctor.ps1",
     "release:set": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set-version.ps1",
-    "release:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1"
+    "release:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1",
+    "installer:verify-clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-clean-installer.ps1",
+    "installer:usb": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-usb-release.ps1"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",
