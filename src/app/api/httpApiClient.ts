@@ -1,3 +1,5 @@
+import type { EmpresaData } from '../../types/api.types';
+
 interface HttpDocument {
   cliente?: string;
   razon_social?: string;
@@ -10,17 +12,21 @@ interface DocumentFilters {
   vendedor?: string;
 }
 
+interface RowsPayload<T> {
+  rows?: T[];
+}
+
 const API_BASE_URL = 'http://localhost:3000/api';
 
-async function readJson(response: Response): Promise<any> {
+async function readJson<T = unknown>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
   }
 
-  return response.json();
+  return (await response.json()) as T;
 }
 
-function extractRows<T>(payload: { rows?: T[] } | T[]): T[] {
+function extractRows<T>(payload: RowsPayload<T> | T[]): T[] {
   if (Array.isArray(payload)) {
     return payload;
   }
@@ -61,7 +67,9 @@ export function createHttpApiClient() {
       const response = await fetch(
         `${API_BASE_URL}/documentos?${params.toString()}`
       );
-      const data = await readJson(response);
+      const data = await readJson<RowsPayload<HttpDocument> | HttpDocument[]>(
+        response
+      );
       return { ok: true, rows: extractRows<HttpDocument>(data) };
     },
 
@@ -72,7 +80,9 @@ export function createHttpApiClient() {
 
     filtrosListar: async () => {
       const response = await fetch(`${API_BASE_URL}/documentos`);
-      const data = await readJson(response);
+      const data = await readJson<RowsPayload<HttpDocument> | HttpDocument[]>(
+        response
+      );
       const docs = extractRows<HttpDocument>(data);
 
       const customerCodes = Array.from(
@@ -111,13 +121,13 @@ export function createHttpApiClient() {
       const response = await fetch(
         `${API_BASE_URL}/top-clientes?limit=${limit}`
       );
-      const data = await readJson(response);
+      const data = await readJson<RowsPayload<unknown> | unknown[]>(response);
       return extractRows(data);
     },
 
-    empresaObtener: async () => {
+    empresaObtener: async (): Promise<EmpresaData> => {
       const response = await fetch(`${API_BASE_URL}/empresa`);
-      return readJson(response);
+      return readJson<EmpresaData>(response);
     },
 
     gestionesListar: async (cliente: string) => {
@@ -125,13 +135,15 @@ export function createHttpApiClient() {
         ? `?cliente=${encodeURIComponent(cliente)}`
         : '';
       const response = await fetch(`${API_BASE_URL}/gestiones${query}`);
-      return extractRows(await readJson(response));
+      const data = await readJson<RowsPayload<unknown> | unknown[]>(response);
+      return extractRows(data);
     },
 
     alertasIncumplimiento: async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/alertas`);
-        return extractRows(await readJson(response));
+        const data = await readJson<RowsPayload<unknown> | unknown[]>(response);
+        return extractRows(data);
       } catch {
         return [];
       }
@@ -140,7 +152,8 @@ export function createHttpApiClient() {
     tendenciasHistoricas: async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/tendencias`);
-        return extractRows(await readJson(response));
+        const data = await readJson<RowsPayload<unknown> | unknown[]>(response);
+        return extractRows(data);
       } catch {
         return [];
       }
@@ -149,7 +162,8 @@ export function createHttpApiClient() {
     cuentasAplicarListar: async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/cuentas-aplicar`);
-        return extractRows(await readJson(response));
+        const data = await readJson<RowsPayload<unknown> | unknown[]>(response);
+        return extractRows(data);
       } catch {
         return [];
       }
@@ -158,7 +172,8 @@ export function createHttpApiClient() {
     abonosListar: async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/abonos`);
-        return extractRows(await readJson(response));
+        const data = await readJson<RowsPayload<unknown> | unknown[]>(response);
+        return extractRows(data);
       } catch {
         return [];
       }

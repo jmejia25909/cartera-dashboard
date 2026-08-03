@@ -8,7 +8,15 @@ import {
   DocumentationModal,
   ToastContainer,
 } from "./components";
-import { AlertsPage, DashboardPage, PromisesPage, ReportsPage } from "./pages";
+import {
+  AbonosPage,
+  AlertsPage,
+  ConfigPage,
+  DashboardPage,
+  PromisesPage,
+  ReportsPage,
+  TendenciasPage,
+} from "./pages";
 import {
   createPdfContext,
   generateAbonosReport,
@@ -929,6 +937,51 @@ export default function App() {
     }
   }
 
+  const aplicarTemaPendiente = async (): Promise<void> => {
+    setTheme(pendingTheme);
+
+    if (isWeb) {
+      addToast("Tema aplicado (local)", "success");
+      return;
+    }
+
+    const api = getElectronApi();
+
+    try {
+      if (api?.empresaGuardar) {
+        await api.empresaGuardar({ ...empresa, tema: pendingTheme });
+        addToast("Tema guardado y aplicado", "success");
+        return;
+      }
+
+      addToast("Tema aplicado (local)", "success");
+    } catch (error: unknown) {
+      console.error(error);
+      addToast("Error guardando tema", "error");
+    }
+  };
+
+  const exportarReporteTendencias = async (): Promise<void> => {
+    if (tendencias.length === 0) {
+      addToast("No hay datos de tendencias para exportar", "info");
+      return;
+    }
+
+    try {
+      await generateTendenciasReport({
+        tendencias,
+        context: createPdfContext(empresa),
+      });
+
+      addToast("✅ Reporte de tendencias generado", "success");
+    } catch (error: unknown) {
+      console.error(error);
+      const message =
+        error instanceof Error ? error.message : "Error desconocido";
+      addToast(`Error generando reporte de tendencias: ${message}`, "error");
+    }
+  };
+
   const agingData = useMemo(() => {
     if (!stats?.aging) return null;
     // Calcular acumulado para >240 días (sumando todos los rangos posteriores)
@@ -1740,194 +1793,27 @@ export default function App() {
 
     if (tab === "config") {
       return (
-        <div>
-        <div className="config-container">
-          <h2 style={{ marginBottom: 6, fontWeight: 800, color: 'var(--text-main)', fontSize: '1.4rem' }}>Configuración</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 14, fontSize: '0.85rem' }}>Administra las preferencias generales y el sistema</p>
-
-          <div className="config-grid">
-            
-            {/* TARJETA 1: PERSONALIZACIÓN (FULL WIDTH) */}
-            <div className="config-card" style={{background: 'linear-gradient(to right, var(--bg-surface), var(--bg-main))'}}>
-              <div className="config-header">
-                <div className="config-icon-box">🎨</div>
-                <div className="config-title">
-                  <h3>Personalización Visual</h3>
-                  <p>Elige el tema que mejor se adapte a tu estilo</p>
-                </div>
-              </div>
-              
-              <div className="theme-section">
-                <div className="theme-options">
-                  {[
-                    { id: 'claro', name: 'Clásico', class: 'theme-preview-claro' },
-                    { id: 'azul', name: 'Corporativo', class: 'theme-preview-azul' },
-                    { id: 'corporativo', name: 'Azul Pro', class: 'theme-preview-corporativo' },
-                    { id: 'pastel', name: 'Suave', class: 'theme-preview-pastel' },
-                    { id: 'oscuro', name: 'Noche', class: 'theme-preview-oscuro' },
-                    { id: 'oscuro-pro', name: 'Oscuro Pro', class: 'theme-preview-oscuro-pro' },
-                    { id: 'contraste', name: 'Alto Contraste', class: 'theme-preview-contraste' },
-                    { id: 'nature', name: 'Nature', class: 'theme-preview-nature' }
-                  ].map((t) => (
-                    <div
-                      key={t.id}
-                      className={`theme-btn ${t.class} ${pendingTheme === t.id ? 'active' : ''}`}
-                      data-name={t.name}
-                      onClick={() => setPendingTheme(t.id as any)}
-                      title={`Seleccionar tema ${t.name}`}
-                    >
-                      {pendingTheme === t.id && <span className="theme-check">✅</span>}
-                    </div>
-                  ))}
-
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
-                    <label className="field field-wrapper" style={{ width: 'auto', marginBottom: 0 }}>
-                      <input type="checkbox" checked={density === 'compact'} onChange={e => setDensity(e.target.checked ? 'compact' : 'normal')} />
-                      <span>Modo compacto</span>
-                    </label>
-                    <label className="field field-wrapper" style={{ width: 'auto', marginBottom: 0 }}>
-                      <input
-                        type="checkbox"
-                        checked={autoDark}
-                        onChange={(event) => {
-                          const enabled = event.target.checked;
-                          setAutoDark(enabled);
-
-                          try {
-                            localStorage.setItem(
-                              'cartera_auto_dark',
-                              enabled ? '1' : '0'
-                            );
-                          } catch {
-                            // localStorage puede estar restringido por el entorno.
-                          }
-                        }}
-                      />
-                      <span>Auto Oscuro (según horario/SO)</span>
-                    </label>
-                  </div>
-                </div>
-                
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
-                  <button 
-                    className="btn primary" 
-                    style={{ padding: '8px 24px', fontSize: '0.9rem', borderRadius: '10px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-                    onClick={async () => {
-                      setTheme(pendingTheme);
-                      if (!isWeb) {
-                        const api = getElectronApi();
-                        try {
-                          if (api?.empresaGuardar) {
-                            await api.empresaGuardar({ ...empresa, tema: pendingTheme });
-                            addToast("Tema guardado y aplicado", "success");
-                          } else {
-                            addToast("Tema aplicado (local)", "success");
-                          }
-                        } catch (e) {
-                          console.error(e);
-                          addToast("Error guardando tema", "error");
-                        }
-                      } else {
-                        addToast("Tema aplicado (local)", "success");
-                      }
-                    }}
-                  >
-                    💾 Guardar y Aplicar Tema
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* TARJETA 2: EMPRESA */}
-            <div className="config-card">
-              <div className="config-header">
-                <div className="config-icon-box">🏢</div>
-                <div className="config-title">
-                  <h3>Empresa</h3>
-                  <p>Información legal y marca</p>
-                </div>
-              </div>
-              <div className="config-actions">
-                <button className="config-btn" onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>
-                  <span><span className="config-btn-icon">⚙️</span> Editar datos generales</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-                <button className="config-btn" onClick={cambiarLogo} disabled={!hasWritePermissions}>
-                  <span><span className="config-btn-icon">🖼️</span> Cambiar logotipo</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-              </div>
-            </div>
-
-            {/* TARJETA 3: DATOS */}
-            <div className="config-card">
-              <div className="config-header">
-                <div className="config-icon-box">💾</div>
-                <div className="config-title">
-                  <h3>Gestión de Datos</h3>
-                  <p>Importación y respaldos</p>
-                </div>
-              </div>
-              <div className="config-actions">
-                <button className="config-btn" onClick={importarExcel} disabled={!hasWritePermissions}>
-                  <span><span className="config-btn-icon">📥</span> Importar Excel Contifico</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-                <button className="config-btn" onClick={exportarBackup}>
-                  <span><span className="config-btn-icon">📤</span> Exportar respaldo completo</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-                <button className="config-btn" onClick={() => setShowModalLimpiar(true)} style={{color: '#ef4444', borderColor: '#fee2e2', background: '#fef2f2'}}>
-                  <span><span className="config-btn-icon">🗑️</span> Limpiar base de datos</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-              </div>
-            </div>
-
-            {/* TARJETA 4: SISTEMA */}
-            <div className="config-card">
-              <div className="config-header">
-                <div className="config-icon-box">🔧</div>
-                <div className="config-title">
-                  <h3>Sistema</h3>
-                  <p>Mantenimiento y ayuda</p>
-                </div>
-              </div>
-              <div className="config-actions">
-                <button className="config-btn" onClick={() => setShowModalDocumentacion(true)}>
-                  <span><span className="config-btn-icon">📖</span> Documentación</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-                <button className="config-btn" onClick={() => setShowModalHistorial(true)}>
-                  <span><span className="config-btn-icon">📝</span> Historial de cambios</span>
-                  <span className="config-btn-arrow">→</span>
-                </button>
-              </div>
-              <div style={{ marginTop: 12, padding: '10px 12px', background: '#f0f9ff', borderRadius: 8, border: '1px solid #bfdbfe', fontSize: '0.7rem', color: '#1e40af', lineHeight: '1.3' }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, fontSize: '0.75rem' }}>📋 Información Legal</div>
-                <div style={{ marginBottom: 3 }}>© 2026 Jhon Franklin Mejia Castro</div>
-                <div style={{ marginBottom: 3 }}>RUC: 0950998104001</div>
-                <div style={{ fontSize: '0.65rem', marginTop: 4, fontStyle: 'italic', color: '#3730a3' }}>Prohibida reproducción no autorizada.</div>
-              </div>
-              <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--bg-main)', borderRadius: 8, border: '1px dashed var(--border)', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                  <span>Versión</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{updateInfo?.currentVersion || 'N/A'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
-                  <span>Actualizaciones</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{updateInfo?.updateCount ?? 0}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
-                  <span>Última actualización</span>
-                  <strong style={{ color: 'var(--text-main)' }}>{formatUpdateDate(updateInfo?.updatedAt)}</strong>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-        </div>
+        <ConfigPage
+          pendingTheme={pendingTheme}
+          onPendingThemeChange={setPendingTheme}
+          density={density}
+          onDensityChange={setDensity}
+          autoDark={autoDark}
+          onAutoDarkChange={setAutoDark}
+          onApplyTheme={aplicarTemaPendiente}
+          hasWritePermissions={hasWritePermissions}
+          onEditCompany={() => setShowModalEmpresa(true)}
+          onChangeLogo={cambiarLogo}
+          onImportExcel={importarExcel}
+          onExportBackup={exportarBackup}
+          onClearDatabase={() => setShowModalLimpiar(true)}
+          onOpenDocumentation={() => setShowModalDocumentacion(true)}
+          onOpenHistory={() => setShowModalHistorial(true)}
+          updateInfo={updateInfo}
+          formatUpdateDate={formatUpdateDate}
+          dbPath={dbPath}
+          onCopyDbPath={copyToClipboard}
+        />
       );
     }
 
@@ -2225,288 +2111,28 @@ export default function App() {
     }
 
     if (tab === "tendencias") {
-      const maxEmision = Math.max(1, ...tendencias.map((t: any) => t.emision || 0));
-      const maxCobrado = Math.max(1, ...tendencias.map((t: any) => t.cobrado || 0));
-      
-      const exportarReporteTendencias = async (): Promise<void> => {
-        if (tendencias.length === 0) {
-          addToast("No hay datos de tendencias para exportar", "info");
-          return;
-        }
-
-        try {
-          await generateTendenciasReport({
-            tendencias,
-            context: createPdfContext(empresa),
-          });
-
-          addToast("✅ Reporte de tendencias generado", "success");
-        } catch (error: unknown) {
-          console.error(error);
-          const message =
-            error instanceof Error ? error.message : "Error desconocido";
-          addToast(`Error generando reporte de tendencias: ${message}`, "error");
-        }
-      };
-
       return (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-          <div className="card-title">📈 Tendencias Históricas (12 meses)</div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginBottom: '10px' }}>
-            <button
-              className="btn secondary"
-              onClick={() => exportarReporteTendencias()}
-              disabled={tendencias.length === 0}
-            >
-              📄 Exportar PDF
-            </button>
-            <button
-              className="btn secondary"
-              onClick={() => setMostrarGraficaTendencias(prev => !prev)}
-              disabled={tendencias.length === 0}
-            >
-              {mostrarGraficaTendencias ? '📋 Tabla' : '📊 Gráfica'}
-            </button>
-          </div>
-
-          {/* KPIs Resumen */}
-          {tendencias.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '15px' }}>
-              {(() => {
-                const totalEmision = tendencias.reduce((sum: number, t: any) => sum + (t.emision || 0), 0);
-                const totalCobrado = tendencias.reduce((sum: number, t: any) => sum + (t.cobrado || 0), 0);
-                const totalDocumentos = tendencias.reduce((sum: number, t: any) => sum + (t.documentos || 0), 0);
-                const totalVencidos = tendencias.reduce((sum: number, t: any) => sum + (t.vencidos || 0), 0);
-                const tasaCobro = totalDocumentos > 0 ? Math.round(((totalDocumentos - totalVencidos) / totalDocumentos) * 100) : 0;
-
-                const kpis = [
-                  { label: 'Total Emitido', value: fmtMoney(totalEmision), color: '#3b82f6', bg: '#dbeafe' },
-                  { label: 'Total Cobrado', value: fmtMoney(totalCobrado), color: '#10b981', bg: '#d1fae5' },
-                  { label: 'Tasa Cobro', value: `${tasaCobro}%`, color: '#6b7280', bg: '#f3f4f6' },
-                  { label: 'Documentos Vencidos', value: String(totalVencidos), color: '#ef4444', bg: '#fee2e2' }
-                ];
-
-                return kpis.map((kpi, idx) => (
-                  <div key={idx} style={{ 
-                    background: kpi.bg, 
-                    padding: '12px 14px', 
-                    borderRadius: '8px',
-                    borderLeft: `4px solid ${kpi.color}`
-                  }}>
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginBottom: '4px' }}>
-                      {kpi.label.toUpperCase()}
-                    </div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: kpi.color }}>
-                      {kpi.value}
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
-          )}
-
-          {mostrarGraficaTendencias && tendencias.length > 0 ? (
-            <div style={{ display: 'grid', gap: '10px', paddingBottom: '10px' }}>
-              {tendencias.map((t: any, i: number) => {
-                const widthEmision = Math.max(6, Math.round(((t.emision || 0) / maxEmision) * 100));
-                const widthCobrado = Math.max(6, Math.round(((t.cobrado || 0) / maxCobrado) * 100));
-                return (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 110px', gap: '10px', alignItems: 'center' }}>
-                    <div style={{ fontWeight: 600, color: '#334155' }}>{t.mes}</div>
-                    <div style={{ display: 'grid', gap: '6px' }}>
-                      <div style={{ background: '#e2e8f0', height: 8, borderRadius: 6, overflow: 'hidden' }}>
-                        <div style={{ width: `${widthEmision}%`, height: '100%', background: '#3b82f6' }}></div>
-                      </div>
-                      <div style={{ background: '#e2e8f0', height: 8, borderRadius: 6, overflow: 'hidden' }}>
-                        <div style={{ width: `${widthCobrado}%`, height: '100%', background: '#10b981' }}></div>
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right', fontSize: '0.85rem' }}>
-                      <div>{fmtMoney(t.emision || 0)}</div>
-                      <div style={{ color: '#16a34a' }}>{fmtMoney(t.cobrado || 0)}</div>
-                    </div>
-                  </div>
-                );
-              })}
-              <div style={{ fontSize: '0.75rem', color: '#64748b', display: 'flex', gap: '12px' }}>
-                <span>⬜ Emisión</span>
-                <span style={{ color: '#10b981' }}>⬜ Cobrado</span>
-              </div>
-            </div>
-          ) : (
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Mes</th>
-                  <th className="num">Documentos</th>
-                  <th className="num">Emisión</th>
-                  <th className="num">Cobrado</th>
-                  <th className="num">Tasa Cobro</th>
-                  <th className="num">Vencidos</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tendencias.length > 0 ? tendencias.map((t, i) => {
-                  const tasaCobro = t.documentos > 0 ? Math.round(((t.documentos - (t.vencidos || 0)) / t.documentos) * 100) : 0;
-                  return (
-                    <tr key={i}>
-                      <td><strong>{t.mes}</strong></td>
-                      <td className="num">{t.documentos}</td>
-                      <td className="num">{fmtMoney(t.emision)}</td>
-                      <td className="num">{fmtMoney(t.cobrado)}</td>
-                      <td className="num" style={{ color: tasaCobro >= 50 ? '#10b981' : tasaCobro >= 25 ? '#f59e0b' : '#ef4444' }}>
-                        <strong>{tasaCobro}%</strong>
-                      </td>
-                      <td className="num">{t.vencidos}</td>
-                    </tr>
-                  );
-                }) : <tr><td colSpan={6}>Sin datos</td></tr>}
-              </tbody>
-            </table>
-          </div>
-          )}
-        </div>
-        </div>
+        <TendenciasPage
+          tendencias={tendencias}
+          mostrarGrafica={mostrarGraficaTendencias}
+          onToggleGrafica={() =>
+            setMostrarGraficaTendencias((previous) => !previous)
+          }
+          onExportPdf={exportarReporteTendencias}
+        />
       );
     }
 
     if (tab === "cuentas") {
-      const abonosFiltrados = abonos.filter(a => {
-        if (abonosFechaDesde && (!a.fecha || a.fecha < abonosFechaDesde)) return false;
-        if (abonosFechaHasta) {
-          const hasta = abonosFechaHasta.length === 10 ? `${abonosFechaHasta}T23:59:59` : abonosFechaHasta;
-          if (!a.fecha || a.fecha > hasta) return false;
-        }
-        return true;
-      });
       return (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-          <div className="card-title">📜 Historial de Abonos Detectados</div>
-          <div className="row" style={{ marginBottom: '10px' }}>
-            <label className="field">
-              <span>Desde</span>
-              <input type="date" value={abonosFechaDesde} onChange={e => setAbonosFechaDesde(e.target.value)} />
-            </label>
-            <label className="field">
-              <span>Hasta</span>
-              <input type="date" value={abonosFechaHasta} onChange={e => setAbonosFechaHasta(e.target.value)} />
-            </label>
-            <div className="field" style={{ alignSelf: 'flex-end' }}>
-              <button className="btn secondary" onClick={exportarAbonosPDF}>
-                📄 Exportar PDF
-              </button>
-            </div>
-          </div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Fecha Detección</th>
-                  <th>Cliente</th>
-                  <th>Documento</th>
-                  <th className="num">Saldo Anterior</th>
-                  <th className="num">Pago Aplicado</th>
-                  <th className="num">Nuevo Saldo</th>
-                  <th>Observación</th>
-                </tr>
-              </thead>
-              <tbody>
-                {abonosFiltrados.length > 0 ? (
-                  abonosFiltrados.map(a => (
-                    <tr key={a.id}>
-                      <td>{a.fecha.split('T')[0]}</td>
-                      <td><strong>{a.cliente || a.razon_social || '-'}</strong></td>
-                      <td><strong>{a.documento}</strong></td>
-                      <td className="num">{fmtMoney(a.total_anterior)}</td>
-                      <td className="num kpi-positive">{fmtMoney(a.total_anterior - a.total_nuevo)}</td>
-                      <td className="num">{fmtMoney(a.total_nuevo)}</td>
-                      <td style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{a.observacion || '-'}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📭</div>
-                      <div style={{ fontSize: '1rem', marginBottom: '8px' }}>No hay abonos detectados aún</div>
-                      <div style={{ fontSize: '0.85rem' }}>Importa el Excel para detectar cambios en los saldos</div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        </div>
-      );
-    }
-
-    if (tab === "config") {
-      const themes: Record<string, { '--bg-gradient': string; '--text': string }> = {
-        pastel: { '--bg-gradient': 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)', '--text': '#1f2937' },
-        lavanda: { '--bg-gradient': 'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)', '--text': '#1f2937' },
-        coral: { '--bg-gradient': 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%)', '--text': '#1f2937' },
-        azul: { '--bg-gradient': 'linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%)', '--text': '#1e3a8a' },
-        gris: { '--bg-gradient': 'linear-gradient(135deg, #f3f4f6 0%, #9ca3af 100%)', '--text': '#111827' }
-      };
-
-      return (
-        <div style={{ maxWidth: 700, margin: '32px auto', padding: '24px', background: 'var(--bg-surface)', borderRadius: 16, boxShadow: '0 2px 16px 0 rgba(0,0,0,0.07)' }}>
-          <h2 style={{ marginBottom: 18, fontWeight: 700, color: 'var(--text-main)' }}>Configuración y Administración</h2>
-
-          {/* Sección: Datos de Empresa */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Datos de Empresa</h3>
-            <button className="btn primary" style={{ marginRight: 8 }} onClick={() => setShowModalEmpresa(true)} disabled={!hasWritePermissions}>⚙️ Editar datos</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>🖼️ Cambiar logo</button>
-          </div>
-
-          {/* Sección: Importación/Exportación */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Importación y Exportación</h3>
-            <button className="btn primary" style={{ marginRight: 8 }} onClick={importarExcel} disabled={!hasWritePermissions}>📥 Importar Excel</button>
-            <button className="btn secondary" style={{ marginRight: 8 }} onClick={exportarBackup} disabled={!hasWritePermissions}>📤 Exportar respaldo</button>
-            <button className="btn secondary" style={{ marginRight: 8 }}>📄 Descargar plantilla</button>
-          </div>
-
-          {/* Sección: Sincronización y Backup */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Sincronización y Backup</h3>
-            <button className="btn primary" style={{ marginRight: 8 }}>🔄 Sincronizar</button>
-            <button className="btn secondary" style={{ marginRight: 8 }} onClick={exportarBackup} disabled={!hasWritePermissions}>💾 Backup manual</button>
-            <button className="btn secondary" style={{ marginRight: 8 }} onClick={() => addToast("Restaurar backup en desarrollo", "info")}>♻️ Restaurar backup</button>
-            <div style={{ marginTop: 10, fontSize: '0.9rem', color: '#64748b' }}>
-              Las actualizaciones manuales no borran datos. La base se guarda en esta ruta:
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-              <code style={{ background: '#f1f5f9', padding: '4px 8px', borderRadius: 6 }}>{dbPath || "(cargando...)"}</code>
-              <button className="btn secondary" onClick={() => dbPath && copyToClipboard(dbPath)} disabled={!dbPath}>📋 Copiar ruta</button>
-            </div>
-          </div>
-
-          {/* Sección: Personalización y Temas */}
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ color: '#2563eb', marginBottom: 8 }}>Personalización y Temas</h3>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className={`btn theme${theme === 'pastel' ? ' selected' : ''}`} style={{ background: themes.pastel['--bg-gradient'], color: themes.pastel['--text'], border: theme === 'pastel' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('pastel')}>🌸 Femenino Pastel</button>
-              <button className={`btn theme${theme === 'lavanda' ? ' selected' : ''}`} style={{ background: themes.lavanda['--bg-gradient'], color: themes.lavanda['--text'], border: theme === 'lavanda' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('lavanda')}>💜 Femenino Lavanda</button>
-              <button className={`btn theme${theme === 'coral' ? ' selected' : ''}`} style={{ background: themes.coral['--bg-gradient'], color: themes.coral['--text'], border: theme === 'coral' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('coral')}>🌷 Femenino Coral</button>
-              <button className={`btn theme${theme === 'azul' ? ' selected' : ''}`} style={{ background: themes.azul['--bg-gradient'], color: themes.azul['--text'], border: theme === 'azul' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('azul')}>🟦 Masculino Azul</button>
-              <button className={`btn theme${theme === 'gris' ? ' selected' : ''}`} style={{ background: themes.gris['--bg-gradient'], color: themes.gris['--text'], border: theme === 'gris' ? '2px solid #2563eb' : 'none' }} onClick={() => setTheme('gris')}>🟫 Masculino Gris</button>
-            </div>
-            <span style={{ fontSize: '0.95rem', color: '#6b7280' }}>Elige un tema para todo el sistema. Los cambios se aplicarán automáticamente.</span>
-          </div>
-
-          {/* Sección: Soporte y Ayuda */}
-          <div style={{ marginBottom: 0 }}>
-            <h3 style={{ color: 'var(--accent)', marginBottom: 8 }}>Soporte y Ayuda</h3>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📖 Ver documentación</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>💬 Contactar soporte</button>
-            <button className="btn secondary" style={{ marginRight: 8, background: 'var(--card)', color: 'var(--text)' }}>📝 Historial de cambios</button>
-          </div>
-        </div>
+        <AbonosPage
+          abonos={abonos}
+          fechaDesde={abonosFechaDesde}
+          fechaHasta={abonosFechaHasta}
+          onFechaDesdeChange={setAbonosFechaDesde}
+          onFechaHastaChange={setAbonosFechaHasta}
+          onExportPdf={exportarAbonosPDF}
+        />
       );
     }
 
