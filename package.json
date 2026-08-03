@@ -3,7 +3,7 @@
   "description": "Sistema de gestión de carteras y cobranza",
   "author": "Jhon Franklin Mejia Castro (RUC: 0950998104001)",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
