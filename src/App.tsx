@@ -215,8 +215,19 @@ export default function App() {
 
   const formatUpdateDate = (value?: string) => {
     if (!value) return "N/A";
-    const dt = new Date(value);
-    return Number.isNaN(dt.getTime()) ? value : dt.toLocaleString();
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat("es-EC", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(date);
   };
 
   const checkPermissions = async () => {

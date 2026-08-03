@@ -26,7 +26,9 @@
     "release:check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
     "deps": "pnpm outdated",
     "postinstall": "electron-builder install-app-deps",
-    "health": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/doctor.ps1"
+    "health": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/doctor.ps1",
+    "release:set": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set-version.ps1",
+    "release:publish": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/publish-release.ps1"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",
