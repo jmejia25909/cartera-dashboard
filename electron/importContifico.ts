@@ -213,9 +213,20 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
       centro_costo = COALESCE(excluded.centro_costo, clientes.centro_costo)
   `);
 
+  // Inserta cada evento lógico una sola vez. La fecha no forma parte de la
+  // identidad porque una reimportación puede ocurrir en otro momento.
   const stmtInsertAbono = db.prepare(`
     INSERT INTO abonos (documento, total_anterior, total_nuevo, fecha, observacion)
-    VALUES (@documento, @total_anterior, @total_nuevo, @fecha, @observacion)
+    SELECT @documento, @total_anterior, @total_nuevo, @fecha, @observacion
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM abonos
+      WHERE UPPER(REPLACE(REPLACE(REPLACE(TRIM(documento), '-', ''), ' ', ''), '.', '')) =
+            UPPER(REPLACE(REPLACE(REPLACE(TRIM(@documento), '-', ''), ' ', ''), '.', ''))
+        AND ABS(total_anterior - @total_anterior) < 0.01
+        AND ABS(total_nuevo - @total_nuevo) < 0.01
+        AND COALESCE(observacion, '') = COALESCE(@observacion, '')
+    )
   `);
 
   let insertedDocs = 0;
