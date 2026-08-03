@@ -234,6 +234,32 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
 
   // Inserta cada evento lógico una sola vez. La fecha no forma parte de la
   // identidad porque una reimportación puede ocurrir en otro momento.
+
+  const stmtGetCreditPolicy = db.prepare(`
+    SELECT tipo_credito, dias_credito, credito_configurado
+    FROM clientes
+    WHERE cliente = ?
+    LIMIT 1
+  `);
+
+  const stmtUpsertCreditAlert = db.prepare(`
+    INSERT INTO alertas_credito (cliente, motivo, estado, detectado_en, resuelto_en)
+    VALUES (@cliente, @motivo, 'PENDIENTE', datetime('now', 'localtime'), NULL)
+    ON CONFLICT(cliente) DO UPDATE SET
+      motivo = excluded.motivo,
+      estado = 'PENDIENTE',
+      detectado_en = excluded.detectado_en,
+      resuelto_en = NULL
+  `);
+
+  const stmtResolveCreditAlert = db.prepare(`
+    UPDATE alertas_credito
+    SET estado = 'RESUELTA',
+        resuelto_en = datetime('now', 'localtime')
+    WHERE cliente = ?
+      AND estado <> 'RESUELTA'
+  `);
+
   const stmtInsertAbono = db.prepare(`
     INSERT INTO abonos (documento, total_anterior, total_nuevo, fecha, observacion)
     SELECT @documento, @total_anterior, @total_nuevo, @fecha, @observacion
