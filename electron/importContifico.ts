@@ -113,6 +113,23 @@ function getCell(row: unknown[], map: Record<string, number>, key: string): unkn
   return row[idx];
 }
 
+
+function parseISODate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+function differenceInCalendarDays(from: string, to: string): number | null {
+  const start=parseISODate(from); const end=parseISODate(to);
+  if(!start || !end) return null;
+  return Math.round((end.getTime()-start.getTime())/86400000);
+}
+function addCalendarDays(dateValue: string, days: number): string {
+  const date=parseISODate(dateValue); if(!date) return "";
+  date.setDate(date.getDate()+days); return date.toISOString().slice(0,10);
+}
+type CreditPolicy = { tipo_credito: string; dias_credito: number | null; credito_configurado: number; };
+
 // -----------------------------
 // Import Principal
 // -----------------------------
@@ -192,6 +209,7 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
       vendedor, centro_costo, categoria_persona,
       por_vencer, dias_30, dias_60, dias_90, dias_120, dias_mas_120,
       total, descripcion, valor_documento, retenciones, cobros,
+      dias_credito_aplicados, credito_fuente, credito_pendiente,
       is_subtotal
     ) VALUES (
       @cliente, @razon_social, @tipo_documento, @documento,
@@ -199,6 +217,7 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
       @vendedor, @centro_costo, @categoria_persona,
       @por_vencer, @dias_30, @dias_60, @dias_90, @dias_120, @dias_mas_120,
       @total, @descripcion, @valor_documento, @retenciones, @cobros,
+      @dias_credito_aplicados, @credito_fuente, @credito_pendiente,
       @is_subtotal
     )
   `);
@@ -252,7 +271,28 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
 
       const razon_social = String(getCell(r, map, kCliente)).trim();
       const fecha_emision = toISODate(getCell(r, map, kEmision));
-      const fecha_vencimiento = toISODate(getCell(r, map, kVence));
+      const fecha_vencimiento_importada = toISODate(getCell(r, map, kVence));
+      const policy = cliente ? stmtGetCreditPolicy.get(cliente) as CreditPolicy | undefined : undefined;
+      const importedCreditDays = differenceInCalendarDays(fecha_emision, fecha_vencimiento_importada);
+      const importedDueDateIsValid = importedCreditDays != null && importedCreditDays > 0;
+      let fecha_vencimiento = fecha_vencimiento_importada;
+      let dias_credito_aplicados: number | null = importedCreditDays;
+      let credito_fuente = "CONTIFICO";
+      let credito_pendiente = 0;
+      if (!importedDueDateIsValid) {
+        const configured = policy?.credito_configurado === 1 && policy.dias_credito != null && Number.isFinite(Number(policy.dias_credito));
+        if (configured) {
+          const configuredDays = Math.max(0, Number(policy.dias_credito));
+          fecha_vencimiento = addCalendarDays(fecha_emision, configuredDays);
+          dias_credito_aplicados = configuredDays;
+          credito_fuente = "POLITICA_CLIENTE";
+        } else {
+          fecha_vencimiento = fecha_emision || fecha_vencimiento_importada;
+          dias_credito_aplicados = null;
+          credito_fuente = "PENDIENTE_CONFIGURACION";
+          credito_pendiente = 1;
+        }
+      }
       const vendedor = String(getCell(r, map, kVendedor)).trim();
       const centro_costo = String(getCell(r, map, kCentro)).trim();
       const categoria_persona = String(getCell(r, map, kCategoria)).trim();
@@ -281,6 +321,14 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
       if (cliente) {
         stmtUpsertCliente.run({ cliente, razon_social, categoria_persona, vendedor, centro_costo });
         insertedClientes++;
+      }
+
+      if (cliente) {
+        if (credito_pendiente === 1) {
+          stmtUpsertCreditAlert.run({ cliente, motivo: "Cliente sin dias de credito configurados y vencimiento importado no valido" });
+        } else {
+          stmtResolveCreditAlert.run(cliente);
+        }
       }
 
       // Registro de Abonos
@@ -333,6 +381,9 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
         valor_documento,
         retenciones,
         cobros,
+        dias_credito_aplicados,
+        credito_fuente,
+        credito_pendiente,
         is_subtotal,
       });
 
@@ -364,6 +415,9 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
           valor_documento: 0,
           retenciones: 0,
           cobros: 0,
+          dias_credito_aplicados: null,
+          credito_fuente: 'LIQUIDACION_AUTOMATICA',
+          credito_pendiente: 0,
           is_subtotal: 0,
         });
       }

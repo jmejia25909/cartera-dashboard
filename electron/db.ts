@@ -274,6 +274,42 @@ function ensureSchema(db: Database.Database) {
     } catch (e) { console.warn("Error al agregar columna logo a empresa:", e); }
   }
 
+
+  const creditClientCols = [
+    { name: "tipo_credito", type: "TEXT NOT NULL DEFAULT 'PENDIENTE'" },
+    { name: "dias_credito", type: "INTEGER" },
+    { name: "credito_configurado", type: "INTEGER NOT NULL DEFAULT 0" },
+    { name: "credito_actualizado_en", type: "TEXT" }
+  ];
+  for (const col of creditClientCols) {
+    if (!tableHasColumn(db, "clientes", col.name)) {
+      try { db.exec(`ALTER TABLE clientes ADD COLUMN ${col.name} ${col.type}`); }
+      catch (e) { console.warn(`Error al agregar columna ${col.name} a clientes:`, e); }
+    }
+  }
+  const creditDocumentCols = [
+    { name: "dias_credito_aplicados", type: "INTEGER" },
+    { name: "credito_fuente", type: "TEXT NOT NULL DEFAULT 'CONTIFICO'" },
+    { name: "credito_pendiente", type: "INTEGER NOT NULL DEFAULT 0" }
+  ];
+  for (const col of creditDocumentCols) {
+    if (!tableHasColumn(db, "documentos", col.name)) {
+      try { db.exec(`ALTER TABLE documentos ADD COLUMN ${col.name} ${col.type}`); }
+      catch (e) { console.warn(`Error al agregar columna ${col.name} a documentos:`, e); }
+    }
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS alertas_credito (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente TEXT NOT NULL UNIQUE,
+      motivo TEXT NOT NULL,
+      estado TEXT NOT NULL DEFAULT 'PENDIENTE',
+      detectado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      resuelto_en TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_alertas_credito_estado ON alertas_credito(estado);
+  `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }
