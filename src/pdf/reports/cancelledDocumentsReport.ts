@@ -1,4 +1,4 @@
-import type { PdfContext } from '../core/pdfTypes';
+﻿import type { PdfContext } from '../core/pdfTypes';
 import { drawPdfHeader } from '../core/pdfHeader';
 import { drawPdfMetricCards } from '../core/pdfCards';
 import { loadPdfLibraries, savePdfDocument } from '../core/pdfDocument';
@@ -18,7 +18,25 @@ export interface CancelledDocumentReportRow {
 export interface GenerateCancelledDocumentsReportParams {
   rows: CancelledDocumentReportRow[];
   context: PdfContext;
+  reversedPayments?: number;
+  reversedAmount?: number;
 }
+
+const fmtMoney = (amount: number): string =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(Number.isFinite(amount) ? amount : 0);
+
+const fileNameOnly = (value?: string | null): string => {
+  if (!value) return '-';
+  return value.replace(/\\/g, '/').split('/').pop() || value;
+};
+
+const formatResult = (value?: string | null): string => {
+  if (!value) return '-';
+  return value.split('_').join(' ');
+};
 
 const formatDate = (value?: string | null): string => {
   if (!value) return '-';
@@ -29,6 +47,8 @@ const formatDate = (value?: string | null): string => {
 export const generateCancelledDocumentsReport = async ({
   rows,
   context,
+  reversedPayments = 0,
+  reversedAmount = 0,
 }: GenerateCancelledDocumentsReportParams): Promise<void> => {
   if (rows.length === 0) {
     throw new Error('No hay documentos anulados para generar el reporte.');
@@ -75,6 +95,18 @@ export const generateCancelledDocumentsReport = async ({
         color: [107, 114, 128],
         soft: [243, 244, 246],
       },
+      {
+        label: 'Abonos Reversados',
+        value: String(reversedPayments),
+        color: [124, 58, 237],
+        soft: [237, 233, 254],
+      },
+      {
+        label: 'Valor Reversado',
+        value: fmtMoney(reversedAmount),
+        color: [5, 150, 105],
+        soft: [209, 250, 229],
+      },
     ],
   });
 
@@ -84,21 +116,21 @@ export const generateCancelledDocumentsReport = async ({
     row.documento || '-',
     row.cliente || '-',
     row.estado_origen || '-',
-    row.resultado || '-',
+    formatResult(row.resultado),
     row.numero_autorizacion || '-',
     formatDate(row.detectado_en),
-    row.archivo_origen || '-',
+    fileNameOnly(row.archivo_origen),
   ]);
 
   autoTable(doc, {
     head: [[
-      'Fecha Anulación',
+      'Fecha AnulaciÃ³n',
       'Tipo',
       'Documento',
       'Cliente',
       'Estado Origen',
       'Resultado',
-      'Autorización',
+      'AutorizaciÃ³n',
       'Detectado',
       'Archivo Origen',
     ]],
@@ -130,9 +162,24 @@ export const generateCancelledDocumentsReport = async ({
       2: { cellWidth: 34 },
       3: { cellWidth: 46 },
       4: { cellWidth: 24 },
-      5: { cellWidth: 25 },
-      6: { cellWidth: 40 },
+      5: { cellWidth: 30, fontStyle: 'bold' },
+      6: { cellWidth: 48, fontSize: 6.4 },
       7: { cellWidth: 22 },
+      8: { cellWidth: 30 },
+    },
+    didParseCell: (data: any) => {
+      if (data.section !== 'body' || data.column.index !== 5) return;
+      const value = String(data.cell.raw || '');
+      if (value === 'ANULADO') {
+        data.cell.styles.fillColor = [254, 226, 226];
+        data.cell.styles.textColor = [185, 28, 28];
+      } else if (value === 'YA ANULADO') {
+        data.cell.styles.fillColor = [254, 243, 199];
+        data.cell.styles.textColor = [161, 98, 7];
+      } else if (value === 'NO ENCONTRADO') {
+        data.cell.styles.fillColor = [243, 244, 246];
+        data.cell.styles.textColor = [75, 85, 99];
+      }
     },
     pageBreak: 'auto',
     rowPageBreak: 'avoid',
@@ -144,3 +191,4 @@ export const generateCancelledDocumentsReport = async ({
     context,
   );
 };
+
