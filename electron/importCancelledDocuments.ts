@@ -321,8 +321,7 @@ export function importCancelledDocumentsExcel(
         anulado = 1,
         fecha_anulacion = @fecha_anulacion,
         motivo_anulacion = 'Importado desde Documentos Anulados',
-        fuente_anulacion = 'ARCHIVO_DOCUMENTOS_ANULADOS',
-        saldo = 0
+        fuente_anulacion = 'ARCHIVO_DOCUMENTOS_ANULADOS'
     WHERE id = @id
   `);
 
