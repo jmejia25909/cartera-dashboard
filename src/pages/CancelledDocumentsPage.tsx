@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { getElectronApi } from "../app/api";
+import { createPdfContext, generateCancelledDocumentsReport } from "../pdf";
 
 type PreviewRow = {
   rowNumber: number;
@@ -61,6 +62,37 @@ export function CancelledDocumentsPage() {
   }, []);
 
   const previewRows = useMemo(() => preview?.rows ?? [], [preview]);
+
+  async function exportPdf() {
+    if (rows.length === 0) {
+      setMessage("No hay documentos anulados para exportar.");
+      return;
+    }
+
+    setLoading(true);
+    setMessage("");
+
+    try {
+      const company = api?.empresaObtener
+        ? await api.empresaObtener()
+        : { nombre: "Mi Empresa" };
+
+      await generateCancelledDocumentsReport({
+        rows,
+        context: createPdfContext(company ?? { nombre: "Mi Empresa" }),
+      });
+
+      setMessage("PDF de documentos anulados generado correctamente.");
+    } catch (error: unknown) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "No se pudo generar el PDF de documentos anulados.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function selectFile() {
     if (!api?.previewCancelledDocuments) {
@@ -145,23 +177,35 @@ export function CancelledDocumentsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void selectFile()}
-          disabled={loading}
-          style={{
-            minHeight: 42,
-            border: 0,
-            borderRadius: 8,
-            padding: "0 16px",
-            background: "#b91c1c",
-            color: "#fff",
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          {loading ? "Procesando..." : "Seleccionar Documentos Anulados"}
-        </button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={() => void exportPdf()}
+            disabled={loading || rows.length === 0}
+            className="btn secondary"
+            style={{ minHeight: 42, padding: "0 16px" }}
+          >
+            📄 Exportar PDF
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void selectFile()}
+            disabled={loading}
+            style={{
+              minHeight: 42,
+              border: 0,
+              borderRadius: 8,
+              padding: "0 16px",
+              background: "#b91c1c",
+              color: "#fff",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {loading ? "Procesando..." : "Seleccionar Documentos Anulados"}
+          </button>
+        </div>
       </header>
 
       {message && (

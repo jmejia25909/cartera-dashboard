@@ -64,3 +64,9 @@ export type {
   GenerateTendenciasReportParams,
   TendenciaReportRow,
 } from './reports/tendenciasReport';
+
+export { generateCancelledDocumentsReport } from './reports/cancelledDocumentsReport';
+export type {
+  CancelledDocumentReportRow,
+  GenerateCancelledDocumentsReportParams,
+} from './reports/cancelledDocumentsReport';
