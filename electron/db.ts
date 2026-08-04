@@ -374,6 +374,10 @@ function ensureSchema(db: Database.Database) {
   ensureCancelledColumn("abonos", "reversado", "INTEGER DEFAULT 0");
   ensureCancelledColumn("abonos", "motivo_reversion", "TEXT");
   ensureCancelledColumn("abonos", "reversado_en", "TEXT");
+  ensureCancelledColumn("documentos_anulados_log", "tipo_documento", "TEXT");
+  ensureCancelledColumn("documentos_anulados_log", "estado_origen", "TEXT");
+  ensureCancelledColumn("documentos_anulados_log", "numero_autorizacion", "TEXT");
+
   ensureCancelledColumn("abonos", "documento_normalizado", "TEXT");
 
   db.exec(`

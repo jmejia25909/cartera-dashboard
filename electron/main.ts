@@ -3,7 +3,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
 import { openDb, getDbFilePath } from "./db";
 import { importContificoExcel } from "./importContifico";
-import { importCancelledDocumentsExcel } from "./importCancelledDocuments";
+import {
+  importCancelledDocumentsExcel,
+  previewCancelledDocumentsExcel,
+} from "./importCancelledDocuments";
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import http from "node:http";
@@ -2049,7 +2052,7 @@ ipcMain.handle("checkRemoteUrl", async () => {
 
 
 
-ipcMain.handle("importCancelledDocuments", async () => {
+ipcMain.handle("previewCancelledDocuments", async () => {
   const selection = await dialog.showOpenDialog({
     title: "Seleccionar archivo Documentos Anulados",
     properties: ["openFile"],
@@ -2057,21 +2060,42 @@ ipcMain.handle("importCancelledDocuments", async () => {
   });
 
   if (selection.canceled || selection.filePaths.length === 0) {
-    return { ok: false, message: "Importación cancelada" };
+    return { ok: false, message: "Selección cancelada" };
   }
 
   try {
-    return importCancelledDocumentsExcel(selection.filePaths[0], db);
+    return previewCancelledDocumentsExcel(selection.filePaths[0], db);
   } catch (error: unknown) {
-    console.error("Error importando documentos anulados:", error);
+    console.error("Error analizando documentos anulados:", error);
+
     return {
       ok: false,
-      message: error instanceof Error
-        ? error.message
-        : "Error desconocido durante la importación",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Error desconocido durante el análisis",
     };
   }
 });
+
+ipcMain.handle(
+  "confirmCancelledDocumentsImport",
+  (_event, filePath: string) => {
+    try {
+      return importCancelledDocumentsExcel(filePath, db);
+    } catch (error: unknown) {
+      console.error("Error importando documentos anulados:", error);
+
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Error desconocido durante la importación",
+      };
+    }
+  },
+);
 
 ipcMain.handle("cancelledDocumentsList", () => {
   const rows = db.prepare(`
@@ -2083,7 +2107,10 @@ ipcMain.handle("cancelledDocumentsList", () => {
       motivo,
       archivo_origen,
       detectado_en,
-      resultado
+      resultado,
+      tipo_documento,
+      estado_origen,
+      numero_autorizacion
     FROM documentos_anulados_log
     ORDER BY datetime(detectado_en) DESC, id DESC
   `).all();

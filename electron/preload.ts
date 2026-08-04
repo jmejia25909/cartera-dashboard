@@ -16,7 +16,10 @@ const apiMethods = {
   creditPoliciesList: () => ipcRenderer.invoke("creditPoliciesList"),
   creditPolicyPreview: (cliente: string) => ipcRenderer.invoke("creditPolicyPreview", cliente),
   creditPolicySave: (data: unknown) => ipcRenderer.invoke("creditPolicySave", data),
-  importCancelledDocuments: () => ipcRenderer.invoke("importCancelledDocuments"),
+  previewCancelledDocuments: () =>
+    ipcRenderer.invoke("previewCancelledDocuments"),
+  confirmCancelledDocumentsImport: (filePath: string) =>
+    ipcRenderer.invoke("confirmCancelledDocumentsImport", filePath),
   cancelledDocumentsList: () => ipcRenderer.invoke("cancelledDocumentsList"),
   importarContifico: () => ipcRenderer.invoke("importarContifico"),
   limpiarBaseDatos: () => ipcRenderer.invoke("limpiarBaseDatos"),

@@ -49,14 +49,43 @@ declare global {
         documentosActualizados: number;
       }>;
 
-      importCancelledDocuments: () => Promise<{
+      previewCancelledDocuments: () => Promise<{
         ok: boolean;
-        filePath?: string;
-        totalRows?: number;
-        matchedDocuments?: number;
-        cancelledDocuments?: number;
-        reversedPayments?: number;
-        unmatchedDocuments?: number;
+        filePath: string;
+        sheetName: string;
+        companyName: string;
+        reportTitle: string;
+        totalRows: number;
+        foundDocuments: number;
+        alreadyCancelledDocuments: number;
+        unmatchedDocuments: number;
+        paymentsToReverse: number;
+        rows: Array<{
+          rowNumber: number;
+          cancellationDate: string;
+          documentType: string;
+          documentNumber: string;
+          normalizedDocumentNumber: string;
+          sourceStatus: string;
+          authorizationNumber: string;
+          matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "YA_ANULADO";
+          customer: string | null;
+          activePayments: number;
+        }>;
+        message?: string;
+      }>;
+
+      confirmCancelledDocumentsImport: (
+        filePath: string,
+      ) => Promise<{
+        ok: boolean;
+        filePath: string;
+        totalRows: number;
+        matchedDocuments: number;
+        alreadyCancelledDocuments: number;
+        cancelledDocuments: number;
+        reversedPayments: number;
+        unmatchedDocuments: number;
         message?: string;
       }>;
 
@@ -71,6 +100,9 @@ declare global {
           archivo_origen: string | null;
           detectado_en: string;
           resultado: string;
+          tipo_documento: string | null;
+          estado_origen: string | null;
+          numero_autorizacion: string | null;
         }>;
       }>;
 
