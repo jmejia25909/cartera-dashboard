@@ -12,6 +12,7 @@ import {
   AbonosPage,
   AlertsPage,
   CreditPoliciesPage,
+  CancelledDocumentsPage,
   ConfigPage,
   DashboardPage,
   PromisesPage,
@@ -1047,6 +1048,10 @@ export default function App() {
 
     if (tab === "creditos") {
       return <CreditPoliciesPage />;
+    }
+
+    if (tab === "anulados") {
+      return <CancelledDocumentsPage />;
     }
 
     if (tab === "dashboard") {

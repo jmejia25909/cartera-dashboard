@@ -351,6 +351,66 @@ function ensureSchema(db: Database.Database) {
       resuelto_en = NULL;
   `);
 
+
+  // Migración de documentos anulados.
+  const ensureCancelledColumn = (
+    tableName: string,
+    columnName: string,
+    definition: string,
+  ): void => {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === columnName)) {
+      db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    }
+  };
+
+  ensureCancelledColumn("documentos", "estado_documento", "TEXT DEFAULT 'ACTIVO'");
+  ensureCancelledColumn("documentos", "anulado", "INTEGER DEFAULT 0");
+  ensureCancelledColumn("documentos", "fecha_anulacion", "TEXT");
+  ensureCancelledColumn("documentos", "motivo_anulacion", "TEXT");
+  ensureCancelledColumn("documentos", "fuente_anulacion", "TEXT");
+
+  ensureCancelledColumn("abonos", "estado", "TEXT DEFAULT 'ACTIVO'");
+  ensureCancelledColumn("abonos", "reversado", "INTEGER DEFAULT 0");
+  ensureCancelledColumn("abonos", "motivo_reversion", "TEXT");
+  ensureCancelledColumn("abonos", "reversado_en", "TEXT");
+  ensureCancelledColumn("abonos", "documento_normalizado", "TEXT");
+
+  db.exec(`
+    UPDATE abonos
+    SET documento_normalizado = CASE
+      WHEN TRIM(COALESCE(documento, '')) = '' THEN ''
+      ELSE LTRIM(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(documento), '-', ''), ' ', ''), '.', ''), '/', ''), '0')
+    END
+    WHERE TRIM(COALESCE(documento_normalizado, '')) = '';
+
+    CREATE TABLE IF NOT EXISTS documentos_anulados_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      documento TEXT NOT NULL,
+      documento_normalizado TEXT NOT NULL,
+      cliente TEXT,
+      fecha_anulacion TEXT,
+      motivo TEXT,
+      archivo_origen TEXT NOT NULL,
+      detectado_en TEXT NOT NULL,
+      documento_id INTEGER,
+      resultado TEXT NOT NULL,
+      UNIQUE(documento_normalizado, archivo_origen)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_documentos_anulados_log_documento
+      ON documentos_anulados_log(documento_normalizado);
+
+    CREATE INDEX IF NOT EXISTS idx_documentos_estado_documento
+      ON documentos(estado_documento);
+
+    CREATE INDEX IF NOT EXISTS idx_abonos_documento_normalizado
+      ON abonos(documento_normalizado);
+
+    CREATE INDEX IF NOT EXISTS idx_abonos_estado
+      ON abonos(estado, reversado);
+  `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }

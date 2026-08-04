@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
 import { openDb, getDbFilePath } from "./db";
 import { importContificoExcel } from "./importContifico";
+import { importCancelledDocumentsExcel } from "./importCancelledDocuments";
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import http from "node:http";
@@ -2046,6 +2047,49 @@ ipcMain.handle("checkRemoteUrl", async () => {
 });
 
 
+
+
+ipcMain.handle("importCancelledDocuments", async () => {
+  const selection = await dialog.showOpenDialog({
+    title: "Seleccionar archivo Documentos Anulados",
+    properties: ["openFile"],
+    filters: [{ name: "Archivos de Excel", extensions: ["xlsx", "xls"] }],
+  });
+
+  if (selection.canceled || selection.filePaths.length === 0) {
+    return { ok: false, message: "Importación cancelada" };
+  }
+
+  try {
+    return importCancelledDocumentsExcel(selection.filePaths[0], db);
+  } catch (error: unknown) {
+    console.error("Error importando documentos anulados:", error);
+    return {
+      ok: false,
+      message: error instanceof Error
+        ? error.message
+        : "Error desconocido durante la importación",
+    };
+  }
+});
+
+ipcMain.handle("cancelledDocumentsList", () => {
+  const rows = db.prepare(`
+    SELECT
+      id,
+      documento,
+      cliente,
+      fecha_anulacion,
+      motivo,
+      archivo_origen,
+      detectado_en,
+      resultado
+    FROM documentos_anulados_log
+    ORDER BY datetime(detectado_en) DESC, id DESC
+  `).all();
+
+  return { ok: true, rows };
+});
 
 ipcMain.handle("creditPoliciesList", () => {
   const rows = db.prepare(`

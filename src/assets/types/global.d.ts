@@ -49,6 +49,31 @@ declare global {
         documentosActualizados: number;
       }>;
 
+      importCancelledDocuments: () => Promise<{
+        ok: boolean;
+        filePath?: string;
+        totalRows?: number;
+        matchedDocuments?: number;
+        cancelledDocuments?: number;
+        reversedPayments?: number;
+        unmatchedDocuments?: number;
+        message?: string;
+      }>;
+
+      cancelledDocumentsList: () => Promise<{
+        ok: boolean;
+        rows: Array<{
+          id: number;
+          documento: string;
+          cliente: string | null;
+          fecha_anulacion: string | null;
+          motivo: string | null;
+          archivo_origen: string | null;
+          detectado_en: string;
+          resultado: string;
+        }>;
+      }>;
+
       importarContifico: () => Promise<{
         ok: boolean;
         filePath?: string;
