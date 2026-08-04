@@ -77,34 +77,15 @@ export function CancelledDocumentsPage() {
         ? await api.empresaObtener()
         : { nombre: "Mi Empresa" };
 
-      const abonosResult = api?.abonosListar
-        ? await api.abonosListar()
-        : [];
-
-      const allPayments = Array.isArray(abonosResult)
-        ? abonosResult
-        : [];
-
-      const cancellationReversals = allPayments.filter(
-        (payment: any) =>
-          payment?.motivo_reversion === "ANULACION_DOCUMENTO" ||
-          (payment?.reversado === 1 &&
-            payment?.motivo_reversion === "ANULACION_DOCUMENTO"),
-      );
-
-      const reversedAmount = cancellationReversals.reduce(
-        (sum: number, payment: any) =>
-          sum +
-          (Number(payment?.total_anterior || 0) -
-            Number(payment?.total_nuevo || 0)),
-        0,
-      );
+      const reversalSummary = api?.cancelledDocumentsReversalSummary
+        ? await api.cancelledDocumentsReversalSummary()
+        : { reversedPayments: 0, reversedAmount: 0 };
 
       await generateCancelledDocumentsReport({
         rows,
         context: createPdfContext(company ?? { nombre: "Mi Empresa" }),
-        reversedPayments: cancellationReversals.length,
-        reversedAmount,
+        reversedPayments: Number(reversalSummary?.reversedPayments || 0),
+        reversedAmount: Number(reversalSummary?.reversedAmount || 0),
       });
 
       setMessage("PDF de documentos anulados generado correctamente.");

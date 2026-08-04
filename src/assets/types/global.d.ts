@@ -89,6 +89,10 @@ declare global {
         message?: string;
       }>;
 
+      cancelledDocumentsReversalSummary: () => Promise<{
+        reversedPayments: number;
+        reversedAmount: number;
+      }>;
       cancelledDocumentsList: () => Promise<{
         ok: boolean;
         rows: Array<{

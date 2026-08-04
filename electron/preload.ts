@@ -21,6 +21,8 @@ const apiMethods = {
   confirmCancelledDocumentsImport: (filePath: string) =>
     ipcRenderer.invoke("confirmCancelledDocumentsImport", filePath),
   cancelledDocumentsList: () => ipcRenderer.invoke("cancelledDocumentsList"),
+  cancelledDocumentsReversalSummary: () =>
+    ipcRenderer.invoke("cancelledDocumentsReversalSummary"),
   importarContifico: () => ipcRenderer.invoke("importarContifico"),
   limpiarBaseDatos: () => ipcRenderer.invoke("limpiarBaseDatos"),
   actualizarDiasCredito: (id: number, dias: number) => ipcRenderer.invoke("actualizarDiasCredito", { id, dias }),

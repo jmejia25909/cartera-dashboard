@@ -124,13 +124,13 @@ export const generateCancelledDocumentsReport = async ({
 
   autoTable(doc, {
     head: [[
-      'Fecha AnulaciÃ³n',
+      'Fecha Anulaci\u00f3n',
       'Tipo',
       'Documento',
       'Cliente',
       'Estado Origen',
       'Resultado',
-      'AutorizaciÃ³n',
+      'Autorizaci\u00f3n',
       'Detectado',
       'Archivo Origen',
     ]],
@@ -165,7 +165,7 @@ export const generateCancelledDocumentsReport = async ({
       5: { cellWidth: 30, fontStyle: 'bold' },
       6: { cellWidth: 48, fontSize: 6.4 },
       7: { cellWidth: 22 },
-      8: { cellWidth: 30 },
+      8: { cellWidth: 34, fontSize: 6.2, overflow: 'hidden' },
     },
     didParseCell: (data: any) => {
       if (data.section !== 'body' || data.column.index !== 5) return;

@@ -2100,6 +2100,25 @@ ipcMain.handle(
   },
 );
 
+ipcMain.handle("cancelledDocumentsReversalSummary", () => {
+  const row = db.prepare(`
+    SELECT
+      COUNT(*) AS reversedPayments,
+      ROUND(COALESCE(SUM(total_anterior - total_nuevo), 0), 2) AS reversedAmount
+    FROM abonos
+    WHERE COALESCE(reversado, 0) = 1
+      AND motivo_reversion = 'ANULACION_DOCUMENTO'
+  `).get() as {
+    reversedPayments: number;
+    reversedAmount: number;
+  };
+
+  return {
+    reversedPayments: Number(row?.reversedPayments || 0),
+    reversedAmount: Number(row?.reversedAmount || 0),
+  };
+});
+
 ipcMain.handle("cancelledDocumentsList", () => {
   const rows = db.prepare(`
     SELECT
