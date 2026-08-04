@@ -156,6 +156,9 @@ declare global {
       dashboardExecutiveStats: () =>
         Promise<DashboardExecutiveStats>;
 
+      dashboardExecutiveStats: () =>
+        Promise<DashboardExecutiveStats>;
+
       topClientes: (limit?: number) => Promise<TopCliente[]>;
       limpiarBaseDatos: () => Promise<{ ok: boolean; message: string }>;
       actualizarDiasCredito: (id: number, dias: number) => Promise<{ ok: boolean; message?: string }>;
