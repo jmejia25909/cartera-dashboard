@@ -140,8 +140,23 @@ const corrected = {
       AND TRIM(d.cliente) <> ''
       AND (
         c.cliente IS NULL
-        OR COALESCE(c.dias_credito, 0) <= 0
+        OR COALESCE(c.credito_configurado, 0) = 0
       )
+  `),
+  documentosCreditoPendiente: scalar(`
+    SELECT COUNT(1) AS c
+    FROM documentos
+    WHERE ${activeDocumentWhere}
+      AND COALESCE(credito_pendiente, 0) = 1
+  `),
+  saldosNoPositivos: row(`
+    SELECT
+      COUNT(1) AS documentos,
+      ROUND(COALESCE(SUM(total), 0), 2) AS saldo
+    FROM documentos
+    WHERE is_subtotal = 0
+      AND COALESCE(total, 0) <= 0
+      AND COALESCE(estado_documento, 'ACTIVO') <> 'ANULADO'
   `),
 };
 
@@ -253,6 +268,21 @@ const moraCritica = rows(`
   LIMIT 10
 `);
 
+const abonosMesPorTipo = rows(`
+  SELECT
+    COALESCE(NULLIF(observacion, ''), 'Sin observación') AS observacion,
+    COUNT(*) AS movimientos,
+    ROUND(SUM(total_anterior - total_nuevo), 2) AS valor
+  FROM abonos
+  WHERE COALESCE(reversado, 0) = 0
+    AND COALESCE(estado, 'ACTIVO') = 'ACTIVO'
+    AND (COALESCE(total_anterior, 0) - COALESCE(total_nuevo, 0)) > 0
+    AND datetime(fecha) >= datetime(?)
+    AND datetime(fecha) < datetime(?)
+  GROUP BY COALESCE(NULLIF(observacion, ''), 'Sin observación')
+  ORDER BY valor DESC
+`, [firstDay, nextMonth]);
+
 const comparison = [
   {
     indicador: "Cartera pendiente",
@@ -296,8 +326,10 @@ const result = {
   topClientes,
   vendedores,
   moraCritica,
+  abonosMesPorTipo,
   notas: [
     "Cobros detectados del mes usa fecha de detección de abonos, no fecha bancaria real.",
+    "Una política de contado con 0 días es válida cuando credito_configurado = 1.",
     "Todos los KPI corregidos excluyen anulados, subtotales y saldos <= 0.",
     "El DSO no se audita porque la base actual no contiene ventas a crédito mensuales confiables.",
   ],

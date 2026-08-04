@@ -23,3 +23,12 @@ Auditoría de solo lectura para comparar los KPI actuales del dashboard con una 
 - Abre SQLite en modo `readonly`.
 - No modifica la base.
 - Debe ejecutarse únicamente con la base temporal.
+
+
+## Ajustes de precisión
+
+- Las políticas de contado con 0 días se consideran configuradas.
+- Los clientes sin política se identifican mediante `credito_configurado = 0`.
+- Se reportan documentos con política pendiente.
+- Se separan saldos no positivos.
+- Los cobros detectados del mes se desglosan por tipo de movimiento.
