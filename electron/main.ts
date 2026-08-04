@@ -2049,21 +2049,41 @@ ipcMain.handle("checkRemoteUrl", async () => {
 
 ipcMain.handle("creditPoliciesList", () => {
   const rows = db.prepare(`
+    WITH credit_clients AS (
+      SELECT DISTINCT TRIM(cliente) AS cliente
+      FROM documentos
+      WHERE is_subtotal = 0
+        AND TRIM(COALESCE(cliente, '')) <> ''
+
+      UNION
+
+      SELECT DISTINCT TRIM(cliente) AS cliente
+      FROM alertas_credito
+      WHERE TRIM(COALESCE(cliente, '')) <> ''
+
+      UNION
+
+      SELECT DISTINCT TRIM(cliente) AS cliente
+      FROM clientes
+      WHERE TRIM(COALESCE(cliente, '')) <> ''
+    )
     SELECT
-      c.cliente,
+      cc.cliente,
       COALESCE(c.tipo_credito, 'CREDITO') AS tipo_credito,
       c.dias_credito,
       COALESCE(c.credito_configurado, 0) AS credito_configurado,
       SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) AS documentos_pendientes,
       MAX(a.estado) AS alerta_estado
-    FROM clientes c
+    FROM credit_clients cc
+    LEFT JOIN clientes c
+      ON TRIM(c.cliente) = cc.cliente
     LEFT JOIN documentos d
-      ON d.cliente = c.cliente
+      ON TRIM(d.cliente) = cc.cliente
       AND d.is_subtotal = 0
     LEFT JOIN alertas_credito a
-      ON a.cliente = c.cliente
+      ON TRIM(a.cliente) = cc.cliente
     GROUP BY
-      c.cliente,
+      cc.cliente,
       c.tipo_credito,
       c.dias_credito,
       c.credito_configurado
@@ -2071,8 +2091,12 @@ ipcMain.handle("creditPoliciesList", () => {
       COALESCE(c.credito_configurado, 0) = 1
       OR SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0
     ORDER BY
-      CASE WHEN SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0 THEN 0 ELSE 1 END,
-      c.cliente COLLATE NOCASE
+      CASE
+        WHEN SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0
+          THEN 0
+        ELSE 1
+      END,
+      cc.cliente COLLATE NOCASE
   `).all();
 
   return { ok: true, rows };
