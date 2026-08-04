@@ -1130,7 +1130,7 @@ const parseNumber = (val: any): number => {
   return isNaN(n) ? 0 : n;
 };
 
-function parseExcel(filePath: string, ivaPercent: number) {
+function _parseExcel(filePath: string, ivaPercent: number) {
   console.log("📄 Leyendo archivo...");
   const fileBuffer = fs.readFileSync(filePath);
   console.log("📚 Parseando workbook...");
@@ -1269,7 +1269,7 @@ function parseExcel(filePath: string, ivaPercent: number) {
   return documents;
 }
 
-function saveDocumentsToDb(db: any, docs: any[]) {
+function _saveDocumentsToDb(db: any, docs: any[]) {
   // Marca de tiempo para esta importación
   const now = new Date();
   const importTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
