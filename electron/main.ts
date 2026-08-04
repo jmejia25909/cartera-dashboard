@@ -2137,18 +2137,34 @@ ipcMain.handle("creditPolicySave", (_event, payload: {
   const tipoCredito = diasCredito === 0 ? "CONTADO" : "CREDITO";
 
   const save = db.transaction(() => {
-    const updateClient = db.prepare(`
-      UPDATE clientes
-      SET tipo_credito = ?,
-          dias_credito = ?,
-          credito_configurado = 1,
-          credito_actualizado_en = datetime('now', 'localtime')
-      WHERE cliente = ?
-    `).run(tipoCredito, diasCredito, cliente);
-
-    if (updateClient.changes === 0) {
-      throw new Error("No se encontró el cliente seleccionado.");
-    }
+    db.prepare(`
+      INSERT INTO clientes (
+        cliente,
+        razon_social,
+        tipo_credito,
+        dias_credito,
+        credito_configurado,
+        credito_actualizado_en
+      )
+      VALUES (
+        ?,
+        ?,
+        ?,
+        ?,
+        1,
+        datetime('now', 'localtime')
+      )
+      ON CONFLICT(cliente) DO UPDATE SET
+        tipo_credito = excluded.tipo_credito,
+        dias_credito = excluded.dias_credito,
+        credito_configurado = 1,
+        credito_actualizado_en = excluded.credito_actualizado_en
+    `).run(
+      cliente,
+      cliente,
+      tipoCredito,
+      diasCredito,
+    );
 
     let documentosActualizados = 0;
 
