@@ -2044,3 +2044,8 @@ ipcMain.handle("checkRemoteUrl", async () => {
   const url = await checkAndRefreshNgrok();
   return { ok: !!url, url };
 });
+
+
+// Legacy import helpers retained temporarily.
+void _parseExcel;
+void _saveDocumentsToDb;
