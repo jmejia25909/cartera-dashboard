@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import * as XLSX from "xlsx";
 import type Database from "better-sqlite3";
 
@@ -114,7 +115,8 @@ function toIsoDate(value: unknown): string {
 }
 
 function parseCancelledReport(filePath: string): ParsedCancelledReport {
-  const workbook = XLSX.readFile(filePath, {
+  const workbook = XLSX.read(fs.readFileSync(filePath), {
+    type: "buffer",
     cellDates: true,
     cellNF: false,
     cellText: false,
