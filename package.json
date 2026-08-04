@@ -32,7 +32,8 @@
     "installer:verify-clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-clean-installer.ps1",
     "installer:usb": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-usb-release.ps1",
     "data:clean-abonos": "node scripts/clean-abonos-copy.mjs",
-    "data:credit-summary": "node scripts/credit-policy-summary.mjs"
+    "data:credit-summary": "node scripts/credit-policy-summary.mjs",
+    "verify:credit-import-route": "node scripts/verify-credit-import-route.mjs"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",

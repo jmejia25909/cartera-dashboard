@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
 import { openDb, getDbFilePath } from "./db";
+import { importContificoExcel } from "./importContifico";
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import http from "node:http";
@@ -1971,63 +1972,26 @@ ipcMain.handle("cuentaAplicarActualizar", (_evt, data) => {
 });
 
 ipcMain.handle("importarContifico", async () => {
-  const result = await dialog.showOpenDialog({
+  const selection = await dialog.showOpenDialog({
+    title: "Seleccionar cartera de Contifico",
     properties: ["openFile"],
-    filters: [
-      { name: "Excel", extensions: ["xlsx", "xls", "xlsm"] },
-      { name: "All Files", extensions: ["*"] },
-    ],
+    filters: [{ name: "Archivos de Excel", extensions: ["xlsx", "xls"] }],
   });
 
-  if (result.canceled || result.filePaths.length === 0) {
-    return { ok: false, message: "Importación cancelada", insertedDocs: 0, insertedClientes: 0, omittedRows: 0 };
+  if (selection.canceled || selection.filePaths.length === 0) {
+    return { ok: false, message: "Importacion cancelada" };
   }
 
-  const filePath = result.filePaths[0];
   try {
-    console.log("📥 Iniciando importación:", filePath);
-    
-    // Re-open DB in case previous instance closed unexpectedly
-    if (!db || !db.open) {
-      db = openDb().db;
-    }
-    
-    const empresa = db.prepare("SELECT iva_percent FROM empresa WHERE id = 1").get();
-    const ivaPercent = empresa?.iva_percent ?? 15.0;
-
-    // 1. Parsear Excel
-    console.log("📋 Parseando Excel con IVA:", ivaPercent);
-    console.log("🚀 A punto de llamar parseExcel...");
-    const docs = parseExcel(filePath, ivaPercent);
-    console.log("✅ parseExcel completado, documentos:", docs.length);
-    if (docs.length === 0) {
-      return { ok: false, message: "El archivo no tiene datos o no se encontraron encabezados en la Fila 5.", insertedDocs: 0, updatedDocs: 0, insertedClientes: 0, omittedRows: 0 };
-    }
-
-    // 2. Guardar en DB
-    const { insertedDocs, updatedDocs, insertedIds, paidDocs } = saveDocumentsToDb(db, docs);
-    
-    // Si hubo inserciones O actualizaciones, es un éxito. Si no hubo nada, ya estaba ingresada.
-    let message = "Proceso completado.";
-    if (insertedDocs > 0) message = `Se ingresaron ${insertedDocs} nuevos documentos.`;
-    else if (updatedDocs > 0) message = `Se actualizaron saldos en ${updatedDocs} documentos.`;
-    else if (paidDocs > 0) message = `Se cerraron ${paidDocs} documentos pagados.`;
-    else message = "La cartera está al día (sin cambios).";
-
-    return { 
-      ok: true, 
-      filePath, 
-      insertedDocs, 
-      updatedDocs,
-      paidDocs,
-      insertedClientes: 0, 
-      omittedRows: 0, 
-      message,
-      insertedIds // Devolvemos los IDs para que el frontend pueda revisarlos
+    return importContificoExcel(selection.filePaths[0], db);
+  } catch (error: unknown) {
+    console.error("Error importando cartera de Contifico:", error);
+    return {
+      ok: false,
+      message: error instanceof Error
+        ? error.message
+        : "Error desconocido durante la importacion",
     };
-  } catch (e: any) {
-    console.error("❌ Error en importación:", e);
-    return { ok: false, message: e?.message || String(e), insertedDocs: 0, insertedClientes: 0, omittedRows: 0 };
   }
 });
 

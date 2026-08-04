@@ -310,6 +310,47 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_alertas_credito_estado ON alertas_credito(estado);
   `);
 
+
+  // Clasificar documentos historicos de credito.
+  db.exec(`
+    UPDATE documentos
+    SET credito_fuente = 'PENDIENTE_CONFIGURACION',
+        credito_pendiente = 1,
+        dias_credito_aplicados = NULL
+    WHERE is_subtotal = 0
+      AND TRIM(COALESCE(cliente, '')) <> ''
+      AND (
+        TRIM(COALESCE(fecha_emision, '')) = ''
+        OR TRIM(COALESCE(fecha_vencimiento, '')) = ''
+        OR date(fecha_vencimiento) <= date(fecha_emision)
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM clientes c
+        WHERE c.cliente = documentos.cliente
+          AND c.credito_configurado = 1
+          AND c.dias_credito IS NOT NULL
+      );
+
+    INSERT INTO alertas_credito (
+      cliente, motivo, estado, detectado_en, resuelto_en
+    )
+    SELECT DISTINCT
+      d.cliente,
+      'Cliente sin dias de credito configurados y vencimiento importado no valido',
+      'PENDIENTE',
+      datetime('now', 'localtime'),
+      NULL
+    FROM documentos d
+    WHERE d.credito_pendiente = 1
+      AND TRIM(COALESCE(d.cliente, '')) <> ''
+    ON CONFLICT(cliente) DO UPDATE SET
+      motivo = excluded.motivo,
+      estado = 'PENDIENTE',
+      detectado_en = excluded.detectado_en,
+      resuelto_en = NULL;
+  `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }
