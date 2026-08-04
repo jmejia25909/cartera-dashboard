@@ -2046,6 +2046,147 @@ ipcMain.handle("checkRemoteUrl", async () => {
 });
 
 
+
+ipcMain.handle("creditPoliciesList", () => {
+  const rows = db.prepare(`
+    SELECT
+      c.cliente,
+      COALESCE(c.tipo_credito, 'CREDITO') AS tipo_credito,
+      c.dias_credito,
+      COALESCE(c.credito_configurado, 0) AS credito_configurado,
+      SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) AS documentos_pendientes,
+      MAX(a.estado) AS alerta_estado
+    FROM clientes c
+    LEFT JOIN documentos d
+      ON d.cliente = c.cliente
+      AND d.is_subtotal = 0
+    LEFT JOIN alertas_credito a
+      ON a.cliente = c.cliente
+    GROUP BY
+      c.cliente,
+      c.tipo_credito,
+      c.dias_credito,
+      c.credito_configurado
+    HAVING
+      COALESCE(c.credito_configurado, 0) = 1
+      OR SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0
+    ORDER BY
+      CASE WHEN SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0 THEN 0 ELSE 1 END,
+      c.cliente COLLATE NOCASE
+  `).all();
+
+  return { ok: true, rows };
+});
+
+ipcMain.handle("creditPolicyPreview", (_event, cliente: string) => {
+  const normalized = String(cliente ?? "").trim();
+  if (!normalized) return { ok: false, documentosPendientes: 0 };
+
+  const row = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM documentos
+    WHERE cliente = ?
+      AND is_subtotal = 0
+      AND credito_pendiente = 1
+  `).get(normalized) as { total: number };
+
+  return { ok: true, documentosPendientes: Number(row?.total ?? 0) };
+});
+
+ipcMain.handle("creditPolicySave", (_event, payload: {
+  cliente: string;
+  tipoCredito: "CONTADO" | "CREDITO";
+  diasCredito: number;
+  recalcularPendientes: boolean;
+}) => {
+  const cliente = String(payload?.cliente ?? "").trim();
+  const diasCredito = Number(payload?.diasCredito);
+  const recalcular = payload?.recalcularPendientes === true;
+
+  if (!cliente) {
+    return { ok: false, message: "El cliente es obligatorio.", documentosActualizados: 0 };
+  }
+  if (!Number.isInteger(diasCredito) || diasCredito < 0 || diasCredito > 365) {
+    return { ok: false, message: "Los días deben estar entre 0 y 365.", documentosActualizados: 0 };
+  }
+
+  const tipoCredito = diasCredito === 0 ? "CONTADO" : "CREDITO";
+
+  const save = db.transaction(() => {
+    const updateClient = db.prepare(`
+      UPDATE clientes
+      SET tipo_credito = ?,
+          dias_credito = ?,
+          credito_configurado = 1,
+          credito_actualizado_en = datetime('now', 'localtime')
+      WHERE cliente = ?
+    `).run(tipoCredito, diasCredito, cliente);
+
+    if (updateClient.changes === 0) {
+      throw new Error("No se encontró el cliente seleccionado.");
+    }
+
+    let documentosActualizados = 0;
+
+    if (recalcular) {
+      const updateDocs = db.prepare(`
+        UPDATE documentos
+        SET fecha_vencimiento = date(fecha_emision, '+' || ? || ' day'),
+            dias_credito_aplicados = ?,
+            credito_fuente = 'POLITICA_CLIENTE',
+            credito_pendiente = 0
+        WHERE cliente = ?
+          AND is_subtotal = 0
+          AND credito_pendiente = 1
+          AND TRIM(COALESCE(fecha_emision, '')) <> ''
+      `).run(diasCredito, diasCredito, cliente);
+
+      documentosActualizados = updateDocs.changes;
+    }
+
+    const pending = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM documentos
+      WHERE cliente = ?
+        AND is_subtotal = 0
+        AND credito_pendiente = 1
+    `).get(cliente) as { total: number };
+
+    if (Number(pending?.total ?? 0) === 0) {
+      db.prepare(`
+        UPDATE alertas_credito
+        SET estado = 'RESUELTA',
+            resuelto_en = datetime('now', 'localtime')
+        WHERE cliente = ?
+      `).run(cliente);
+    } else {
+      db.prepare(`
+        UPDATE alertas_credito
+        SET estado = 'PENDIENTE',
+            resuelto_en = NULL
+        WHERE cliente = ?
+      `).run(cliente);
+    }
+
+    return documentosActualizados;
+  });
+
+  try {
+    const documentosActualizados = save();
+    return {
+      ok: true,
+      message: "Política guardada correctamente.",
+      documentosActualizados,
+    };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo guardar la política.",
+      documentosActualizados: 0,
+    };
+  }
+});
+
 // Legacy import helpers retained temporarily.
 void _parseExcel;
 void _saveDocumentsToDb;

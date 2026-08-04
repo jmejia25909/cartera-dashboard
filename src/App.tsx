@@ -11,6 +11,7 @@ import {
 import {
   AbonosPage,
   AlertsPage,
+  CreditPoliciesPage,
   ConfigPage,
   DashboardPage,
   PromisesPage,
@@ -1043,6 +1044,10 @@ export default function App() {
       gap: '16px',
       alignItems: 'stretch'
     };
+
+    if (tab === "creditos") {
+      return <CreditPoliciesPage />;
+    }
 
     if (tab === "dashboard") {
       return (

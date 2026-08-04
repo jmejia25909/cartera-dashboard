@@ -9,5 +9,6 @@ export const APP_NAVIGATION_TABS: NavigationTab[] = [
   { id: 'alertas', label: 'Alertas', icon: '🚨' },
   { id: 'tendencias', label: 'Tendencias', icon: '📉' },
   { id: 'cuentas', label: 'Cuentas', icon: '💰' },
+  { id: 'creditos', label: 'Crédito', icon: '🗓️' },
   { id: 'config', label: 'Configuración', icon: '⚙️' },
 ];

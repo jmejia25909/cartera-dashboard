@@ -23,6 +23,32 @@ declare global {
       getDesktopToken: () => Promise<string>;
       hasWritePermissions: () => Promise<boolean>;
 
+      creditPoliciesList: () => Promise<{
+        ok: boolean;
+        rows: Array<{
+          cliente: string;
+          tipo_credito: "CONTADO" | "CREDITO";
+          dias_credito: number | null;
+          credito_configurado: number;
+          documentos_pendientes: number;
+          alerta_estado: string | null;
+        }>;
+      }>;
+      creditPolicyPreview: (cliente: string) => Promise<{
+        ok: boolean;
+        documentosPendientes: number;
+      }>;
+      creditPolicySave: (data: {
+        cliente: string;
+        tipoCredito: "CONTADO" | "CREDITO";
+        diasCredito: number;
+        recalcularPendientes: boolean;
+      }) => Promise<{
+        ok: boolean;
+        message?: string;
+        documentosActualizados: number;
+      }>;
+
       importarContifico: () => Promise<{
         ok: boolean;
         filePath?: string;

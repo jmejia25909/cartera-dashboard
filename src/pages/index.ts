@@ -23,3 +23,5 @@ export type {
 
 export { AbonosPage } from './AbonosPage';
 export type { AbonoItem, AbonosPageProps } from './AbonosPage';
+
+export { CreditPoliciesPage } from './CreditPoliciesPage';
