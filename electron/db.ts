@@ -415,6 +415,33 @@ function ensureSchema(db: Database.Database) {
       ON abonos(estado, reversado);
   `);
 
+
+  // Conciliación histórica de cobros duplicados y movimientos no positivos.
+  db.exec(`
+    UPDATE abonos
+    SET estado = 'REVERSADO',
+        reversado = 1,
+        motivo_reversion = 'DUPLICADO_POR_DESAPARICION',
+        reversado_en = datetime('now', 'localtime')
+    WHERE COALESCE(reversado, 0) = 0
+      AND observacion = 'Abono detectado por documento no presente en importacion'
+      AND EXISTS (
+        SELECT 1
+        FROM abonos total
+        WHERE COALESCE(total.reversado, 0) = 0
+          AND total.observacion = 'Cobro Total: Documento ya no aparece en cartera (Cancelado)'
+          AND total.documento_normalizado = abonos.documento_normalizado
+      );
+
+    UPDATE abonos
+    SET estado = 'REVERSADO',
+        reversado = 1,
+        motivo_reversion = 'MOVIMIENTO_NO_POSITIVO',
+        reversado_en = datetime('now', 'localtime')
+    WHERE COALESCE(reversado, 0) = 0
+      AND (COALESCE(total_anterior, 0) - COALESCE(total_nuevo, 0)) <= 0;
+  `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }

@@ -35,7 +35,8 @@
     "data:credit-summary": "node scripts/credit-policy-summary.mjs",
     "verify:credit-import-route": "node scripts/verify-credit-import-route.mjs",
     "verify:credit-policy-ui": "node scripts/verify-credit-policy-ui.mjs",
-    "verify:cancelled-documents-import": "node scripts/verify-cancelled-documents-import.mjs"
+    "verify:cancelled-documents-import": "node scripts/verify-cancelled-documents-import.mjs",
+    "verify:collection-reconciliation": "node scripts/verify-collection-reconciliation.mjs"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",

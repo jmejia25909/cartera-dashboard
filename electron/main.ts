@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
 import { openDb, getDbFilePath } from "./db";
 import { importContificoExcel } from "./importContifico";
+import { reconcileCollections } from "./collectionReconciliation";
 import {
   importCancelledDocumentsExcel,
   previewCancelledDocumentsExcel,
@@ -1987,7 +1988,9 @@ ipcMain.handle("importarContifico", async () => {
   }
 
   try {
-    return importContificoExcel(selection.filePaths[0], db);
+    const result = importContificoExcel(selection.filePaths[0], db);
+    reconcileCollections(db);
+    return result;
   } catch (error: unknown) {
     console.error("Error importando cartera de Contifico:", error);
     return {

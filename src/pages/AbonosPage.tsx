@@ -10,6 +10,9 @@ export interface AbonoItem {
   total_anterior: number;
   total_nuevo: number;
   observacion?: string;
+  estado?: string;
+  reversado?: number;
+  motivo_reversion?: string;
 }
 
 export interface AbonosPageProps {
@@ -32,6 +35,18 @@ export function AbonosPage({
   const abonosFiltrados = useMemo(
     () =>
       abonos.filter((abono) => {
+        const valorAplicado =
+          Number(abono.total_anterior || 0) -
+          Number(abono.total_nuevo || 0);
+
+        if (abono.reversado === 1 || abono.estado === "REVERSADO") {
+          return false;
+        }
+
+        if (valorAplicado <= 0) {
+          return false;
+        }
+
         if (fechaDesde && (!abono.fecha || abono.fecha < fechaDesde)) {
           return false;
         }
