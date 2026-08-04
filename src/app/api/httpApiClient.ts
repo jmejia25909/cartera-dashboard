@@ -78,6 +78,13 @@ export function createHttpApiClient() {
       return readJson(response);
     },
 
+    dashboardExecutiveStats: async () => {
+      const response = await fetch(
+        `${API_BASE_URL}/dashboard-executive`,
+      );
+      return readJson(response);
+    },
+
     filtrosListar: async () => {
       const response = await fetch(`${API_BASE_URL}/documentos`);
       const data = await readJson<RowsPayload<HttpDocument> | HttpDocument[]>(

@@ -10,6 +10,8 @@ const apiMethods = {
   getDesktopToken: () => ipcRenderer.invoke("getDesktopToken"),
   hasWritePermissions: () => ipcRenderer.invoke("hasWritePermissions"),
   statsObtener: () => ipcRenderer.invoke("statsObtener"),
+  dashboardExecutiveStats: () =>
+    ipcRenderer.invoke("dashboardExecutiveStats"),
   filtrosListar: () => ipcRenderer.invoke("filtrosListar"),
   topClientes: (limit?: number) => ipcRenderer.invoke("topClientes", limit),
   documentosListar: (args: unknown) => ipcRenderer.invoke("documentosListar", args),

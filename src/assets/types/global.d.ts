@@ -14,6 +14,7 @@ import type {
   TopCliente,
   PronosticoMes
 } from '../../types/api.types';
+import type { DashboardExecutiveStats } from '../../types/dashboardExecutive';
 
 declare global {
   interface Window {
@@ -151,6 +152,9 @@ declare global {
         percentMetaCumplida?: number;
         tasaCumplimientoPromesas?: number;
       }>;
+
+      dashboardExecutiveStats: () =>
+        Promise<DashboardExecutiveStats>;
 
       topClientes: (limit?: number) => Promise<TopCliente[]>;
       limpiarBaseDatos: () => Promise<{ ok: boolean; message: string }>;

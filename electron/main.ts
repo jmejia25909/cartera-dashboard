@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
 import { openDb, getDbFilePath } from "./db";
+import { computeDashboardExecutiveStats } from "./dashboardExecutive";
 import { importContificoExcel } from "./importContifico";
 import { reconcileCollections } from "./collectionReconciliation";
 import {
@@ -587,6 +588,9 @@ function startWebServer() {
           };
         }
         else if (url.pathname === "/api/stats") data = computeStats();
+        else if (url.pathname === "/api/dashboard-executive") {
+          data = computeDashboardExecutiveStats(db);
+        }
         else if (url.pathname === "/api/filtros") data = listFiltros();
         else if (url.pathname === "/api/empresa") data = getEmpresa();
         else if (url.pathname === "/api/top-clientes") data = topClientes(Number(url.searchParams.get("limit")) || 10);
@@ -1532,6 +1536,10 @@ ipcMain.handle("hasWritePermissions", async () => true);
 
 ipcMain.handle("statsObtener", async () => {
   return computeStats();
+});
+
+ipcMain.handle("dashboardExecutiveStats", async () => {
+  return computeDashboardExecutiveStats(db);
 });
 
 ipcMain.handle("filtrosListar", async () => {
