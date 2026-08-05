@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import {
   AppHeader,
@@ -810,7 +810,7 @@ export default function App() {
       setDescuadresDetectados(descuadres);
 
       if (descuadres > 0) {
-        addToast(`âš ï¸ Importado: ${resultTyped.insertedDocs} docs (${descuadres} con descuadres en tramos)`, "warning");
+        addToast(`âš ï¸ Importado: ${resultTyped.insertedDocs} docs (${descuadres} con descuadres en tramos)`, "warning");
       } else {
         addToast(`âœ… ImportaciÃ³n exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, "success");
       }
@@ -1954,7 +1954,7 @@ export default function App() {
                 <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
                 <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
                 <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>AnÃ¡lisis Riesgo</button>
-                <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>âš ï¸ Deudores CrÃ³nicos</button>
+                <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>âš ï¸ Deudores CrÃ³nicos</button>
               </div>
               <button className="btn primary" onClick={exportarAnalisisPDF} disabled={!canExportAnalisis}>
                 Generar reporte
@@ -2355,7 +2355,7 @@ export default function App() {
                   style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
                 >
                   <option value="Pendiente">â³ Pendiente</option>
-                  <option value="Parcialmente Cumplida">âš ï¸ Parcialmente Cumplida</option>
+                  <option value="Parcialmente Cumplida">âš ï¸ Parcialmente Cumplida</option>
                   <option value="Cumplida">âœ… Cumplida</option>
                   <option value="Incumplida">âŒ Incumplida</option>
                   <option value="Reprogramada">ðŸ”„ Reprogramada</option>
