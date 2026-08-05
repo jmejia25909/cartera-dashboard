@@ -10,8 +10,14 @@ const apiMethods = {
   getDesktopToken: () => ipcRenderer.invoke("getDesktopToken"),
   hasWritePermissions: () => ipcRenderer.invoke("hasWritePermissions"),
   statsObtener: () => ipcRenderer.invoke("statsObtener"),
-  dashboardExecutiveStats: () =>
-    ipcRenderer.invoke("dashboardExecutiveStats"),
+  dashboardExecutiveStats: (filters?: {
+    year?: number;
+    month?: number | null;
+  }) =>
+    ipcRenderer.invoke(
+      "dashboardExecutiveStats",
+      filters,
+    ),
   filtrosListar: () => ipcRenderer.invoke("filtrosListar"),
   topClientes: (limit?: number) => ipcRenderer.invoke("topClientes", limit),
   documentosListar: (args: unknown) => ipcRenderer.invoke("documentosListar", args),

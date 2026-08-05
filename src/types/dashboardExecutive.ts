@@ -7,6 +7,30 @@ export type DashboardDataQualityStatus =
   | 'ATENCION'
   | 'CRITICO';
 
+export interface DashboardExecutiveFilters {
+  year?: number;
+  month?: number | null;
+}
+
+export interface DashboardPeriod {
+  selectedYear: number;
+  selectedMonth: number | null;
+  label: string;
+  from: string;
+  toExclusive: string;
+  availableYears: number[];
+  note: string;
+}
+
+export interface DashboardMonthlySeries {
+  month: number;
+  label: string;
+  partialPayments: number;
+  disappearances: number;
+  otherMovements: number;
+  total: number;
+}
+
 export interface DashboardAgingItem {
   key:
     | 'POR_VENCER'
@@ -69,6 +93,7 @@ export interface DashboardExecutiveStats {
   fechaCorte: string;
   ultimaImportacion: string | null;
   ultimaDeteccionAbono: string | null;
+  periodo: DashboardPeriod;
 
   cartera: {
     pendiente: number;
@@ -127,7 +152,7 @@ export interface DashboardExecutiveStats {
   historico: {
     disponible: boolean;
     motivo: string;
-    series: [];
+    series: DashboardMonthlySeries[];
   };
 
   kpisFuturos: Array<{

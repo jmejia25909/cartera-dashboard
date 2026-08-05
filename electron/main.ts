@@ -589,7 +589,24 @@ function startWebServer() {
         }
         else if (url.pathname === "/api/stats") data = computeStats();
         else if (url.pathname === "/api/dashboard-executive") {
-          data = computeDashboardExecutiveStats(db);
+          const yearValue = url.searchParams.get("year");
+          const monthValue = url.searchParams.get("month");
+
+          data = computeDashboardExecutiveStats(
+            db,
+            new Date(),
+            {
+              year: yearValue
+                ? Number(yearValue)
+                : undefined,
+              month:
+                monthValue === "all"
+                  ? null
+                  : monthValue
+                    ? Number(monthValue)
+                    : undefined,
+            },
+          );
         }
         else if (url.pathname === "/api/filtros") data = listFiltros();
         else if (url.pathname === "/api/empresa") data = getEmpresa();
@@ -1538,9 +1555,16 @@ ipcMain.handle("statsObtener", async () => {
   return computeStats();
 });
 
-ipcMain.handle("dashboardExecutiveStats", async () => {
-  return computeDashboardExecutiveStats(db);
-});
+ipcMain.handle(
+  "dashboardExecutiveStats",
+  async (_evt, filters) => {
+    return computeDashboardExecutiveStats(
+      db,
+      new Date(),
+      filters || {},
+    );
+  },
+);
 
 ipcMain.handle("filtrosListar", async () => {
   return listFiltros();

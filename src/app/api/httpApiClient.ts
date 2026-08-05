@@ -1,4 +1,8 @@
 import type { EmpresaData } from '../../types/api.types';
+import type {
+  DashboardExecutiveFilters,
+  DashboardExecutiveStats,
+} from '../../types/dashboardExecutive';
 
 interface HttpDocument {
   cliente?: string;
@@ -78,11 +82,30 @@ export function createHttpApiClient() {
       return readJson(response);
     },
 
-    dashboardExecutiveStats: async () => {
+    dashboardExecutiveStats: async (
+      filters: DashboardExecutiveFilters = {},
+    ): Promise<DashboardExecutiveStats> => {
+      const params = new URLSearchParams();
+
+      if (filters.year) {
+        params.set("year", String(filters.year));
+      }
+
+      if (filters.month === null) {
+        params.set("month", "all");
+      } else if (filters.month) {
+        params.set("month", String(filters.month));
+      }
+
+      const query = params.toString();
+
       const response = await fetch(
-        `${API_BASE_URL}/dashboard-executive`,
+        `${API_BASE_URL}/dashboard-executive${query ? `?${query}` : ""}`,
       );
-      return readJson(response);
+
+      return readJson<DashboardExecutiveStats>(
+        response,
+      );
     },
 
     filtrosListar: async () => {

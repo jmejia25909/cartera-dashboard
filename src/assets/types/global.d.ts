@@ -14,7 +14,10 @@ import type {
   TopCliente,
   PronosticoMes
 } from '../../types/api.types';
-import type { DashboardExecutiveStats } from '../../types/dashboardExecutive';
+import type {
+  DashboardExecutiveFilters,
+  DashboardExecutiveStats,
+} from '../../types/dashboardExecutive';
 
 declare global {
   interface Window {
@@ -153,8 +156,9 @@ declare global {
         tasaCumplimientoPromesas?: number;
       }>;
 
-      dashboardExecutiveStats: () =>
-        Promise<DashboardExecutiveStats>;
+      dashboardExecutiveStats: (
+        filters?: DashboardExecutiveFilters,
+      ) => Promise<DashboardExecutiveStats>;
 
       dashboardExecutiveStats: () =>
         Promise<DashboardExecutiveStats>;

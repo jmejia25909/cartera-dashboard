@@ -3,7 +3,9 @@ import type {
   DashboardAgingItem,
   DashboardCriticalAlert,
   DashboardCriticalDebtor,
+  DashboardExecutiveFilters,
   DashboardExecutiveStats,
+  DashboardMonthlySeries,
   DashboardSellerPortfolio,
   DashboardTopClient,
 } from "../src/types/dashboardExecutive";
@@ -12,6 +14,27 @@ type NumericRow = {
   value?: number | null;
   count?: number | null;
 };
+
+const MONTH_LABELS = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic",
+];
+
+const ACTIVE_DOCUMENT_WHERE = `
+  is_subtotal = 0
+  AND COALESCE(total, 0) > 0
+  AND COALESCE(estado_documento, 'ACTIVO') <> 'ANULADO'
+`;
 
 const roundMoney = (value: unknown): number =>
   Math.round((Number(value) || 0) * 100) / 100;
@@ -23,39 +46,106 @@ const toDateOnlyIso = (date: Date): string => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
+
   return `${year}-${month}-${day}`;
 };
 
-const monthBounds = (
-  date: Date,
-): { start: string; endExclusive: string } => {
-  const startDate = new Date(date.getFullYear(), date.getMonth(), 1);
-  const endDate = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+const normalizeYear = (
+  value: unknown,
+  fallback: number,
+): number => {
+  const parsed = Number(value);
 
-  return {
-    start: toDateOnlyIso(startDate),
-    endExclusive: toDateOnlyIso(endDate),
-  };
+  if (
+    Number.isInteger(parsed) &&
+    parsed >= 2000 &&
+    parsed <= 2100
+  ) {
+    return parsed;
+  }
+
+  return fallback;
 };
 
-const ACTIVE_DOCUMENT_WHERE = `
-  is_subtotal = 0
-  AND COALESCE(total, 0) > 0
-  AND COALESCE(estado_documento, 'ACTIVO') <> 'ANULADO'
-`;
+const normalizeMonth = (
+  value: unknown,
+  fallback: number | null,
+): number | null => {
+  if (value === null) {
+    return null;
+  }
+
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+
+  if (
+    Number.isInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= 12
+  ) {
+    return parsed;
+  }
+
+  return fallback;
+};
+
+const createPeriod = (
+  now: Date,
+  filters?: DashboardExecutiveFilters,
+) => {
+  const selectedYear = normalizeYear(
+    filters?.year,
+    now.getFullYear(),
+  );
+
+  const selectedMonth = normalizeMonth(
+    filters?.month,
+    now.getMonth() + 1,
+  );
+
+  const startDate =
+    selectedMonth === null
+      ? new Date(selectedYear, 0, 1)
+      : new Date(selectedYear, selectedMonth - 1, 1);
+
+  const endDate =
+    selectedMonth === null
+      ? new Date(selectedYear + 1, 0, 1)
+      : new Date(selectedYear, selectedMonth, 1);
+
+  const label =
+    selectedMonth === null
+      ? `Año ${selectedYear}`
+      : `${MONTH_LABELS[selectedMonth - 1]} ${selectedYear}`;
+
+  return {
+    selectedYear,
+    selectedMonth,
+    label,
+    from: toDateOnlyIso(startDate),
+    toExclusive: toDateOnlyIso(endDate),
+  };
+};
 
 export function computeDashboardExecutiveStats(
   db: Database.Database,
   now: Date = new Date(),
+  filters?: DashboardExecutiveFilters,
 ): DashboardExecutiveStats {
   const todayIso = toDateOnlyIso(now);
-  const period = monthBounds(now);
+  const period = createPeriod(now, filters);
 
   const scalar = (
     sql: string,
     params: readonly unknown[] = [],
   ): number => {
-    const result = db.prepare(sql).get(...params) as NumericRow | undefined;
+    const result = db.prepare(sql).get(...params) as
+      | NumericRow
+      | undefined;
+
     return Number(result?.value ?? result?.count ?? 0);
   };
 
@@ -69,7 +159,8 @@ export function computeDashboardExecutiveStats(
     SELECT COALESCE(SUM(total), 0) AS value
     FROM documentos
     WHERE ${ACTIVE_DOCUMENT_WHERE}
-      AND date(fecha_vencimiento) < date('now', 'localtime')
+      AND date(fecha_vencimiento) <
+        date('now', 'localtime')
   `);
 
   const mora90 = scalar(`
@@ -110,6 +201,40 @@ export function computeDashboardExecutiveStats(
       ) > 0
   `).get() as { value?: string | null } | undefined;
 
+  const availableYearsRows = db.prepare(`
+    SELECT DISTINCT year
+    FROM (
+      SELECT CAST(strftime('%Y', fecha) AS INTEGER) AS year
+      FROM abonos
+      WHERE datetime(fecha) IS NOT NULL
+
+      UNION
+
+      SELECT CAST(strftime('%Y', importado_en) AS INTEGER) AS year
+      FROM documentos
+      WHERE datetime(importado_en) IS NOT NULL
+    )
+    WHERE year IS NOT NULL
+  `).all() as Array<{ year: number }>;
+
+  const availableYearsSet = new Set<number>(
+    availableYearsRows.map((item) => Number(item.year)),
+  );
+
+  for (
+    let year = now.getFullYear() - 1;
+    year <= now.getFullYear() + 4;
+    year += 1
+  ) {
+    availableYearsSet.add(year);
+  }
+
+  availableYearsSet.add(period.selectedYear);
+
+  const availableYears = Array.from(availableYearsSet)
+    .filter((year) => Number.isInteger(year))
+    .sort((left, right) => left - right);
+
   const collectionRows = db.prepare(`
     SELECT
       observacion,
@@ -128,7 +253,7 @@ export function computeDashboardExecutiveStats(
       AND datetime(fecha) >= datetime(?)
       AND datetime(fecha) < datetime(?)
     GROUP BY observacion
-  `).all(period.start, period.endExclusive) as Array<{
+  `).all(period.from, period.toExclusive) as Array<{
     observacion: string | null;
     movimientos: number;
     valor: number;
@@ -146,7 +271,10 @@ export function computeDashboardExecutiveStats(
     const movements = Number(item.movimientos || 0);
     const amount = Number(item.valor || 0);
 
-    if (observation === "Abono detectado por cambio de total") {
+    if (
+      observation ===
+      "Abono detectado por cambio de total"
+    ) {
       movimientosParciales += movements;
       abonosParcialesDetectados += amount;
       continue;
@@ -175,11 +303,99 @@ export function computeDashboardExecutiveStats(
     cierresPorDesaparicionDetectados +
     otrosDetectados;
 
+  const monthlyRows = db.prepare(`
+    SELECT
+      CAST(strftime('%m', fecha) AS INTEGER) AS month,
+      ROUND(
+        SUM(
+          CASE
+            WHEN observacion =
+              'Abono detectado por cambio de total'
+            THEN total_anterior - total_nuevo
+            ELSE 0
+          END
+        ),
+        2
+      ) AS partial_payments,
+      ROUND(
+        SUM(
+          CASE
+            WHEN observacion =
+              'Cobro Total: Documento ya no aparece en cartera (Cancelado)'
+            THEN total_anterior - total_nuevo
+            ELSE 0
+          END
+        ),
+        2
+      ) AS disappearances,
+      ROUND(
+        SUM(
+          CASE
+            WHEN observacion NOT IN (
+              'Abono detectado por cambio de total',
+              'Cobro Total: Documento ya no aparece en cartera (Cancelado)'
+            )
+            THEN total_anterior - total_nuevo
+            ELSE 0
+          END
+        ),
+        2
+      ) AS other_movements
+    FROM abonos
+    WHERE COALESCE(reversado, 0) = 0
+      AND COALESCE(estado, 'ACTIVO') = 'ACTIVO'
+      AND (
+        COALESCE(total_anterior, 0) -
+        COALESCE(total_nuevo, 0)
+      ) > 0
+      AND strftime('%Y', fecha) = ?
+    GROUP BY CAST(strftime('%m', fecha) AS INTEGER)
+    ORDER BY month
+  `).all(String(period.selectedYear)) as Array<{
+    month: number;
+    partial_payments: number;
+    disappearances: number;
+    other_movements: number;
+  }>;
+
+  const monthlyMap = new Map(
+    monthlyRows.map((item) => [Number(item.month), item]),
+  );
+
+  const monthlySeries: DashboardMonthlySeries[] =
+    MONTH_LABELS.map((label, index) => {
+      const month = index + 1;
+      const item = monthlyMap.get(month);
+      const partialPayments = roundMoney(
+        item?.partial_payments,
+      );
+      const disappearances = roundMoney(
+        item?.disappearances,
+      );
+      const otherMovements = roundMoney(
+        item?.other_movements,
+      );
+
+      return {
+        month,
+        label,
+        partialPayments,
+        disappearances,
+        otherMovements,
+        total: roundMoney(
+          partialPayments +
+          disappearances +
+          otherMovements,
+        ),
+      };
+    });
+
   const vence7Dias = scalar(`
     SELECT COALESCE(SUM(total), 0) AS value
     FROM documentos
     WHERE ${ACTIVE_DOCUMENT_WHERE}
-      AND date(fecha_vencimiento) >= date('now', 'localtime')
+      AND date(fecha_vencimiento) >=
+        date('now', 'localtime')
       AND date(fecha_vencimiento) <=
         date('now', 'localtime', '+7 day')
   `);
@@ -188,7 +404,8 @@ export function computeDashboardExecutiveStats(
     SELECT COUNT(1) AS count
     FROM documentos
     WHERE ${ACTIVE_DOCUMENT_WHERE}
-      AND date(fecha_vencimiento) >= date('now', 'localtime')
+      AND date(fecha_vencimiento) >=
+        date('now', 'localtime')
       AND date(fecha_vencimiento) <=
         date('now', 'localtime', '+7 day')
   `);
@@ -269,9 +486,11 @@ export function computeDashboardExecutiveStats(
     SELECT COUNT(1) AS count
     FROM gestiones
     WHERE TRIM(COALESCE(fecha_promesa, '')) <> ''
-      AND date(fecha_promesa) < date('now', 'localtime')
+      AND date(fecha_promesa) <
+        date('now', 'localtime')
       AND COALESCE(resultado, '') LIKE '%Promesa%'
-      AND COALESCE(resultado, '') <> 'Promesa Cumplida'
+      AND COALESCE(resultado, '') <>
+        'Promesa Cumplida'
   `);
 
   const rawAging = db.prepare(`
@@ -330,21 +549,24 @@ export function computeDashboardExecutiveStats(
     rawAging.map((item) => [item.bucket, item]),
   );
 
-  const aging: DashboardAgingItem[] = agingMetadata.map((metadata) => {
-    const item = agingMap.get(metadata.key);
-    const saldo = roundMoney(item?.saldo);
+  const aging: DashboardAgingItem[] =
+    agingMetadata.map((metadata) => {
+      const item = agingMap.get(metadata.key);
+      const saldo = roundMoney(item?.saldo);
 
-    return {
-      key: metadata.key,
-      label: metadata.label,
-      saldo,
-      documentos: Number(item?.documentos || 0),
-      porcentaje:
-        carteraPendiente > 0
-          ? roundPercent((saldo / carteraPendiente) * 100)
-          : 0,
-    };
-  });
+      return {
+        key: metadata.key,
+        label: metadata.label,
+        saldo,
+        documentos: Number(item?.documentos || 0),
+        porcentaje:
+          carteraPendiente > 0
+            ? roundPercent(
+                (saldo / carteraPendiente) * 100,
+              )
+            : 0,
+      };
+    });
 
   const topClientes = db.prepare(`
     SELECT
@@ -383,8 +605,8 @@ export function computeDashboardExecutiveStats(
     mora90: number;
   }>;
 
-  const normalizedTopClients: DashboardTopClient[] = topClientes.map(
-    (item) => {
+  const normalizedTopClients: DashboardTopClient[] =
+    topClientes.map((item) => {
       const saldo = roundMoney(item.saldo);
       const vencido = roundMoney(item.vencido);
 
@@ -398,8 +620,7 @@ export function computeDashboardExecutiveStats(
             ? roundPercent((vencido / saldo) * 100)
             : 0,
       };
-    },
-  );
+    });
 
   const sellers = db.prepare(`
     SELECT
@@ -441,8 +662,8 @@ export function computeDashboardExecutiveStats(
     clientes: number;
   }>;
 
-  const carteraPorVendedor: DashboardSellerPortfolio[] = sellers.map(
-    (item) => {
+  const carteraPorVendedor: DashboardSellerPortfolio[] =
+    sellers.map((item) => {
       const saldo = roundMoney(item.saldo);
       const vencido = roundMoney(item.vencido);
 
@@ -454,11 +675,12 @@ export function computeDashboardExecutiveStats(
         clientes: Number(item.clientes || 0),
         porcentajeVencido:
           saldo > 0
-            ? roundPercent((vencido / saldo) * 100)
+            ? roundPercent(
+                (vencido / saldo) * 100,
+              )
             : 0,
       };
-    },
-  );
+    });
 
   const criticalRows = db.prepare(`
     SELECT
@@ -498,31 +720,32 @@ export function computeDashboardExecutiveStats(
     vendedor: string;
   }>;
 
-  const moraCritica: DashboardCriticalDebtor[] = criticalRows.map(
-    (item) => ({
+  const moraCritica: DashboardCriticalDebtor[] =
+    criticalRows.map((item) => ({
       cliente: item.cliente || "Sin cliente",
       mora90: roundMoney(item.mora90),
       maxDias: Number(item.max_dias || 0),
       documentos: Number(item.documentos || 0),
       vendedor: item.vendedor || "Sin vendedor",
-    }),
-  );
+    }));
 
   const coberturaPoliticaCredito =
     clientesConSaldo > 0
       ? roundPercent(
-          ((clientesConSaldo - clientesSinPolitica) /
-            clientesConSaldo) *
-            100,
+          (
+            (clientesConSaldo - clientesSinPolitica) /
+            clientesConSaldo
+          ) * 100,
         )
       : 100;
 
   const coincidenciaAnulaciones =
     totalAnulacionesImportadas > 0
       ? roundPercent(
-          (anulacionesCoincidentes /
-            totalAnulacionesImportadas) *
-            100,
+          (
+            anulacionesCoincidentes /
+            totalAnulacionesImportadas
+          ) * 100,
         )
       : 100;
 
@@ -545,7 +768,10 @@ export function computeDashboardExecutiveStats(
       key: "CLIENTES_SIN_POLITICA",
       label: "Clientes sin política de crédito",
       count: clientesSinPolitica,
-      severity: clientesSinPolitica > 0 ? "WARNING" : "INFO",
+      severity:
+        clientesSinPolitica > 0
+          ? "WARNING"
+          : "INFO",
       target: "CREDITO",
     },
     {
@@ -585,10 +811,16 @@ export function computeDashboardExecutiveStats(
         (sum, item) => sum + item.documentos,
         0,
       ),
-      severity: mora90 > 0 ? "CRITICAL" : "INFO",
+      severity:
+        mora90 > 0
+          ? "CRITICAL"
+          : "INFO",
       target: "REPORTES",
     },
   ];
+
+  const hasHistoricalMovements =
+    monthlySeries.some((item) => item.total > 0);
 
   return {
     fechaCorte: todayIso,
@@ -597,19 +829,36 @@ export function computeDashboardExecutiveStats(
     ultimaDeteccionAbono:
       ultimaDeteccionAbonoRow?.value || null,
 
+    periodo: {
+      selectedYear: period.selectedYear,
+      selectedMonth: period.selectedMonth,
+      label: period.label,
+      from: period.from,
+      toExclusive: period.toExclusive,
+      availableYears,
+      note:
+        "El filtro mensual aplica a movimientos detectados. " +
+        "Los saldos, aging y rankings corresponden al corte actual.",
+    },
+
     cartera: {
       pendiente: roundMoney(carteraPendiente),
       vencida: roundMoney(carteraVencida),
       porcentajeVencida:
         carteraPendiente > 0
           ? roundPercent(
-              (carteraVencida / carteraPendiente) * 100,
+              (
+                carteraVencida /
+                carteraPendiente
+              ) * 100,
             )
           : 0,
       mora90: roundMoney(mora90),
       porcentajeMora90:
         carteraPendiente > 0
-          ? roundPercent((mora90 / carteraPendiente) * 100)
+          ? roundPercent(
+              (mora90 / carteraPendiente) * 100,
+            )
           : 0,
       clientesConSaldo,
       documentosPendientes,
@@ -624,12 +873,14 @@ export function computeDashboardExecutiveStats(
         roundMoney(abonosParcialesDetectados),
       movimientosParciales,
       cierresPorDesaparicionDetectados:
-        roundMoney(cierresPorDesaparicionDetectados),
+        roundMoney(
+          cierresPorDesaparicionDetectados,
+        ),
       movimientosPorDesaparicion,
       otrosDetectados: roundMoney(otrosDetectados),
       otrosMovimientos,
-      desde: period.start,
-      hastaExclusivo: period.endExclusive,
+      desde: period.from,
+      hastaExclusivo: period.toExclusive,
       nota:
         "La fecha corresponde a la detección del cambio. " +
         "Los cierres por desaparición no constituyen cobro " +
@@ -657,10 +908,9 @@ export function computeDashboardExecutiveStats(
       documentosEvaluados: documentosPendientes,
       notas: [
         "No se muestra una puntuación compuesta arbitraria.",
-        "La cobertura de política considera contado de 0 días " +
-          "como configuración válida.",
-        "La coincidencia de anulaciones compara registros " +
-          "encontrados frente al total importado.",
+        "La cobertura considera contado de 0 días como válido.",
+        "La coincidencia de anulaciones compara encontrados " +
+          "frente al total importado.",
       ],
     },
 
@@ -671,11 +921,12 @@ export function computeDashboardExecutiveStats(
     alertas,
 
     historico: {
-      disponible: false,
+      disponible: hasHistoricalMovements,
       motivo:
-        "Se requieren al menos dos snapshots mensuales " +
-        "comparables para mostrar evolución y tendencias.",
-      series: [],
+        hasHistoricalMovements
+          ? "Movimientos detectados por mes."
+          : "No existen movimientos detectados para el año seleccionado.",
+      series: monthlySeries,
     },
 
     kpisFuturos: [
@@ -698,16 +949,14 @@ export function computeDashboardExecutiveStats(
         label: "Cumplimiento de meta",
         estado: "REQUIERE_CONFIGURACION",
         motivo:
-          "Requiere una meta mensual aprobada y cobros " +
-          "conciliados.",
+          "Requiere meta aprobada y cobros conciliados.",
       },
       {
         key: "EFECTIVIDAD_GESTOR",
         label: "Efectividad por gestor",
         estado: "SIN_DATOS",
         motivo:
-          "Requiere asignación consistente de gestiones " +
-          "y resultados.",
+          "Requiere asignación consistente de gestiones.",
       },
     ],
   };
