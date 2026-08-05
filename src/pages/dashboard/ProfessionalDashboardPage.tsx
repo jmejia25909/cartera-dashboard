@@ -1,16 +1,5 @@
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import {
-  createHttpApiClient,
-  getElectronApi,
-} from "../../app/api";
-import {
   DashboardHeader,
-  DASHBOARD_MONTHS,
 } from "../../components/dashboard/DashboardHeader";
 import {
   DashboardKpis,
@@ -27,10 +16,15 @@ import {
   OperationsPanel,
   TopClientsPanel,
 } from "../../components/dashboard/DashboardTables";
+import {
+  useDashboardExecutive,
+} from "../../hooks/dashboard/useDashboardExecutive";
 import type {
-  DashboardExecutiveFilters,
   DashboardExecutiveStats,
 } from "../../types/dashboardExecutive";
+import type {
+  DashboardNavigationTarget,
+} from "../../types/dashboardNavigation";
 import "./professional-dashboard.css";
 
 type LegacyProps = {
@@ -56,11 +50,7 @@ export interface DashboardPageProps extends LegacyProps {
   dbPath?: string;
   onRefresh?: () => void | Promise<void>;
   onNavigate?: (
-    target:
-      | "reportes"
-      | "creditos"
-      | "anulados"
-      | "gestion",
+    target: DashboardNavigationTarget,
   ) => void;
 }
 
@@ -80,92 +70,16 @@ export function DashboardPage({
   onNavigate,
   onOpenReports,
 }: DashboardPageProps) {
-  const initialMonth =
-    executiveStats?.periodo.selectedMonth ??
-    new Date().getMonth() + 1;
-
-  const initialYear =
-    executiveStats?.periodo.selectedYear ??
-    new Date().getFullYear();
-
-  const [data, setData] =
-    useState<DashboardExecutiveStats | null>(
-      executiveStats || null,
-    );
-
-  const [selectedMonth, setSelectedMonth] =
-    useState<number | null>(initialMonth);
-
-  const [selectedYear, setSelectedYear] =
-    useState<number>(initialYear);
-
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (executiveStats) {
-      setData(executiveStats);
-    }
-  }, [executiveStats]);
-
-  const loadExecutiveData = useCallback(
-    async (
-      filters: DashboardExecutiveFilters,
-    ): Promise<void> => {
-      const electronApi = getElectronApi();
-      const api = electronApi || createHttpApiClient();
-
-      if (!api?.dashboardExecutiveStats) {
-        return;
-      }
-
-      setLoading(true);
-
-      try {
-        const result =
-          await api.dashboardExecutiveStats(filters);
-
-        setData(result);
-      } catch (error) {
-        console.error(
-          "Error cargando dashboard ejecutivo:",
-          error,
-        );
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    void loadExecutiveData({
-      year: selectedYear,
-      month: selectedMonth,
-    });
-  }, [
-    loadExecutiveData,
+  const {
+    data,
+    loading,
     selectedMonth,
     selectedYear,
-  ]);
-
-  const availableYears = useMemo(() => {
-    const years = data?.periodo.availableYears || [];
-
-    if (years.length > 0) {
-      return years;
-    }
-
-    const currentYear = new Date().getFullYear();
-
-    return [
-      currentYear - 1,
-      currentYear,
-      currentYear + 1,
-      currentYear + 2,
-      currentYear + 3,
-      currentYear + 4,
-    ];
-  }, [data]);
+    selectedMonthLabel,
+    availableYears,
+    setSelectedMonth,
+    setSelectedYear,
+  } = useDashboardExecutive(executiveStats);
 
   if (!data) {
     return <DashboardLoading />;
@@ -184,13 +98,6 @@ export function DashboardPage({
     historico,
     periodo,
   } = data;
-
-  const selectedMonthLabel =
-    selectedMonth === null
-      ? "Todos los meses"
-      : DASHBOARD_MONTHS.find(
-          (month) => month.value === selectedMonth,
-        )?.label || "Mes seleccionado";
 
   const navigateReports = () => {
     if (onNavigate) {

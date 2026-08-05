@@ -14,15 +14,9 @@ import {
 import type {
   DashboardExecutiveStats,
 } from "../../types/dashboardExecutive";
-
-export const DASHBOARD_CHART_COLORS = [
-  "#14b8a6",
-  "#3b82f6",
-  "#8b5cf6",
-  "#f59e0b",
-  "#f97316",
-  "#ef4444",
-];
+import {
+  DASHBOARD_CHART_COLORS,
+} from "./dashboard.constants";
 
 const money = new Intl.NumberFormat("es-EC", {
   style: "currency",

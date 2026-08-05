@@ -1,21 +1,9 @@
 import type {
   DashboardDataQualityStatus,
 } from "../../types/dashboardExecutive";
-
-export const DASHBOARD_MONTHS = [
-  { value: 1, label: "Ene" },
-  { value: 2, label: "Feb" },
-  { value: 3, label: "Mar" },
-  { value: 4, label: "Abr" },
-  { value: 5, label: "May" },
-  { value: 6, label: "Jun" },
-  { value: 7, label: "Jul" },
-  { value: 8, label: "Ago" },
-  { value: 9, label: "Sep" },
-  { value: 10, label: "Oct" },
-  { value: 11, label: "Nov" },
-  { value: 12, label: "Dic" },
-] as const;
+import {
+  DASHBOARD_MONTHS,
+} from "./dashboard.constants";
 
 interface DashboardHeaderProps {
   selectedMonth: number | null;

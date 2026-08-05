@@ -11,11 +11,9 @@ const money = new Intl.NumberFormat("es-EC", {
 
 const integer = new Intl.NumberFormat("es-EC");
 
-type DashboardTarget =
-  | "reportes"
-  | "creditos"
-  | "anulados"
-  | "gestion";
+import type {
+  DashboardNavigationTarget,
+} from "../../types/dashboardNavigation";
 
 function OperationCard({
   label,
@@ -68,7 +66,7 @@ export function OperationsPanel({
 }: {
   operacion: DashboardExecutiveStats["operacion"];
   calidadDatos: DashboardExecutiveStats["calidadDatos"];
-  onNavigate?: (target: DashboardTarget) => void;
+  onNavigate?: (target: DashboardNavigationTarget) => void;
   onOpenReports?: () => void;
 }) {
   const navigateReports = () => {
@@ -243,7 +241,7 @@ export function AlertsPanel({
   onNavigate,
 }: {
   alertas: DashboardExecutiveStats["alertas"];
-  onNavigate?: (target: DashboardTarget) => void;
+  onNavigate?: (target: DashboardNavigationTarget) => void;
 }) {
   return (
     <DashboardPanel
@@ -267,7 +265,7 @@ export function AlertsPanel({
             type="button"
             onClick={() => {
               const target =
-                alert.target.toLowerCase() as DashboardTarget;
+                alert.target.toLowerCase() as DashboardNavigationTarget;
 
               onNavigate?.(target);
             }}
