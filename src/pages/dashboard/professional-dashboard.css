@@ -1073,3 +1073,119 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* DASHBOARD POWER BI FINAL REFINEMENT 001 */
+
+/* Legibilidad */
+.bi-kpi__title { font-size: 0.69rem; }
+.bi-kpi__subtitle { font-size: 0.71rem; }
+.bi-panel__header h2 { font-size: 0.91rem; }
+.bi-panel__header p { font-size: 0.63rem; }
+.bi-link { font-size: 0.66rem; }
+.bi-data-state { font-size: 0.66rem; }
+
+/* Aging completo */
+.bi-panel--aging .bi-panel__body {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.bi-aging-table {
+  height: 100%;
+  grid-template-rows:
+    auto
+    repeat(8, minmax(18px, 1fr))
+    auto;
+  gap: 3px;
+}
+
+.bi-aging-table__head {
+  padding-bottom: 1px;
+  font-size: 0.58rem;
+}
+
+.bi-aging-row {
+  min-height: 18px;
+  font-size: 0.64rem;
+}
+
+.bi-aging-row > strong { font-size: 0.64rem; }
+
+.bi-aging-row > small,
+.bi-aging-row > em { font-size: 0.60rem; }
+
+.bi-aging-total {
+  margin-top: 1px;
+  padding-top: 4px;
+  padding-bottom: 1px;
+  font-size: 0.65rem;
+}
+
+/* Leyenda del gráfico anual */
+.bi-panel--evolution .bi-panel__body {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 4px;
+}
+
+.bi-panel--evolution .recharts-responsive-container {
+  min-height: 0;
+}
+
+.bi-chart-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 25px;
+  padding-top: 4px;
+  border-top: 1px solid #eef2f7;
+  color: #59667d;
+  font-size: 0.58rem;
+}
+
+.bi-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.bi-chart-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.bi-chart-legend__blue { background: #2563eb; }
+.bi-chart-legend__green { background: #10b981; }
+
+.bi-chart-legend em {
+  color: #8a96aa;
+  font-size: 0.52rem;
+  font-style: normal;
+}
+
+/* Paneles inferiores */
+.bi-operation__text small { font-size: 0.60rem; }
+.bi-operation__text strong { font-size: 0.78rem; }
+.bi-operation__text em { font-size: 0.56rem; }
+
+.bi-ranking strong,
+.bi-critical-list strong { font-size: 0.64rem; }
+
+.bi-ranking small,
+.bi-critical-list small { font-size: 0.54rem; }
+
+.bi-ranking > div > b,
+.bi-critical-list > div > b { font-size: 0.64rem; }
+
+.bi-seller-list span,
+.bi-seller-list strong { font-size: 0.59rem; }
+
+.bi-critical-list > div > em { font-size: 0.55rem; }
+.bi-alert-list strong { font-size: 0.62rem; }
+.bi-alert-list small { font-size: 0.53rem; }
+.bi-alert-list b { font-size: 0.63rem; }
+.bi-footer { font-size: 0.55rem; }

@@ -395,12 +395,14 @@ export function DashboardPage({
       ? 'MOVIMIENTOS DEL AÑO'
       : 'COBROS DEL MES';
 
-  const selectedSeries =
-    historico.series.filter((item) =>
-      selectedMonth === null
-        ? true
-        : item.month === selectedMonth,
-    );
+  const chartSeries = historico.series;
+
+  const selectedMonthLabel =
+    selectedMonth === null
+      ? 'Todos los meses'
+      : MONTHS.find(
+          (month) => month.value === selectedMonth,
+        )?.label || 'Mes seleccionado';
 
   return (
     <div className="powerbi-dashboard">
@@ -441,8 +443,12 @@ export function DashboardPage({
         <div className="bi-filterbar__right">
           <span
             className={`bi-data-state bi-data-state--${calidadDatos.estado.toLowerCase()}`}
+            title={
+              `${operacion.documentosCreditoPendiente} documentos con crédito pendiente · ` +
+              `${operacion.anuladosNoEncontrados} anulados no encontrados`
+            }
           >
-            ● {calidadDatos.estado}
+            ● Calidad del dato: {calidadDatos.estado}
           </span>
 
           <label className="bi-year-filter">
@@ -620,7 +626,7 @@ export function DashboardPage({
 
         <Panel
           title="Evolución de movimientos"
-          subtitle={`${periodo.selectedYear} · Detecciones mensuales`}
+          subtitle={`${periodo.selectedYear} · 12 meses · ${selectedMonthLabel} resaltado`}
           className="bi-panel--evolution"
           action={
             <span
@@ -632,12 +638,13 @@ export function DashboardPage({
           }
         >
           {historico.disponible ? (
-            <ResponsiveContainer
+            <>
+              <ResponsiveContainer
               width="100%"
               height="100%"
             >
               <BarChart
-                data={selectedSeries}
+                data={chartSeries}
                 margin={{
                   top: 8,
                   right: 10,
@@ -671,24 +678,64 @@ export function DashboardPage({
                   formatter={(value, name) => [
                     money.format(Number(value)),
                     name === 'partialPayments'
-                      ? 'Abonos parciales'
-                      : 'Cierres detectados',
+                      ? 'Abonos parciales detectados'
+                      : 'Cierres por desaparición',
                   ]}
                 />
                 <Bar
                   dataKey="partialPayments"
-                  fill="#2563eb"
                   radius={[5, 5, 0, 0]}
                   name="partialPayments"
-                />
+                >
+                  {chartSeries.map((item) => (
+                    <Cell
+                      key={`partial-${item.month}`}
+                      fill="#2563eb"
+                      fillOpacity={
+                        selectedMonth === null ||
+                        item.month === selectedMonth
+                          ? 1
+                          : 0.22
+                      }
+                    />
+                  ))}
+                </Bar>
                 <Bar
                   dataKey="disappearances"
-                  fill="#10b981"
                   radius={[5, 5, 0, 0]}
                   name="disappearances"
-                />
+                >
+                  {chartSeries.map((item) => (
+                    <Cell
+                      key={`disappearance-${item.month}`}
+                      fill="#10b981"
+                      fillOpacity={
+                        selectedMonth === null ||
+                        item.month === selectedMonth
+                          ? 1
+                          : 0.22
+                      }
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
+
+            <div className="bi-chart-legend">
+              <span>
+                <i className="bi-chart-legend__blue" />
+                Abonos parciales detectados
+              </span>
+              <span>
+                <i className="bi-chart-legend__green" />
+                Cierres por desaparición
+              </span>
+              <em>
+                El mes seleccionado se resalta; los demás
+                permanecen visibles.
+              </em>
+            </div>
+            </>
           ) : (
             <div className="bi-empty-chart">
               <span>▥</span>
