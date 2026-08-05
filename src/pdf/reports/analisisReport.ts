@@ -175,14 +175,14 @@ const getReportConfig = (
   if (vista === 'riesgo') {
     return {
       key: 'riesgo',
-      title: 'AnÃ¡lisis de Riesgo',
+      title: 'Análisis de Riesgo',
       head: [
         'Cliente',
         'Deuda Total',
         'Deuda Vencida',
-        'DÃ­as Mora',
+        'Días Mora',
         'Score',
-        'PredicciÃ³n',
+        'Predicción',
       ],
       alignRightIndices: [1, 2, 3, 4],
       rows: riesgos.map((item) => {
@@ -202,13 +202,13 @@ const getReportConfig = (
 
   return {
     key: 'deudores_cronicos',
-    title: 'Deudores CrÃ³nicos',
+    title: 'Deudores Crónicos',
     head: [
       '#',
       'Cliente',
       'Vendedor',
       'Deuda Total',
-      'Vencido (+90 dÃ­as)',
+      'Vencido (+90 días)',
       'Docs Vencidos',
     ],
     alignRightIndices: [0, 3, 4, 5],
@@ -432,9 +432,9 @@ export const generateAnalisisReport = async (
     pageWidth,
     text,
   } = drawPdfHeader(doc, {
-    title: 'Panel de AnÃ¡lisis',
+    title: 'Panel de Análisis',
     context: params.context,
-    detailLines: [`SecciÃ³n: ${config.title}`],
+    detailLines: [`Sección: ${config.title}`],
   });
 
   const cardsEndY = drawMetricCards(doc, {

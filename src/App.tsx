@@ -79,7 +79,7 @@ export default function App() {
   const [topClientes, setTopClientes] = useState<any[]>([]);
   const [allGestiones, setAllGestiones] = useState<any[]>([]);
   
-  // Filtros y BÃºsquedas
+  // Filtros y Búsquedas
   const [selectedCliente, setSelectedCliente] = useState("");
   const [selectedVendedor, setSelectedVendedor] = useState("");
   
@@ -127,7 +127,7 @@ export default function App() {
   const [toasts, setToasts] = useState<any[]>([]);
   const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: "" });
   
-  // ConfiguraciÃ³n
+  // Configuración
   const [empresa, setEmpresa] = useState<any>({});
   const [remoteUrl, setRemoteUrl] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
@@ -196,7 +196,7 @@ export default function App() {
     }
   }, [density]);
 
-  // Tema automÃ¡tico: oscurecer por preferencia del sistema u horario si estÃ¡ activado
+  // Tema automático: oscurecer por preferencia del sistema u horario si está activado
   useEffect(() => {
     if (!autoDark) return;
     const applyAutoTheme = () => {
@@ -206,7 +206,7 @@ export default function App() {
         const shouldDark = prefersDark || hour >= 19 || hour < 7;
         setTheme(shouldDark ? 'oscuro' : (pendingTheme || 'claro'));
       } catch {
-        // El tema automÃ¡tico es opcional; se conserva el tema vigente.
+        // El tema automático es opcional; se conserva el tema vigente.
       }
     };
     applyAutoTheme();
@@ -214,7 +214,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, [autoDark, pendingTheme]);
 
-  // Funciones auxiliares bÃ¡sicas
+  // Funciones auxiliares básicas
   const addToast = (message: string, type = "info") => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, type }]);
@@ -273,7 +273,7 @@ export default function App() {
       await api.gestionGuardar(payload);
       // No recargar - confiar solo en estado local
     } catch (e) {
-      console.error("Error registrando gestiÃ³n automÃ¡tica:", e);
+      console.error("Error registrando gestión automática:", e);
     }
   };
 
@@ -312,14 +312,14 @@ export default function App() {
     return date >= weekStartMonday;
   };
 
-  // Effect para detectar tamaÃ±o de pantalla
+  // Effect para detectar tamaño de pantalla
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Effect para detectar cambios de IP y cargar configuraciÃ³n al montar - REMOVIDO fetch(/api/config) que causaba errores
+  // Effect para detectar cambios de IP y cargar configuración al montar - REMOVIDO fetch(/api/config) que causaba errores
 
   // Effect para detectar cambios de IP y cargar datos al montar
   useEffect(() => {
@@ -360,7 +360,7 @@ export default function App() {
         .catch(() => setUpdateInfo(null));
     }
     
-    // Log para depuraciÃ³n de gestiones despuÃ©s de 3 segundos
+    // Log para depuración de gestiones después de 3 segundos
     setTimeout(() => {
       console.log('[DEBUG] allGestiones:', allGestiones);
     }, 3000);
@@ -372,7 +372,7 @@ export default function App() {
       try {
         const result = await api.getGitRemoteUrl();
         if (result.ok && result.url && result.url !== repoUrl) {
-          console.log(`ðŸ“¡ IP local actualizada: ${repoUrl} -> ${result.url}`);
+          console.log(`📡 IP local actualizada: ${repoUrl} -> ${result.url}`);
           setRepoUrl(result.url);
         }
       } catch (error) {
@@ -582,17 +582,17 @@ export default function App() {
     }
   }
 
-  // Datos derivados para GestiÃ³n (Memoizados para rendimiento)
+  // Datos derivados para Gestión (Memoizados para rendimiento)
 
-  // PaginaciÃ³n para Reportes
-  // Eliminado: paginatedDocumentos y paginaciÃ³n no se usan
+  // Paginación para Reportes
+  // Eliminado: paginatedDocumentos y paginación no se usan
 
   const resumenVencidos = useMemo(
     () => getResumenVencidos(todosDocsVencidos as Documento[]),
     [todosDocsVencidos]
   );
 
-  // CÃ¡lculos de negocio centralizados en services
+  // Cálculos de negocio centralizados en services
   const eficienciaCobranza = useMemo(
     () => calculateEficienciaCobranza(docs as Documento[]),
     [docs]
@@ -618,7 +618,7 @@ export default function App() {
     [docs]
   );
 
-  // 6. Extraer centros de costo Ãºnicos
+  // 6. Extraer centros de costo únicos
   useEffect(() => {
     const centros = Array.from(new Set((docs || []).map(d => d?.centro_costo).filter(Boolean))).sort();
     setCentrosCosto(centros as string[]);
@@ -653,7 +653,7 @@ export default function App() {
     const api = getElectronApi();
     if (isWeb || !selectedCliente || !api?.gestionGuardar) return;
     try {
-      // Convertir monto_promesa a nÃºmero si es una promesa de pago
+      // Convertir monto_promesa a número si es una promesa de pago
       const gestionParaGuardar = {
         ...gestionForm,
         ...(gestionForm.resultado === "Promesa de Pago" && { monto_promesa: gestionForm.monto_promesa ? Number(gestionForm.monto_promesa) : 0 })
@@ -666,9 +666,9 @@ export default function App() {
       });
       
       if (result?.ok) {
-        addToast("GestiÃ³n guardada exitosamente", "success");
+        addToast("Gestión guardada exitosamente", "success");
         
-        // Agregar gestiÃ³n al estado local con ID Ãºnico
+        // Agregar gestión al estado local con ID único
         const nuevaGestion = {
           id: `manual_${Date.now()}`,
           cliente: selectedCliente,
@@ -696,11 +696,11 @@ export default function App() {
           monto_promesa: ""
         });
       } else {
-        addToast(result?.message || "Error guardando gestiÃ³n", "error");
+        addToast(result?.message || "Error guardando gestión", "error");
       }
     } catch (e) {
-      addToast("Error guardando gestiÃ³n", "error");
-      console.error("Error guardando gestiÃ³n:", e);
+      addToast("Error guardando gestión", "error");
+      console.error("Error guardando gestión:", e);
     }
   }
 
@@ -709,7 +709,7 @@ export default function App() {
     if (isWeb || !api?.gestionEliminar) return;
     try {
       await api.gestionEliminar(id);
-      addToast("GestiÃ³n eliminada", "success");
+      addToast("Gestión eliminada", "success");
       
       // Actualizar solo estado local
       const nuevasGestiones = allGestiones.filter(g => g.id !== id);
@@ -722,8 +722,8 @@ export default function App() {
         console.error("Error guardando en localStorage:", e);
       }
     } catch (e) {
-      addToast("Error eliminando gestiÃ³n", "error");
-      console.error("Error eliminando gestiÃ³n:", e);
+      addToast("Error eliminando gestión", "error");
+      console.error("Error eliminando gestión:", e);
     }
   }
 
@@ -812,14 +812,14 @@ export default function App() {
       if (descuadres > 0) {
         addToast(`âš ï¸ Importado: ${resultTyped.insertedDocs} docs (${descuadres} con descuadres en tramos)`, "warning");
       } else {
-        addToast(`âœ… ImportaciÃ³n exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, "success");
+        addToast(`✅ Importación exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, "success");
       }
 
       await cargarDatos();
       await cargarDocumentos();
     } else {
       const errorMsg = resultTyped?.message || "Error desconocido";
-      addToast("Error en importaciÃ³n: " + errorMsg, "error");
+      addToast("Error en importación: " + errorMsg, "error");
     }
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : String(e);
@@ -894,7 +894,7 @@ export default function App() {
         context: createPdfContext(empresa),
       });
 
-      addToast('âœ… Reporte de anÃ¡lisis generado', 'success');
+      addToast('✅ Reporte de análisis generado', 'success');
     } catch (error: unknown) {
       console.error(error);
 
@@ -904,7 +904,7 @@ export default function App() {
           : 'Error desconocido al generar el reporte';
 
       addToast(
-        `Error generando reporte de anÃ¡lisis: ${message}`,
+        `Error generando reporte de análisis: ${message}`,
         'error'
       );
     }
@@ -914,7 +914,7 @@ export default function App() {
   async function exportarBackup() {
     const api = getElectronApi();
     if (isWeb || !api?.exportarBackup) {
-      addToast("Esta funciÃ³n solo estÃ¡ disponible en la versiÃ³n de escritorio", "info");
+      addToast("Esta función solo está disponible en la versión de escritorio", "info");
       return;
     }
     try {
@@ -933,7 +933,7 @@ export default function App() {
   async function cambiarLogo() {
     const api = getElectronApi();
     if (isWeb || !api?.cambiarLogo) {
-      addToast("Solo disponible en la versiÃ³n de escritorio", "info");
+      addToast("Solo disponible en la versión de escritorio", "info");
       return;
     }
     try {
@@ -996,7 +996,7 @@ export default function App() {
 
   const agingData = useMemo(() => {
     if (!stats?.aging) return null;
-    // Calcular acumulado para >240 dÃ­as (sumando todos los rangos posteriores)
+    // Calcular acumulado para >240 días (sumando todos los rangos posteriores)
     const mas240 = (stats.aging.d270 || 0) + (stats.aging.d300 || 0) + (stats.aging.d330 || 0) + (stats.aging.d360 || 0) + (stats.aging.d360p || 0);
 
     return [
@@ -1016,7 +1016,7 @@ export default function App() {
   const topClientesData = useMemo(() => {
     if (!topClientes.length) return null;
     
-    // FunciÃ³n para interpolar entre verde (bajo saldo) y rojo (alto saldo)
+    // Función para interpolar entre verde (bajo saldo) y rojo (alto saldo)
     const interpolateColor = (percentage: number): string => {
       // Verde: rgb(34, 197, 94), Rojo: rgb(239, 68, 68)
       const green = [34, 197, 94];
@@ -1032,7 +1032,7 @@ export default function App() {
       return `rgb(${r}, ${g}, ${b})`;
     };
     
-    // Encontrar el mÃ¡ximo saldo para calcular porcentajes
+    // Encontrar el máximo saldo para calcular porcentajes
     const maxTotal = Math.max(...topClientes.map(c => c.total || 0));
     
     // Retornar datos en formato Recharts con color
@@ -1088,7 +1088,7 @@ export default function App() {
     }
 
     if (tab === "gestion") {
-      // VISTA FUSIONADA COMPLETA: GestiÃ³n + Estados de Cuenta
+      // VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta
       
       // KPIs globales
       const totalVencidoSistema = todosDocsVencidos.reduce((s, d) => s + getDocAmount(d), 0);
@@ -1099,32 +1099,32 @@ export default function App() {
       // Calcular gestiones de hoy
       const hoy = new Date().toISOString().split('T')[0];
       
-      // EN GENERAL: clientes Ãºnicos / EN INDIVIDUAL: total de gestiones
+      // EN GENERAL: clientes únicos / EN INDIVIDUAL: total de gestiones
       const gestionesHoy = (selectedCliente && selectedCliente !== "Todos")
         ? gestiones.filter(g => g.fecha && g.fecha.startsWith(hoy)).length  // Individual: todas las gestiones del cliente
         : allGestiones
             .filter(g => g.fecha && g.fecha.startsWith(hoy))
             .map(g => g.cliente || g.razon_social)
-            .filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes Ãºnicos
+            .filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes únicos
             .length;
       
       // PDFs generados hoy
-      // EN GENERAL: clientes Ãºnicos / EN INDIVIDUAL: total de PDFs
+      // EN GENERAL: clientes únicos / EN INDIVIDUAL: total de PDFs
       const pdfsGenerados = (selectedCliente && selectedCliente !== "Todos")
         ? gestiones.filter(g => g.fecha && g.fecha.startsWith(hoy) && g.tipo === "PDF").length  // Individual: total de PDFs del cliente
         : allGestiones
             .filter(g => g.fecha && g.fecha.startsWith(hoy) && g.tipo === "PDF")
             .map(g => g.cliente || g.razon_social)
-            .filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes Ãºnicos con PDF
+            .filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes únicos con PDF
             .length;
       
-      // FunciÃ³n para exportar PDF
+      // Función para exportar PDF
       const exportarEstadoDeCuenta = async (
         clienteNombre: string
       ): Promise<void> => {
         if (!clienteNombre || clienteNombre === "Todos") {
           addToast(
-            "Selecciona un cliente especÃ­fico para generar su estado de cuenta",
+            "Selecciona un cliente específico para generar su estado de cuenta",
             "info"
           );
           return;
@@ -1190,7 +1190,7 @@ export default function App() {
         const cuerpo = encodeURIComponent(lineas.join('\r\n'));
         window.open(`mailto:?subject=${asunto}&body=${cuerpo}`, '_blank');
 
-        // Registrar gestiÃ³n automÃ¡tica de Email
+        // Registrar gestión automática de Email
         registrarGestion({
           id: `email_${Date.now()}`,
           cliente: clienteNombre,
@@ -1199,10 +1199,10 @@ export default function App() {
           observacion: "Recordatorio de pago enviado por correo",
           fecha: new Date().toISOString()
         });
-        addToast("GestiÃ³n de Email registrada", "success");
+        addToast("Gestión de Email registrada", "success");
       };
 
-      // FunciÃ³n para generar Reporte de GestiÃ³n (Evidencia)
+      // Función para generar Reporte de Gestión (Evidencia)
       const exportarReporteGestion = async (): Promise<void> => {
         let gestionesFiltradas = filteredGestiones;
 
@@ -1243,7 +1243,7 @@ export default function App() {
             context: createPdfContext(empresa),
           });
 
-          addToast("âœ… Reporte de gestiÃ³n generado", "success");
+          addToast("✅ Reporte de gestión generado", "success");
         } catch (error: unknown) {
           console.error(error);
           const message =
@@ -1255,9 +1255,9 @@ export default function App() {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={gridTwoCol}>
-          {/* KPIs de GestiÃ³n */}
+          {/* KPIs de Gestión */}
           <div className="card" style={{ marginBottom: 0, padding: '10px' }}>
-            <div className="card-title" style={{fontSize: '0.95rem', marginBottom: '8px'}}>ðŸ“Š KPIs de GestiÃ³n</div>
+            <div className="card-title" style={{fontSize: '0.95rem', marginBottom: '8px'}}>📊 KPIs de Gestión</div>
             <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
               <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
                 <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>Clientes con Vencidos</div>
@@ -1280,7 +1280,7 @@ export default function App() {
           
           {/* Filtros y Acciones */}
           <div className="card" style={{ marginBottom: 0, marginTop: '16px', padding: '12px' }}>
-            <div className="card-title" style={{fontSize: '0.95rem', marginBottom: '10px', textAlign: 'center'}}>ðŸ” Filtros y Acciones</div>
+            <div className="card-title" style={{fontSize: '0.95rem', marginBottom: '10px', textAlign: 'center'}}>🔍 Filtros y Acciones</div>
             
             {/* Fila 1: Filtros principales - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
@@ -1312,7 +1312,7 @@ export default function App() {
                   <option value="Todos">Todos</option>
                   <option value="Con Vencidos">Con Vencidos</option>
                   <option value="Mayor Deuda">Mayor Deuda</option>
-                  <option value="MÃ¡s DÃ­as Vencidos">MÃ¡s DÃ­as Vencidos</option>
+                  <option value="Más Días Vencidos">Más Días Vencidos</option>
                 </select>
               </label>
             </div>
@@ -1322,7 +1322,7 @@ export default function App() {
 
             {/* Fila 2: Reportes - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
-              <span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>ðŸ“… Fechas:</span>
+              <span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>📅 Fechas:</span>
               <input 
                 type="date" 
                 value={filtroFechaDesde} 
@@ -1334,7 +1334,7 @@ export default function App() {
                   fontSize: '0.8rem'
                 }}
               />
-              <span style={{color: '#94a3b8', fontSize: '0.75rem'}}>â€¢</span>
+              <span style={{color: '#94a3b8', fontSize: '0.75rem'}}>•</span>
               <input 
                 type="date" 
                 value={filtroFechaHasta} 
@@ -1359,7 +1359,7 @@ export default function App() {
                   whiteSpace: 'nowrap'
                 }}
               >
-                ðŸ“Š Reporte
+                📊 Reporte
               </button>
             </div>
 
@@ -1383,7 +1383,7 @@ export default function App() {
                 disabled={!hasWritePermissions}
                 style={{padding: '4px 10px', fontSize: '0.8rem'}}
               >
-                ðŸ“ž Masiva
+                📞 Masiva
               </button>
               <button
                 className="btn secondary"
@@ -1405,7 +1405,7 @@ export default function App() {
                 disabled={!hasWritePermissions}
                 style={{padding: '4px 10px', fontSize: '0.8rem'}}
               >
-                ðŸ“§ Estados
+                📧 Estados
               </button>
             </div>
           </div>
@@ -1427,7 +1427,7 @@ export default function App() {
               }}>
                 <div>
                   <h2 style={{margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 700, color: '#1f2937'}}>
-                    ðŸ‘¤ {selectedCliente}
+                    👤 {selectedCliente}
                   </h2>
                   <div style={{
                     display: 'flex',
@@ -1436,12 +1436,12 @@ export default function App() {
                     color: '#6b7280',
                     flexWrap: 'wrap'
                   }}>
-                    <span>ðŸ’° Vencido: <strong style={{color: '#ef4444', fontSize: '1.1rem'}}>{fmtMoney(totalVencidoCliente)}</strong></span>
+                    <span>💰 Vencido: <strong style={{color: '#ef4444', fontSize: '1.1rem'}}>{fmtMoney(totalVencidoCliente)}</strong></span>
                     {todosDocsVencidos.find(d => d.razon_social === selectedCliente || d.cliente === selectedCliente) && (
-                      <span>â° MÃ¡x DÃ­as Venc.: <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>{Math.max(...todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente).map(d => d.dias_vencidos || 0))} dÃ­as</strong></span>
+                      <span>⏰ Máx Días Venc.: <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>{Math.max(...todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente).map(d => d.dias_vencidos || 0))} días</strong></span>
                     )}
                     {gestiones.filter(g => isInCurrentWeek(g.fecha)).length > 0 && (
-                      <span>ðŸ“ž Ãšltima contacto: <strong style={{color: '#3b82f6'}}>{gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha ? gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha.substring(0, 10) : 'N/A'}</strong></span>
+                      <span>📞 Última contacto: <strong style={{color: '#3b82f6'}}>{gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha ? gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha.substring(0, 10) : 'N/A'}</strong></span>
                     )}
                   </div>
                 </div>
@@ -1451,11 +1451,11 @@ export default function App() {
                   onClick={() => setSelectedCliente(null)}
                   title="Volver a lista de clientes"
                 >
-                  ðŸ”™ Volver
+                  🔙 Volver
                 </button>
               </div>
 
-              {/* ACCIONES RÃPIDAS */}
+              {/* ACCIONES RÁPIDAS */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
@@ -1477,7 +1477,7 @@ export default function App() {
                   onClick={() => setShowModalGestion(true)}
                   disabled={!hasWritePermissions}
                 >
-                  <span style={{fontSize: '1.4rem'}}>ðŸ“ž</span>
+                  <span style={{fontSize: '1.4rem'}}>📞</span>
                   Registrar Llamada
                 </button>
 
@@ -1495,7 +1495,7 @@ export default function App() {
                   }}
                   onClick={() => enviarEmail(selectedCliente)}
                 >
-                  <span style={{fontSize: '1.4rem'}}>ðŸ“§</span>
+                  <span style={{fontSize: '1.4rem'}}>📧</span>
                   Enviar Email
                 </button>
 
@@ -1524,11 +1524,11 @@ export default function App() {
                       `*Recordatorio de Pago* al ${fechaHoy}`,
                       `*Total Vencido:* ${fmtMoney(totalCliente)}`,
                       '',
-                      `Adjunto el detalle en PDF para tu revisiÃ³n.`,
+                      `Adjunto el detalle en PDF para tu revisión.`,
                       '',
-                      `Por favor, ayÃºdanos con la confirmaciÃ³n del pago a la brevedad posible.`,
+                      `Por favor, ayúdanos con la confirmación del pago a la brevedad posible.`,
                       '',
-                      `Â¡Saludos!`
+                      `¡Saludos!`
                     ];
                     const mensaje = encodeURIComponent(lineas.join('\n'));
                     window.open(`https://wa.me/?text=${mensaje}`, '_blank');
@@ -1540,10 +1540,10 @@ export default function App() {
                       observacion: "Recordatorio enviado por WhatsApp",
                       fecha: new Date().toISOString()
                     });
-                    addToast("GestiÃ³n de WhatsApp registrada", "success");
+                    addToast("Gestión de WhatsApp registrada", "success");
                   }}
                 >
-                  <span style={{fontSize: '1.4rem'}}>ðŸ’¬</span>
+                  <span style={{fontSize: '1.4rem'}}>💬</span>
                   WhatsApp
                 </button>
 
@@ -1561,7 +1561,7 @@ export default function App() {
                   }}
                   onClick={() => exportarEstadoDeCuenta(selectedCliente)}
                 >
-                  <span style={{fontSize: '1.4rem'}}>ðŸ“„</span>
+                  <span style={{fontSize: '1.4rem'}}>📄</span>
                   Estado de Cuenta
                 </button>
               </div>
@@ -1570,16 +1570,16 @@ export default function App() {
               {docsVencidosCliente.length > 0 && (
                 <div style={{marginBottom: '24px'}}>
                   <h3 style={{fontSize: '1.1rem', fontWeight: '700', marginBottom: '12px', color: '#1f2937'}}>
-                    ðŸ“‹ Documentos Vencidos ({docsVencidosCliente.length})
+                    📋 Documentos Vencidos ({docsVencidosCliente.length})
                   </h3>
                   <div className="table-wrapper">
                     <table className="data-table" style={{fontSize: '0.85rem', marginBottom: 0}}>
                       <thead>
                         <tr>
                           <th>Documento</th>
-                          <th>EmisiÃ³n</th>
+                          <th>Emisión</th>
                           <th>Vencimiento</th>
-                          <th className="num">DÃ­as Vencidos</th>
+                          <th className="num">Días Vencidos</th>
                           <th className="num">Total</th>
                         </tr>
                       </thead>
@@ -1621,7 +1621,7 @@ export default function App() {
                   gap: '12px'
                 }}>
                   <h3 style={{fontSize: '1.1rem', fontWeight: '700', margin: 0, color: '#1f2937'}}>
-                    ðŸ“ž Historial de Gestiones ({gestiones.length})
+                    📞 Historial de Gestiones ({gestiones.length})
                   </h3>
                   {gestiones.length > 0 && (
                     <button 
@@ -1629,7 +1629,7 @@ export default function App() {
                       style={{padding: '6px 12px', fontSize: '0.85rem'}}
                       onClick={exportarReporteGestion}
                     >
-                      ðŸ“Š Generar Reporte
+                      📊 Generar Reporte
                     </button>
                   )}
                 </div>
@@ -1641,7 +1641,7 @@ export default function App() {
                         <th style={{minWidth: '120px'}}>Fecha</th>
                         <th style={{minWidth: '100px'}}>Tipo</th>
                         <th>Resultado</th>
-                        <th>ObservaciÃ³n</th>
+                        <th>Observación</th>
                         <th className="num">Monto Promesa</th>
                         <th style={{width: '40px'}}></th>
                       </tr>
@@ -1650,7 +1650,7 @@ export default function App() {
                       {gestiones.length === 0 ? (
                         <tr>
                           <td colSpan={6} style={{textAlign: 'center', padding: '24px', color: '#9ca3af'}}>
-                            ðŸ“­ Sin gestiones registradas. Â¡Comienza registrando una!
+                            📭 Sin gestiones registradas. ¡Comienza registrando una!
                           </td>
                         </tr>
                       ) : (
@@ -1708,7 +1708,7 @@ export default function App() {
                                 style={{position: 'static', transform: 'none', marginLeft: 0, fontSize: '1rem'}}
                                 onClick={() => eliminarGestion(g.id)}
                                 disabled={!hasWritePermissions}
-                                title="Eliminar gestiÃ³n"
+                                title="Eliminar gestión"
                               >
                                 âŒ
                               </button>
@@ -1722,7 +1722,7 @@ export default function App() {
 
                 {gestiones.length > 20 && (
                   <p style={{textAlign: 'center', color: '#9ca3af', fontSize: '0.8rem', marginTop: '8px', marginBottom: 0}}>
-                    Mostrando Ãºltimas 20 de {gestiones.length} gestiones
+                    Mostrando últimas 20 de {gestiones.length} gestiones
                   </p>
                 )}
               </div>
@@ -1730,7 +1730,7 @@ export default function App() {
           ) : (
             /* TABLA DE CLIENTES PARA SELECCIONAR */
             <div className="card" style={{marginTop: '20px'}}>
-              <div className="card-title">ðŸ“‹ Clientes con Vencimientos - Selecciona uno para gestionar</div>
+              <div className="card-title">📋 Clientes con Vencimientos - Selecciona uno para gestionar</div>
               <div className="table-wrapper">
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
                   <table className="data-table" style={{minWidth: 900, width: '100%', tableLayout: 'auto'}}>
@@ -1738,11 +1738,11 @@ export default function App() {
                       <tr>
                         <th>Cliente</th>
                         <th className="num">Vencido</th>
-                        <th className="text-center" title="Ãšltima llamada">ðŸ“ž</th>
-                        <th className="text-center" title="Ãšltimo email">ðŸ“§</th>
-                        <th className="text-center" title="Ãšltimo WhatsApp">ðŸ’¬</th>
-                        <th className="text-center" title="Ãšltimo estado de cuenta">ðŸ“„</th>
-                        <th style={{width: '100px'}}>AcciÃ³n</th>
+                        <th className="text-center" title="Última llamada">📞</th>
+                        <th className="text-center" title="Último email">📧</th>
+                        <th className="text-center" title="Último WhatsApp">💬</th>
+                        <th className="text-center" title="Último estado de cuenta">📄</th>
+                        <th style={{width: '100px'}}>Acción</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1784,10 +1784,10 @@ export default function App() {
                                 <td className="text-center" title={lastCall ? lastCall.fecha : 'Sin contacto'}>
                                   {lastCall ? <span style={{color:'#10b981', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
                                 </td>
-                                <td className="text-center" title={lastEmail ? lastEmail.fecha : 'Sin envÃ­o'}>
+                                <td className="text-center" title={lastEmail ? lastEmail.fecha : 'Sin envío'}>
                                   {lastEmail ? <span style={{color:'#3b82f6', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
                                 </td>
-                                <td className="text-center" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envÃ­o'}>
+                                <td className="text-center" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envío'}>
                                   {lastWhatsapp ? <span style={{color:'#22c55e', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
                                 </td>
                                 <td className="text-center" title={lastPdf ? lastPdf.fecha : 'Sin estado de cuenta'}>
@@ -1948,13 +1948,18 @@ export default function App() {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="card">
-            <div className="card-title">ðŸ“Š Panel de AnÃ¡lisis</div>
+            <div className="card-title">📊 Panel de Análisis</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button className={`btn ${vistaAnalisis === 'motivos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('motivos')}>Motivos Impago</button>
                 <button className={`btn ${vistaAnalisis === 'productividad' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('productividad')}>Productividad</button>
-                <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>AnÃ¡lisis Riesgo</button>
-                <button className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('cronicos')}>âš ï¸ Deudores CrÃ³nicos</button>
+                <button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>
+                <button
+                  className={`btn ${vistaAnalisis === 'cronicos' ? 'primary' : 'secondary'}`}
+                  onClick={() => setVistaAnalisis('cronicos')}
+                >
+                  ⚠️ Deudores Crónicos
+                </button>
               </div>
               <button className="btn primary" onClick={exportarAnalisisPDF} disabled={!canExportAnalisis}>
                 Generar reporte
@@ -2026,15 +2031,15 @@ export default function App() {
                       <th>Cliente</th>
                       <th className="num">Deuda Total</th>
                       <th className="num">Deuda Vencida</th>
-                      <th className="num">DÃ­as Mora</th>
+                      <th className="num">Días Mora</th>
                       <th className="num">Score</th>
-                      <th className="num">PredicciÃ³n</th>
+                      <th className="num">Predicción</th>
                     </tr>
                   </thead>
                   <tbody>
                     {analisisRiesgo.length > 0 ? (
                       analisisRiesgo.map((a, i) => {
-                        const prediccion = a.score < 30 ? 'ðŸ”´ Alto Riesgo' : a.score < 60 ? 'ðŸŸ¡ Riesgo Medio' : 'ðŸŸ¢ Bajo Riesgo';
+                        const prediccion = a.score < 30 ? '🔴 Alto Riesgo' : a.score < 60 ? '🟡 Riesgo Medio' : '🟢 Bajo Riesgo';
                         return (
                           <tr key={i}>
                             <td>{a.razon_social}</td>
@@ -2069,7 +2074,7 @@ export default function App() {
                       <th>Cliente</th>
                       <th>Vendedor</th>
                       <th className="num">Deuda Total</th>
-                      <th className="num">Vencido (+90 dÃ­as)</th>
+                      <th className="num">Vencido (+90 días)</th>
                       <th className="num">Docs Vencidos</th>
                     </tr>
                   </thead>
@@ -2088,7 +2093,7 @@ export default function App() {
                     ) : (
                       <tr>
                         <td colSpan={6} style={{textAlign: 'center', color: '#9ca3af', padding: '20px'}}>
-                          âœ… No hay deudores crÃ³nicos (mora mayor a 90 dÃ­as)
+                          ✅ No hay deudores crónicos (mora mayor a 90 días)
                         </td>
                       </tr>
                     )}
@@ -2170,7 +2175,7 @@ export default function App() {
     setLimpiandoBase(true);
 
     try {
-      console.log("ðŸ§¹ Limpiando almacenamiento local...");
+      console.log("🧹 Limpiando almacenamiento local...");
 
       try {
         localStorage.clear();
@@ -2183,7 +2188,7 @@ export default function App() {
         console.error("Error limpiando almacenamiento local:", storageError);
       }
 
-      console.log("ðŸ—‘ï¸ Limpiando base de datos...");
+      console.log("🗑️ Limpiando base de datos...");
       const api = getElectronApi();
       const result = await api?.limpiarBaseDatos?.();
 
@@ -2194,7 +2199,7 @@ export default function App() {
 
       setShowModalLimpiar(false);
       addToast(
-        "Base de datos y cachÃ© local limpiados completamente. Recargando sistema...",
+        "Base de datos y caché local limpiados completamente. Recargando sistema...",
         "success"
       );
 
@@ -2233,11 +2238,11 @@ export default function App() {
 
       <ToastContainer toasts={toasts} />
 
-      {/* Modal GestiÃ³n */}
+      {/* Modal Gestión */}
       {showModalGestion && (
         <div className="modal-overlay" onClick={() => setShowModalGestion(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">Nueva GestiÃ³n</div>
+            <div className="modal-header">Nueva Gestión</div>
             <div className="modal-body">
               <label className="field">
                 <span>Tipo</span>
@@ -2267,13 +2272,13 @@ export default function App() {
                   <option>Producto defectuoso</option>
                   <option>Error administrativo</option>
                   <option>En reclamo</option>
-                  <option>Cambio de facturaciÃ³n</option>
+                  <option>Cambio de facturación</option>
                   <option>Otros</option>
                 </select>
               </label>
               <label className="field">
-                <span>ObservaciÃ³n</span>
-                <textarea value={gestionForm.observacion} onChange={e => setGestionForm({...gestionForm, observacion: e.target.value})} rows={3} placeholder="Detalles de la gestiÃ³n..." />
+                <span>Observación</span>
+                <textarea value={gestionForm.observacion} onChange={e => setGestionForm({...gestionForm, observacion: e.target.value})} rows={3} placeholder="Detalles de la gestión..." />
               </label>
               {gestionForm.resultado === "Promesa de Pago" && (
                 <>
@@ -2358,12 +2363,12 @@ export default function App() {
                   <option value="Parcialmente Cumplida">âš ï¸ Parcialmente Cumplida</option>
                   <option value="Cumplida">âœ… Cumplida</option>
                   <option value="Incumplida">âŒ Incumplida</option>
-                  <option value="Reprogramada">ðŸ”„ Reprogramada</option>
+                  <option value="Reprogramada">🔄 Reprogramada</option>
                 </select>
               </label>
               
               <label className="field">
-                <span>ObservaciÃ³n</span>
+                <span>Observación</span>
                 <textarea 
                   value={promesaEditando.observacion || ''} 
                   onChange={e => setPromesaEditando({...promesaEditando, observacion: e.target.value})} 
@@ -2373,7 +2378,7 @@ export default function App() {
               </label>
               
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-nav)', padding: '8px', borderRadius: '4px', marginBottom: '12px' }}>
-                <strong>â„¹ï¸ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica Ãºnicamente con importaciones.
+                <strong>ℹ️ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica únicamente con importaciones.
               </div>
             </div>
             <div className="modal-footer">
@@ -2399,11 +2404,11 @@ export default function App() {
                 <input value={empresa.ruc || ""} onChange={e => setEmpresa({...empresa, ruc: e.target.value})} />
               </label>
               <label className="field">
-                <span>DirecciÃ³n</span>
+                <span>Dirección</span>
                 <textarea value={empresa.direccion || ""} onChange={e => setEmpresa({...empresa, direccion: e.target.value})} rows={2} />
               </label>
               <label className="field">
-                <span>TelÃ©fono</span>
+                <span>Teléfono</span>
                 <input value={empresa.telefono || ""} onChange={e => setEmpresa({...empresa, telefono: e.target.value})} />
               </label>
               <label className="field">

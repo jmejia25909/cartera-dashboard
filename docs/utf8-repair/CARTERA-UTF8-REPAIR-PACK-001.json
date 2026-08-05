@@ -1,0 +1,774 @@
+{
+  "generatedAt": "2026-08-05T19:08:58.638Z",
+  "totalChanges": 128,
+  "changes": [
+    {
+      "file": "src/App.tsx",
+      "line": 82,
+      "before": "// Filtros y BÃºsquedas",
+      "after": "// Filtros y Búsquedas"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 130,
+      "before": "// ConfiguraciÃ³n",
+      "after": "// Configuración"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 199,
+      "before": "// Tema automÃ¡tico: oscurecer por preferencia del sistema u horario si estÃ¡ activado",
+      "after": "// Tema automático: oscurecer por preferencia del sistema u horario si está activado"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 209,
+      "before": "// El tema automÃ¡tico es opcional; se conserva el tema vigente.",
+      "after": "// El tema automático es opcional; se conserva el tema vigente."
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 217,
+      "before": "// Funciones auxiliares bÃ¡sicas",
+      "after": "// Funciones auxiliares básicas"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 276,
+      "before": "console.error(\"Error registrando gestiÃ³n automÃ¡tica:\", e);",
+      "after": "console.error(\"Error registrando gestión automática:\", e);"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 315,
+      "before": "// Effect para detectar tamaÃ±o de pantalla",
+      "after": "// Effect para detectar tamaño de pantalla"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 322,
+      "before": "// Effect para detectar cambios de IP y cargar configuraciÃ³n al montar - REMOVIDO fetch(/api/config) que causaba errores",
+      "after": "// Effect para detectar cambios de IP y cargar configuración al montar - REMOVIDO fetch(/api/config) que causaba errores"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 363,
+      "before": "// Log para depuraciÃ³n de gestiones despuÃ©s de 3 segundos",
+      "after": "// Log para depuración de gestiones después de 3 segundos"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 375,
+      "before": "console.log(`ðŸ“¡ IP local actualizada: ${repoUrl} -> ${result.url}`);",
+      "after": "console.log(`📡 IP local actualizada: ${repoUrl} -> ${result.url}`);"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 585,
+      "before": "// Datos derivados para GestiÃ³n (Memoizados para rendimiento)",
+      "after": "// Datos derivados para Gestión (Memoizados para rendimiento)"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 587,
+      "before": "// PaginaciÃ³n para Reportes",
+      "after": "// Paginación para Reportes"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 588,
+      "before": "// Eliminado: paginatedDocumentos y paginaciÃ³n no se usan",
+      "after": "// Eliminado: paginatedDocumentos y paginación no se usan"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 595,
+      "before": "// CÃ¡lculos de negocio centralizados en services",
+      "after": "// Cálculos de negocio centralizados en services"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 621,
+      "before": "// 6. Extraer centros de costo Ãºnicos",
+      "after": "// 6. Extraer centros de costo únicos"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 656,
+      "before": "// Convertir monto_promesa a nÃºmero si es una promesa de pago",
+      "after": "// Convertir monto_promesa a número si es una promesa de pago"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 669,
+      "before": "addToast(\"GestiÃ³n guardada exitosamente\", \"success\");",
+      "after": "addToast(\"Gestión guardada exitosamente\", \"success\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 671,
+      "before": "// Agregar gestiÃ³n al estado local con ID Ãºnico",
+      "after": "// Agregar gestión al estado local con ID único"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 699,
+      "before": "addToast(result?.message || \"Error guardando gestiÃ³n\", \"error\");",
+      "after": "addToast(result?.message || \"Error guardando gestión\", \"error\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 702,
+      "before": "addToast(\"Error guardando gestiÃ³n\", \"error\");",
+      "after": "addToast(\"Error guardando gestión\", \"error\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 703,
+      "before": "console.error(\"Error guardando gestiÃ³n:\", e);",
+      "after": "console.error(\"Error guardando gestión:\", e);"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 712,
+      "before": "addToast(\"GestiÃ³n eliminada\", \"success\");",
+      "after": "addToast(\"Gestión eliminada\", \"success\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 725,
+      "before": "addToast(\"Error eliminando gestiÃ³n\", \"error\");",
+      "after": "addToast(\"Error eliminando gestión\", \"error\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 726,
+      "before": "console.error(\"Error eliminando gestiÃ³n:\", e);",
+      "after": "console.error(\"Error eliminando gestión:\", e);"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 815,
+      "before": "addToast(`âœ… ImportaciÃ³n exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, \"success\");",
+      "after": "addToast(`✅ Importación exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, \"success\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 822,
+      "before": "addToast(\"Error en importaciÃ³n: \" + errorMsg, \"error\");",
+      "after": "addToast(\"Error en importación: \" + errorMsg, \"error\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 897,
+      "before": "addToast('âœ… Reporte de anÃ¡lisis generado', 'success');",
+      "after": "addToast('✅ Reporte de análisis generado', 'success');"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 907,
+      "before": "`Error generando reporte de anÃ¡lisis: ${message}`,",
+      "after": "`Error generando reporte de análisis: ${message}`,"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 917,
+      "before": "addToast(\"Esta funciÃ³n solo estÃ¡ disponible en la versiÃ³n de escritorio\", \"info\");",
+      "after": "addToast(\"Esta función solo está disponible en la versión de escritorio\", \"info\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 936,
+      "before": "addToast(\"Solo disponible en la versiÃ³n de escritorio\", \"info\");",
+      "after": "addToast(\"Solo disponible en la versión de escritorio\", \"info\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 999,
+      "before": "// Calcular acumulado para >240 dÃ­as (sumando todos los rangos posteriores)",
+      "after": "// Calcular acumulado para >240 días (sumando todos los rangos posteriores)"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1019,
+      "before": "// FunciÃ³n para interpolar entre verde (bajo saldo) y rojo (alto saldo)",
+      "after": "// Función para interpolar entre verde (bajo saldo) y rojo (alto saldo)"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1035,
+      "before": "// Encontrar el mÃ¡ximo saldo para calcular porcentajes",
+      "after": "// Encontrar el máximo saldo para calcular porcentajes"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1091,
+      "before": "// VISTA FUSIONADA COMPLETA: GestiÃ³n + Estados de Cuenta",
+      "after": "// VISTA FUSIONADA COMPLETA: Gestión + Estados de Cuenta"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1102,
+      "before": "// EN GENERAL: clientes Ãºnicos / EN INDIVIDUAL: total de gestiones",
+      "after": "// EN GENERAL: clientes únicos / EN INDIVIDUAL: total de gestiones"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1108,
+      "before": ".filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes Ãºnicos",
+      "after": ".filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes únicos"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1112,
+      "before": "// EN GENERAL: clientes Ãºnicos / EN INDIVIDUAL: total de PDFs",
+      "after": "// EN GENERAL: clientes únicos / EN INDIVIDUAL: total de PDFs"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1118,
+      "before": ".filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes Ãºnicos con PDF",
+      "after": ".filter((cliente, index, arr) => arr.indexOf(cliente) === index)  // General: clientes únicos con PDF"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1121,
+      "before": "// FunciÃ³n para exportar PDF",
+      "after": "// Función para exportar PDF"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1127,
+      "before": "\"Selecciona un cliente especÃ­fico para generar su estado de cuenta\",",
+      "after": "\"Selecciona un cliente específico para generar su estado de cuenta\","
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1193,
+      "before": "// Registrar gestiÃ³n automÃ¡tica de Email",
+      "after": "// Registrar gestión automática de Email"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1202,
+      "before": "addToast(\"GestiÃ³n de Email registrada\", \"success\");",
+      "after": "addToast(\"Gestión de Email registrada\", \"success\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1205,
+      "before": "// FunciÃ³n para generar Reporte de GestiÃ³n (Evidencia)",
+      "after": "// Función para generar Reporte de Gestión (Evidencia)"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1246,
+      "before": "addToast(\"âœ… Reporte de gestiÃ³n generado\", \"success\");",
+      "after": "addToast(\"✅ Reporte de gestión generado\", \"success\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1258,
+      "before": "{/* KPIs de GestiÃ³n */}",
+      "after": "{/* KPIs de Gestión */}"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1260,
+      "before": "<div className=\"card-title\" style={{fontSize: '0.95rem', marginBottom: '8px'}}>ðŸ“Š KPIs de GestiÃ³n</div>",
+      "after": "<div className=\"card-title\" style={{fontSize: '0.95rem', marginBottom: '8px'}}>📊 KPIs de Gestión</div>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1283,
+      "before": "<div className=\"card-title\" style={{fontSize: '0.95rem', marginBottom: '10px', textAlign: 'center'}}>ðŸ” Filtros y Acciones</div>",
+      "after": "<div className=\"card-title\" style={{fontSize: '0.95rem', marginBottom: '10px', textAlign: 'center'}}>🔍 Filtros y Acciones</div>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1315,
+      "before": "<option value=\"MÃ¡s DÃ­as Vencidos\">MÃ¡s DÃ­as Vencidos</option>",
+      "after": "<option value=\"Más Días Vencidos\">Más Días Vencidos</option>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1325,
+      "before": "<span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>ðŸ“… Fechas:</span>",
+      "after": "<span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>📅 Fechas:</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1337,
+      "before": "<span style={{color: '#94a3b8', fontSize: '0.75rem'}}>â€¢</span>",
+      "after": "<span style={{color: '#94a3b8', fontSize: '0.75rem'}}>•</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1362,
+      "before": "ðŸ“Š Reporte",
+      "after": "📊 Reporte"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1386,
+      "before": "ðŸ“ž Masiva",
+      "after": "📞 Masiva"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1408,
+      "before": "ðŸ“§ Estados",
+      "after": "📧 Estados"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1430,
+      "before": "ðŸ‘¤ {selectedCliente}",
+      "after": "👤 {selectedCliente}"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1439,
+      "before": "<span>ðŸ’° Vencido: <strong style={{color: '#ef4444', fontSize: '1.1rem'}}>{fmtMoney(totalVencidoCliente)}</strong></span>",
+      "after": "<span>💰 Vencido: <strong style={{color: '#ef4444', fontSize: '1.1rem'}}>{fmtMoney(totalVencidoCliente)}</strong></span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1441,
+      "before": "<span>â° MÃ¡x DÃ­as Venc.: <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>{Math.max(...todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente).map(d => d.dias_vencidos || 0))} dÃ­as</strong></span>",
+      "after": "<span>⏰ Máx Días Venc.: <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>{Math.max(...todosDocsVencidos.filter(d => d.razon_social === selectedCliente || d.cliente === selectedCliente).map(d => d.dias_vencidos || 0))} días</strong></span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1444,
+      "before": "<span>ðŸ“ž Ãšltima contacto: <strong style={{color: '#3b82f6'}}>{gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha ? gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha.substring(0, 10) : 'N/A'}</strong></span>",
+      "after": "<span>📞 Última contacto: <strong style={{color: '#3b82f6'}}>{gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha ? gestiones.find(g => isInCurrentWeek(g.fecha))?.fecha.substring(0, 10) : 'N/A'}</strong></span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1454,
+      "before": "ðŸ”™ Volver",
+      "after": "🔙 Volver"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1458,
+      "before": "{/* ACCIONES RÃPIDAS */}",
+      "after": "{/* ACCIONES RÁPIDAS */}"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1480,
+      "before": "<span style={{fontSize: '1.4rem'}}>ðŸ“ž</span>",
+      "after": "<span style={{fontSize: '1.4rem'}}>📞</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1498,
+      "before": "<span style={{fontSize: '1.4rem'}}>ðŸ“§</span>",
+      "after": "<span style={{fontSize: '1.4rem'}}>📧</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1527,
+      "before": "`Adjunto el detalle en PDF para tu revisiÃ³n.`,",
+      "after": "`Adjunto el detalle en PDF para tu revisión.`,"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1529,
+      "before": "`Por favor, ayÃºdanos con la confirmaciÃ³n del pago a la brevedad posible.`,",
+      "after": "`Por favor, ayúdanos con la confirmación del pago a la brevedad posible.`,"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1531,
+      "before": "`Â¡Saludos!`",
+      "after": "`¡Saludos!`"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1543,
+      "before": "addToast(\"GestiÃ³n de WhatsApp registrada\", \"success\");",
+      "after": "addToast(\"Gestión de WhatsApp registrada\", \"success\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1546,
+      "before": "<span style={{fontSize: '1.4rem'}}>ðŸ’¬</span>",
+      "after": "<span style={{fontSize: '1.4rem'}}>💬</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1564,
+      "before": "<span style={{fontSize: '1.4rem'}}>ðŸ“„</span>",
+      "after": "<span style={{fontSize: '1.4rem'}}>📄</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1573,
+      "before": "ðŸ“‹ Documentos Vencidos ({docsVencidosCliente.length})",
+      "after": "📋 Documentos Vencidos ({docsVencidosCliente.length})"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1580,
+      "before": "<th>EmisiÃ³n</th>",
+      "after": "<th>Emisión</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1582,
+      "before": "<th className=\"num\">DÃ­as Vencidos</th>",
+      "after": "<th className=\"num\">Días Vencidos</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1624,
+      "before": "ðŸ“ž Historial de Gestiones ({gestiones.length})",
+      "after": "📞 Historial de Gestiones ({gestiones.length})"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1632,
+      "before": "ðŸ“Š Generar Reporte",
+      "after": "📊 Generar Reporte"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1644,
+      "before": "<th>ObservaciÃ³n</th>",
+      "after": "<th>Observación</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1653,
+      "before": "ðŸ“­ Sin gestiones registradas. Â¡Comienza registrando una!",
+      "after": "📭 Sin gestiones registradas. ¡Comienza registrando una!"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1711,
+      "before": "title=\"Eliminar gestiÃ³n\"",
+      "after": "title=\"Eliminar gestión\""
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1725,
+      "before": "Mostrando Ãºltimas 20 de {gestiones.length} gestiones",
+      "after": "Mostrando últimas 20 de {gestiones.length} gestiones"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1733,
+      "before": "<div className=\"card-title\">ðŸ“‹ Clientes con Vencimientos - Selecciona uno para gestionar</div>",
+      "after": "<div className=\"card-title\">📋 Clientes con Vencimientos - Selecciona uno para gestionar</div>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1741,
+      "before": "<th className=\"text-center\" title=\"Ãšltima llamada\">ðŸ“ž</th>",
+      "after": "<th className=\"text-center\" title=\"Última llamada\">📞</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1742,
+      "before": "<th className=\"text-center\" title=\"Ãšltimo email\">ðŸ“§</th>",
+      "after": "<th className=\"text-center\" title=\"Último email\">📧</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1743,
+      "before": "<th className=\"text-center\" title=\"Ãšltimo WhatsApp\">ðŸ’¬</th>",
+      "after": "<th className=\"text-center\" title=\"Último WhatsApp\">💬</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1744,
+      "before": "<th className=\"text-center\" title=\"Ãšltimo estado de cuenta\">ðŸ“„</th>",
+      "after": "<th className=\"text-center\" title=\"Último estado de cuenta\">📄</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1745,
+      "before": "<th style={{width: '100px'}}>AcciÃ³n</th>",
+      "after": "<th style={{width: '100px'}}>Acción</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1787,
+      "before": "<td className=\"text-center\" title={lastEmail ? lastEmail.fecha : 'Sin envÃ­o'}>",
+      "after": "<td className=\"text-center\" title={lastEmail ? lastEmail.fecha : 'Sin envío'}>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1790,
+      "before": "<td className=\"text-center\" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envÃ­o'}>",
+      "after": "<td className=\"text-center\" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envío'}>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1951,
+      "before": "<div className=\"card-title\">ðŸ“Š Panel de AnÃ¡lisis</div>",
+      "after": "<div className=\"card-title\">📊 Panel de Análisis</div>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 1956,
+      "before": "<button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>AnÃ¡lisis Riesgo</button>",
+      "after": "<button className={`btn ${vistaAnalisis === 'riesgo' ? 'primary' : 'secondary'}`} onClick={() => setVistaAnalisis('riesgo')}>Análisis Riesgo</button>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2029,
+      "before": "<th className=\"num\">DÃ­as Mora</th>",
+      "after": "<th className=\"num\">Días Mora</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2031,
+      "before": "<th className=\"num\">PredicciÃ³n</th>",
+      "after": "<th className=\"num\">Predicción</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2037,
+      "before": "const prediccion = a.score < 30 ? 'ðŸ”´ Alto Riesgo' : a.score < 60 ? 'ðŸŸ¡ Riesgo Medio' : 'ðŸŸ¢ Bajo Riesgo';",
+      "after": "const prediccion = a.score < 30 ? '🔴 Alto Riesgo' : a.score < 60 ? '🟡 Riesgo Medio' : '🟢 Bajo Riesgo';"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2072,
+      "before": "<th className=\"num\">Vencido (+90 dÃ­as)</th>",
+      "after": "<th className=\"num\">Vencido (+90 días)</th>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2091,
+      "before": "âœ… No hay deudores crÃ³nicos (mora mayor a 90 dÃ­as)",
+      "after": "✅ No hay deudores crónicos (mora mayor a 90 días)"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2173,
+      "before": "console.log(\"ðŸ§¹ Limpiando almacenamiento local...\");",
+      "after": "console.log(\"🧹 Limpiando almacenamiento local...\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2186,
+      "before": "console.log(\"ðŸ—‘ï¸ Limpiando base de datos...\");",
+      "after": "console.log(\"🗑️ Limpiando base de datos...\");"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2197,
+      "before": "\"Base de datos y cachÃ© local limpiados completamente. Recargando sistema...\",",
+      "after": "\"Base de datos y caché local limpiados completamente. Recargando sistema...\","
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2236,
+      "before": "{/* Modal GestiÃ³n */}",
+      "after": "{/* Modal Gestión */}"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2240,
+      "before": "<div className=\"modal-header\">Nueva GestiÃ³n</div>",
+      "after": "<div className=\"modal-header\">Nueva Gestión</div>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2270,
+      "before": "<option>Cambio de facturaciÃ³n</option>",
+      "after": "<option>Cambio de facturación</option>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2275,
+      "before": "<span>ObservaciÃ³n</span>",
+      "after": "<span>Observación</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2276,
+      "before": "<textarea value={gestionForm.observacion} onChange={e => setGestionForm({...gestionForm, observacion: e.target.value})} rows={3} placeholder=\"Detalles de la gestiÃ³n...\" />",
+      "after": "<textarea value={gestionForm.observacion} onChange={e => setGestionForm({...gestionForm, observacion: e.target.value})} rows={3} placeholder=\"Detalles de la gestión...\" />"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2361,
+      "before": "<option value=\"Reprogramada\">ðŸ”„ Reprogramada</option>",
+      "after": "<option value=\"Reprogramada\">🔄 Reprogramada</option>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2366,
+      "before": "<span>ObservaciÃ³n</span>",
+      "after": "<span>Observación</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2376,
+      "before": "<strong>â„¹ï¸ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica Ãºnicamente con importaciones.",
+      "after": "<strong>ℹ️ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica únicamente con importaciones."
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2402,
+      "before": "<span>DirecciÃ³n</span>",
+      "after": "<span>Dirección</span>"
+    },
+    {
+      "file": "src/App.tsx",
+      "line": 2406,
+      "before": "<span>TelÃ©fono</span>",
+      "after": "<span>Teléfono</span>"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 178,
+      "before": "title: 'AnÃ¡lisis de Riesgo',",
+      "after": "title: 'Análisis de Riesgo',"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 183,
+      "before": "'DÃ­as Mora',",
+      "after": "'Días Mora',"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 185,
+      "before": "'PredicciÃ³n',",
+      "after": "'Predicción',"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 205,
+      "before": "title: 'Deudores CrÃ³nicos',",
+      "after": "title: 'Deudores Crónicos',"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 211,
+      "before": "'Vencido (+90 dÃ­as)',",
+      "after": "'Vencido (+90 días)',"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 435,
+      "before": "title: 'Panel de AnÃ¡lisis',",
+      "after": "title: 'Panel de Análisis',"
+    },
+    {
+      "file": "src/pdf/reports/analisisReport.ts",
+      "line": 437,
+      "before": "detailLines: [`SecciÃ³n: ${config.title}`],",
+      "after": "detailLines: [`Sección: ${config.title}`],"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 21,
+      "before": "// Tabla de campaÃ±as de cobranza",
+      "after": "// Tabla de campañas de cobranza"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 57,
+      "before": "// LIMPIEZA: Eliminar columnas de aging estÃ¡tico si existen (ahora se calculan dinÃ¡micamente)",
+      "after": "// LIMPIEZA: Eliminar columnas de aging estático si existen (ahora se calculan dinámicamente)"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 64,
+      "before": "// Ignorar si la versiÃ³n de SQLite no soporta DROP COLUMN o si falla",
+      "after": "// Ignorar si la versión de SQLite no soporta DROP COLUMN o si falla"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 87,
+      "before": "Nota: en el Excel existen filas \"subtotal\" por cliente donde \"Tipo Documento\" viene vacÃ­o.",
+      "after": "Nota: en el Excel existen filas \"subtotal\" por cliente donde \"Tipo Documento\" viene vacío."
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 150,
+      "before": "motivo TEXT, -- Error facturaciÃ³n, Producto defectuoso, Servicio no prestado, etc.",
+      "after": "motivo TEXT, -- Error facturación, Producto defectuoso, Servicio no prestado, etc."
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 152,
+      "before": "estado TEXT DEFAULT 'Abierta', -- Abierta, En revisiÃ³n, Resuelta, Rechazada",
+      "after": "estado TEXT DEFAULT 'Abierta', -- Abierta, En revisión, Resuelta, Rechazada"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 167,
+      "before": "tipo TEXT, -- Adelanto, Abono sin factura, Nota crÃ©dito, DevoluciÃ³n",
+      "after": "tipo TEXT, -- Adelanto, Abono sin factura, Nota crédito, Devolución"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 180,
+      "before": "// MigraciÃ³n suave: agregar columnas de auditorÃ­a si faltan",
+      "after": "// Migración suave: agregar columnas de auditoría si faltan"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 234,
+      "before": "// MigraciÃ³n: Agregar columna administrador si no existe",
+      "after": "// Migración: Agregar columna administrador si no existe"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 241,
+      "before": "// MigraciÃ³n: Agregar columna iva_percent si no existe",
+      "after": "// Migración: Agregar columna iva_percent si no existe"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 248,
+      "before": "// MigraciÃ³n: Agregar columna meta_mensual si no existe",
+      "after": "// Migración: Agregar columna meta_mensual si no existe"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 255,
+      "before": "// MigraciÃ³n: Agregar columna excel_headers_json para guardar estructura esperada",
+      "after": "// Migración: Agregar columna excel_headers_json para guardar estructura esperada"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 262,
+      "before": "// MigraciÃ³n: Agregar columnas a clientes si no existen",
+      "after": "// Migración: Agregar columnas a clientes si no existen"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 270,
+      "before": "// MigraciÃ³n: Agregar columna logo si no existe",
+      "after": "// Migración: Agregar columna logo si no existe"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 469,
+      "before": "// ConfiguraciÃ³n de SQLite para permitir mÃºltiples lectores",
+      "after": "// Configuración de SQLite para permitir múltiples lectores"
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 498,
+      "before": "* Devuelve la ruta absoluta del archivo SQLite sin necesidad de abrir la conexiÃ³n.",
+      "after": "* Devuelve la ruta absoluta del archivo SQLite sin necesidad de abrir la conexión."
+    },
+    {
+      "file": "electron/db.ts",
+      "line": 499,
+      "before": "* Ãštil para mostrar la \"Ruta DB\" en el renderer.",
+      "after": "* Útil para mostrar la \"Ruta DB\" en el renderer."
+    }
+  ]
+}

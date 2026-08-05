@@ -18,7 +18,7 @@ function tableHasColumn(db: Database.Database, table: string, col: string): bool
 }
 
 function ensureSchema(db: Database.Database) {
-      // Tabla de campaÃ±as de cobranza
+      // Tabla de campañas de cobranza
       db.exec(`
         CREATE TABLE IF NOT EXISTS campanas (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,14 +54,14 @@ function ensureSchema(db: Database.Database) {
     `);
 
 
-  // LIMPIEZA: Eliminar columnas de aging estÃ¡tico si existen (ahora se calculan dinÃ¡micamente)
+  // LIMPIEZA: Eliminar columnas de aging estático si existen (ahora se calculan dinámicamente)
   const agingCols = ["por_vencer", "dias_30", "dias_60", "dias_90", "dias_120", "dias_mas_120"];
   for (const col of agingCols) {
     if (tableHasColumn(db, "documentos", col)) {
       try {
         db.exec(`ALTER TABLE documentos DROP COLUMN ${col}`);
       } catch {
-        // Ignorar si la versiÃ³n de SQLite no soporta DROP COLUMN o si falla
+        // Ignorar si la versión de SQLite no soporta DROP COLUMN o si falla
       }
     }
   }
@@ -84,7 +84,7 @@ function ensureSchema(db: Database.Database) {
 
     /*
       Tabla principal: cartera importada desde Contifico (CarteraPorCobrar).
-      Nota: en el Excel existen filas "subtotal" por cliente donde "Tipo Documento" viene vacÃ­o.
+      Nota: en el Excel existen filas "subtotal" por cliente donde "Tipo Documento" viene vacío.
       Esas filas se guardan con is_subtotal=1 para poder usarlas (opcionalmente) en reportes,
       pero la vista de "Documentos" debe filtrar is_subtotal=0.
     */
@@ -147,9 +147,9 @@ function ensureSchema(db: Database.Database) {
       documento TEXT NOT NULL,
       cliente TEXT NOT NULL,
       monto REAL DEFAULT 0,
-      motivo TEXT, -- Error facturaciÃ³n, Producto defectuoso, Servicio no prestado, etc.
+      motivo TEXT, -- Error facturación, Producto defectuoso, Servicio no prestado, etc.
       fecha_creacion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-      estado TEXT DEFAULT 'Abierta', -- Abierta, En revisiÃ³n, Resuelta, Rechazada
+      estado TEXT DEFAULT 'Abierta', -- Abierta, En revisión, Resuelta, Rechazada
       fecha_resolucion TEXT,
       observacion TEXT,
       usuario_creador TEXT DEFAULT 'sistema'
@@ -164,7 +164,7 @@ function ensureSchema(db: Database.Database) {
       documento TEXT,
       cliente TEXT NOT NULL,
       monto REAL DEFAULT 0,
-      tipo TEXT, -- Adelanto, Abono sin factura, Nota crÃ©dito, DevoluciÃ³n
+      tipo TEXT, -- Adelanto, Abono sin factura, Nota crédito, Devolución
       fecha_recepcion TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
       estado TEXT DEFAULT 'Pendiente', -- Pendiente, Aplicada, Rechazada
       fecha_aplicacion TEXT,
@@ -177,7 +177,7 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cuentas_estado ON cuentas_aplicar(estado);
   `);
 
-  // MigraciÃ³n suave: agregar columnas de auditorÃ­a si faltan
+  // Migración suave: agregar columnas de auditoría si faltan
   const gestionCols = [
     { name: "usuario", type: "TEXT DEFAULT 'sistema'" },
     { name: "creado_en", type: "TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))" },
@@ -231,35 +231,35 @@ function ensureSchema(db: Database.Database) {
     }
   }
 
-  // MigraciÃ³n: Agregar columna administrador si no existe
+  // Migración: Agregar columna administrador si no existe
   if (!tableHasColumn(db, "empresa", "administrador")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN administrador TEXT DEFAULT ''");
     } catch (e) { console.warn("Error al agregar columna administrador a empresa:", e); }
   }
 
-  // MigraciÃ³n: Agregar columna iva_percent si no existe
+  // Migración: Agregar columna iva_percent si no existe
   if (!tableHasColumn(db, "empresa", "iva_percent")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN iva_percent REAL DEFAULT 15.0");
     } catch (e) { console.warn("Error al agregar columna iva_percent a empresa:", e); }
   }
 
-  // MigraciÃ³n: Agregar columna meta_mensual si no existe
+  // Migración: Agregar columna meta_mensual si no existe
   if (!tableHasColumn(db, "empresa", "meta_mensual")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN meta_mensual REAL DEFAULT 100000");
     } catch (e) { console.warn("Error al agregar columna meta_mensual a empresa:", e); }
   }
 
-  // MigraciÃ³n: Agregar columna excel_headers_json para guardar estructura esperada
+  // Migración: Agregar columna excel_headers_json para guardar estructura esperada
   if (!tableHasColumn(db, "empresa", "excel_headers_json")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN excel_headers_json TEXT DEFAULT ''");
     } catch (e) { console.warn("Error al agregar columna excel_headers_json a empresa:", e); }
   }
 
-  // MigraciÃ³n: Agregar columnas a clientes si no existen
+  // Migración: Agregar columnas a clientes si no existen
   const clientCols = ["telefono", "email", "direccion", "contacto"];
   for (const c of clientCols) {
     if (!tableHasColumn(db, "clientes", c)) {
@@ -267,7 +267,7 @@ function ensureSchema(db: Database.Database) {
     }
   }
 
-  // MigraciÃ³n: Agregar columna logo si no existe
+  // Migración: Agregar columna logo si no existe
   if (!tableHasColumn(db, "empresa", "logo")) {
     try {
       db.exec("ALTER TABLE empresa ADD COLUMN logo TEXT");
@@ -466,7 +466,7 @@ export function openDb() {
   const dbPath = path.join(dataDir, "cartera.db");
   const db = new Database(dbPath);
 
-  // ConfiguraciÃ³n de SQLite para permitir mÃºltiples lectores
+  // Configuración de SQLite para permitir múltiples lectores
   db.pragma("journal_mode = WAL");  // Write-Ahead Logging
   db.pragma("synchronous = NORMAL"); // Balance entre velocidad y seguridad
   db.pragma("cache_size = -64000");  // 64MB cache
@@ -495,8 +495,8 @@ export function openDb() {
 }
 
 /**
- * Devuelve la ruta absoluta del archivo SQLite sin necesidad de abrir la conexiÃ³n.
- * Ãštil para mostrar la "Ruta DB" en el renderer.
+ * Devuelve la ruta absoluta del archivo SQLite sin necesidad de abrir la conexión.
+ * Útil para mostrar la "Ruta DB" en el renderer.
  */
 export function getDbFilePath(): string {
   try {
