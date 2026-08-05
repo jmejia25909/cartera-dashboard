@@ -1049,12 +1049,6 @@ export default function App() {
 
   // Renderizado condicional por tab
   function renderContent() {
-    const gridTwoCol = {
-      display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-      gap: '16px',
-      alignItems: 'stretch'
-    };
 
     if (tab === "creditos") {
       return <CreditPoliciesPage />;
@@ -1254,33 +1248,33 @@ export default function App() {
 
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={gridTwoCol}>
+          <div className="gestion-executive-layout gestion-powerbi-page">
           {/* KPIs de Gestión */}
-          <div className="card" style={{ marginBottom: 0, padding: '10px' }}>
-            <div className="card-title" style={{fontSize: '0.95rem', marginBottom: '8px'}}>📊 KPIs de Gestión</div>
-            <div className="kpis-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
-                <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>Clientes con Vencidos</div>
-                <div className="kpi-value" style={{fontSize: '1.8rem', marginTop: '4px', fontWeight: '700'}}>{clientesConVencidos.length}</div>
+          <div className="card gestion-kpi-panel">
+            <div className="card-title gestion-panel-title"><span className="gestion-panel-title__icon">▦</span><span><strong>Resumen de gestión</strong><small>Indicadores operativos de cobranza</small></span></div>
+            <div className="kpis-grid gestion-kpi-grid">
+              <div className="kpi-card gestion-kpi-card">
+                <div className="kpi-title gestion-kpi-title">Clientes con Vencidos</div>
+                <div className="kpi-value gestion-kpi-value">{clientesConVencidos.length}</div>
               </div>
-              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
-                <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>Total por Gestionar</div>
-                <div className="kpi-value kpi-negative" style={{fontSize: '1.8rem', marginTop: '4px', fontWeight: '700'}}>{fmtMoney(totalPorGestionar)}</div>
+              <div className="kpi-card gestion-kpi-card">
+                <div className="kpi-title gestion-kpi-title">Total por Gestionar</div>
+                <div className="kpi-value kpi-negative gestion-kpi-value">{fmtMoney(totalPorGestionar)}</div>
               </div>
-              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
-                <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>Contactados Hoy</div>
-                <div className="kpi-value" style={{fontSize: '1.8rem', marginTop: '4px', fontWeight: '700'}}>{gestionesHoy}</div>
+              <div className="kpi-card gestion-kpi-card">
+                <div className="kpi-title gestion-kpi-title">Contactados Hoy</div>
+                <div className="kpi-value gestion-kpi-value">{gestionesHoy}</div>
               </div>
-              <div className="kpi-card" style={{ alignItems: 'center', textAlign: 'center', padding: '12px 10px' }}>
-                <div className="kpi-title" style={{fontSize: '0.7rem', fontWeight: '600', lineHeight: '1.2', color: '#666'}}>PDFs Generados</div>
-                <div className="kpi-value" style={{fontSize: '1.8rem', marginTop: '4px', fontWeight: '700'}}>{pdfsGenerados}</div>
+              <div className="kpi-card gestion-kpi-card">
+                <div className="kpi-title gestion-kpi-title">PDFs Generados</div>
+                <div className="kpi-value gestion-kpi-value">{pdfsGenerados}</div>
               </div>
             </div>
           </div>
           
           {/* Filtros y Acciones */}
-          <div className="card" style={{ marginBottom: 0, marginTop: '16px', padding: '12px' }}>
-            <div className="card-title" style={{fontSize: '0.95rem', marginBottom: '10px', textAlign: 'center'}}>🔍 Filtros y Acciones</div>
+          <div className="card gestion-toolbar-panel">
+            <div className="card-title gestion-panel-title"><span className="gestion-panel-title__icon">⌕</span><span><strong>Filtros y acciones</strong><small>Consulta, reportes y gestión masiva</small></span></div>
             
             {/* Fila 1: Filtros principales - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
@@ -1413,7 +1407,7 @@ export default function App() {
           
           {/* GESTOR INTEGRADO DE CLIENTE - UNA SOLA INTERFAZ FUNCIONAL */}
           {selectedCliente && selectedCliente !== "Todos" ? (
-            <div className="card" style={{marginTop: '20px'}}>
+            <div className="card gestion-clients-panel">
               {/* HEADER DEL CLIENTE */}
               <div style={{
                 display: 'flex',
@@ -1572,7 +1566,7 @@ export default function App() {
                   <h3 style={{fontSize: '1.1rem', fontWeight: '700', marginBottom: '12px', color: '#1f2937'}}>
                     📋 Documentos Vencidos ({docsVencidosCliente.length})
                   </h3>
-                  <div className="table-wrapper">
+                  <div className="table-wrapper gestion-table-wrapper">
                     <table className="data-table" style={{fontSize: '0.85rem', marginBottom: 0}}>
                       <thead>
                         <tr>
@@ -1730,10 +1724,10 @@ export default function App() {
           ) : (
             /* TABLA DE CLIENTES PARA SELECCIONAR */
             <div className="card" style={{marginTop: '20px'}}>
-              <div className="card-title">📋 Clientes con Vencimientos - Selecciona uno para gestionar</div>
+              <div className="card-title gestion-table-title"><span><strong>Clientes con vencimientos</strong><small>Selecciona un cliente para iniciar la gestión</small></span></div>
               <div className="table-wrapper">
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
-                  <table className="data-table" style={{minWidth: 900, width: '100%', tableLayout: 'auto'}}>
+                  <table className="data-table gestion-data-table" style={{minWidth: 900, width: '100%', tableLayout: 'auto'}}>
                     <thead>
                       <tr>
                         <th>Cliente</th>
