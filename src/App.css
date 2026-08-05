@@ -4744,3 +4744,162 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+
+/* GESTION POWER BI COMPACT PACK 002 */
+
+.gestion-powerbi-page {
+  gap: 10px !important;
+  min-height: auto !important;
+  padding: 0 10px 10px !important;
+}
+
+.gestion-executive-layout {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 8px !important;
+  align-items: start !important;
+}
+
+.gestion-kpi-panel,
+.gestion-toolbar-panel {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 10px 12px !important;
+}
+
+.gestion-kpi-panel {
+  display: grid !important;
+  grid-template-columns: 190px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.gestion-kpi-panel .gestion-panel-title {
+  margin: 0 !important;
+}
+
+.gestion-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.gestion-kpi-card {
+  min-height: 64px !important;
+  padding: 9px 11px !important;
+}
+
+.gestion-kpi-title {
+  font-size: 0.6rem !important;
+}
+
+.gestion-kpi-value {
+  margin-top: 4px !important;
+  font-size: 1.25rem !important;
+}
+
+.gestion-toolbar-panel {
+  display: grid !important;
+  grid-template-columns: 190px minmax(0, 1fr) !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.gestion-toolbar-panel .gestion-panel-title {
+  margin: 0 !important;
+}
+
+.gestion-toolbar-panel > div:not(.gestion-panel-title) {
+  min-width: 0 !important;
+}
+
+.gestion-toolbar-panel .form-grid,
+.gestion-toolbar-panel .filters-grid,
+.gestion-toolbar-panel .grid,
+.gestion-toolbar-panel [style*="display: grid"] {
+  grid-template-columns:
+    minmax(180px, 1.3fr)
+    minmax(160px, 1fr)
+    130px
+    130px
+    auto !important;
+  gap: 8px !important;
+  align-items: end !important;
+}
+
+.gestion-toolbar-panel .field {
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.gestion-toolbar-panel select,
+.gestion-toolbar-panel input[type="date"] {
+  height: 32px !important;
+}
+
+.gestion-toolbar-panel .btn {
+  min-height: 32px !important;
+}
+
+.gestion-toolbar-panel hr {
+  display: none !important;
+}
+
+.gestion-clients-panel {
+  min-height: 0 !important;
+  height: auto !important;
+  overflow: hidden !important;
+}
+
+.gestion-table-title {
+  min-height: 44px !important;
+  padding: 9px 12px !important;
+}
+
+.gestion-table-wrapper {
+  height: calc(100vh - 355px) !important;
+  min-height: 390px !important;
+  max-height: none !important;
+  overflow: auto !important;
+}
+
+.gestion-data-table thead th {
+  height: 34px !important;
+  font-size: 0.61rem !important;
+}
+
+.gestion-data-table tbody td {
+  height: 36px !important;
+  padding: 5px 10px !important;
+  font-size: 0.67rem !important;
+}
+
+.gestion-data-table .btn {
+  min-height: 27px !important;
+  padding: 0 9px !important;
+}
+
+@media (max-width: 1250px) {
+  .gestion-kpi-panel,
+  .gestion-toolbar-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .gestion-table-wrapper {
+    height: calc(100vh - 430px) !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .gestion-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .gestion-table-wrapper {
+    height: auto !important;
+    min-height: 360px !important;
+  }
+}
