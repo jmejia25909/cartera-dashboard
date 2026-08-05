@@ -4232,3 +4232,222 @@ button:disabled {
     overflow-x: auto;
   }
 }
+
+
+/* POWER BI EXECUTIVE REDESIGN 002 - APP SHELL */
+
+/* Encabezado comercial, compacto y sin información técnica */
+.powerbi-app-header {
+  height: 62px !important;
+  min-height: 62px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 20px !important;
+  padding: 7px 20px !important;
+  border-bottom: 1px solid #e7ecf3 !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.99),
+      rgba(249, 251, 254, 0.99)
+    ) !important;
+  box-shadow: 0 3px 14px rgba(30, 41, 59, 0.04) !important;
+}
+
+.powerbi-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 230px;
+}
+
+.powerbi-brand__logo {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 40px;
+  border: 1px solid #e4e9f1;
+  border-radius: 11px;
+  background: #fff;
+  box-shadow: 0 4px 13px rgba(30, 41, 59, 0.07);
+}
+
+.powerbi-brand__logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.powerbi-brand__identity h1 {
+  margin: 0;
+  color: #064e3b;
+  font-size: 1.28rem;
+  font-weight: 850;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+}
+
+.powerbi-brand__identity span {
+  display: block;
+  margin-top: 4px;
+  color: #334155;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.powerbi-app-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.powerbi-connection,
+.powerbi-database,
+.powerbi-global-refresh {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.powerbi-connection {
+  min-width: 80px;
+  padding: 0 12px;
+  border: 1px solid #dce4ee;
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 750;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.powerbi-connection:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 12px rgba(37, 99, 235, 0.09);
+}
+
+.powerbi-connection:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.powerbi-connection i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.powerbi-connection--online {
+  border-color: #9fe5c8;
+  color: #08755d;
+  background: #effcf7;
+}
+
+.powerbi-connection--offline {
+  border-color: #f2b8b5;
+  color: #b42318;
+  background: #fff5f4;
+}
+
+.powerbi-database {
+  padding: 0 12px;
+  border: 1px solid #dce4ee;
+  color: #475569;
+  font-size: 0.67rem;
+  font-weight: 720;
+  background: #f8fafc;
+}
+
+.powerbi-database span {
+  color: #4968df;
+}
+
+.powerbi-global-refresh {
+  padding: 0 15px;
+  border: 0;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 820;
+  background: linear-gradient(135deg, #4267e8, #5d55d7);
+  box-shadow: 0 6px 15px rgba(66, 103, 232, 0.2);
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.powerbi-global-refresh:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(66, 103, 232, 0.27);
+}
+
+/* Navegación horizontal similar a Power BI */
+.nav-bar {
+  height: 50px !important;
+  min-height: 50px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 14px !important;
+  padding: 5px 18px !important;
+  border-bottom: 1px solid #c9efda !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: none !important;
+}
+
+.nav-item {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 13px !important;
+  gap: 7px !important;
+  border-radius: 9px !important;
+  font-size: 0.78rem !important;
+  font-weight: 720 !important;
+}
+
+.nav-item span {
+  font-size: 0.88rem !important;
+}
+
+.nav-item.active {
+  color: #315de8 !important;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(59, 130, 246, 0.12),
+      rgba(99, 102, 241, 0.16)
+    ) !important;
+  box-shadow: 0 5px 13px rgba(49, 93, 232, 0.12) !important;
+}
+
+/* El dashboard comienza inmediatamente después de la navegación */
+.content {
+  padding: 8px 14px 7px !important;
+}
+
+@media (max-width: 1200px) {
+  .powerbi-app-header {
+    padding-inline: 13px !important;
+  }
+
+  .powerbi-database {
+    display: none;
+  }
+
+  .nav-bar {
+    justify-content: flex-start !important;
+    overflow-x: auto;
+  }
+}

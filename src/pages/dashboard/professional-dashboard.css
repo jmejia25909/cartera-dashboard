@@ -1353,3 +1353,138 @@
     min-height: calc(100vh - 138px);
   }
 }
+
+
+/* POWER BI EXECUTIVE REDESIGN 002 - DASHBOARD */
+
+/* Un único botón Actualizar: el del encabezado */
+.bi-filterbar__right .bi-refresh {
+  display: none !important;
+}
+
+/* Filtros limpios: meses a la izquierda, calidad y año a la derecha */
+.bi-filterbar {
+  min-height: 46px;
+  padding: 6px 9px;
+  border-radius: 12px;
+}
+
+.bi-filterbar__left,
+.bi-filterbar__right {
+  gap: 7px;
+}
+
+.bi-month-filter {
+  gap: 5px;
+}
+
+.bi-month-filter button {
+  min-width: 35px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 8px;
+}
+
+.bi-year-filter {
+  height: 32px;
+  border-radius: 9px;
+}
+
+.bi-data-state {
+  height: 27px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 9px;
+  border-radius: 999px;
+}
+
+/* Altura útil recuperada */
+.powerbi-dashboard {
+  height: calc(100vh - 127px);
+  min-height: 700px;
+  padding-top: 5px;
+}
+
+/* KPI idénticos al criterio visual aprobado */
+.bi-kpi-grid {
+  height: 128px;
+}
+
+.bi-kpi {
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.bi-kpi__content {
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.bi-kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.bi-kpi__value {
+  margin-top: 5px;
+  font-size: clamp(1.52rem, 1.65vw, 1.9rem);
+}
+
+.bi-kpi__subtitle {
+  margin-top: 6px;
+}
+
+/* Mayor presencia visual en el Aging */
+.bi-aging-row__bar {
+  height: 9px;
+}
+
+.bi-aging-row:hover .bi-aging-row__bar i {
+  transform: scaleY(1.3);
+}
+
+/* Gráfico y leyenda compactos */
+.bi-panel--evolution .bi-panel__body {
+  padding-top: 10px;
+}
+
+.bi-chart-legend {
+  min-height: 21px;
+  padding-top: 3px;
+}
+
+/* Paneles inferiores y operaciones */
+.bi-operation {
+  min-height: 58px;
+  padding: 7px 8px;
+}
+
+.bi-operation__text strong {
+  font-size: 0.82rem;
+}
+
+.bi-ranking > div:hover,
+.bi-critical-list > div:hover,
+.bi-alert-list button:hover {
+  background: #f8faff;
+}
+
+/* Acabado comercial */
+.bi-panel,
+.bi-filterbar,
+.bi-kpi {
+  box-shadow: 0 6px 19px rgba(38, 52, 82, 0.05);
+}
+
+.bi-panel:hover {
+  box-shadow: 0 9px 23px rgba(38, 52, 82, 0.075);
+}
+
+@media (max-width: 1550px) {
+  .powerbi-dashboard {
+    height: auto;
+    min-height: calc(100vh - 127px);
+  }
+}

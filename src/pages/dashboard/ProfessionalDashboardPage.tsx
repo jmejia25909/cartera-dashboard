@@ -251,7 +251,6 @@ function DashboardLoading() {
 export function DashboardPage({
   executiveStats,
   descuadresDetectados = 0,
-  onRefresh,
   onNavigate,
   onOpenReports,
 }: DashboardPageProps) {
@@ -322,15 +321,6 @@ export function DashboardPage({
     selectedMonth,
     selectedYear,
   ]);
-
-  const refreshDashboard = async (): Promise<void> => {
-    await onRefresh?.();
-
-    await loadExecutiveData({
-      year: selectedYear,
-      month: selectedMonth,
-    });
-  };
 
   const navigateReports = () => {
     if (onNavigate) {
@@ -469,14 +459,6 @@ export function DashboardPage({
             </select>
           </label>
 
-          <button
-            type="button"
-            className="bi-refresh"
-            onClick={() => void refreshDashboard()}
-            disabled={loading}
-          >
-            {loading ? 'Actualizando…' : '↻ Actualizar'}
-          </button>
         </div>
       </section>
 
