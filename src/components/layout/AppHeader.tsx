@@ -25,139 +25,89 @@ export function AppHeader({
   onCopyUrl,
   onRefresh,
 }: AppHeaderProps) {
+  const baseLabel = isWeb ? 'Modo Web' : 'Base Local';
+
   return (
-    <header className="app-header">
-      <div className="header-left">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div
-            style={{
-              width: '42px',
-              height: '42px',
-              background: empresa.logo
-                ? 'transparent'
-                : 'linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)',
-              borderRadius: '10px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '20px',
-              boxShadow: '0 2px 8px rgba(59, 130, 246, 0.2)',
-              overflow: 'hidden',
-            }}
-          >
-            <img
-              src={empresa.logo || '/logo-freeplastic.png'}
-              alt={empresa.logo ? 'Logo' : 'Logo FreePlastic'}
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-            />
-          </div>
+    <header className="app-header executive-app-header">
+      <div className="executive-brand">
+        <div className="executive-brand__logo">
+          <img
+            src={empresa.logo || '/logo-freeplastic.png'}
+            alt={empresa.logo ? 'Logo' : 'Logo FreePlastic'}
+          />
+        </div>
 
-          <div>
-            <h1
-              style={{
-                margin: 0,
-                fontSize: '1.4rem',
-                fontWeight: '700',
-                color: 'var(--text-main)',
-              }}
-            >
-              {empresa.nombre || 'Cartera Dashboard'}
-            </h1>
-
-            {empresa.administrador && (
-              <div
-                style={{
-                  fontSize: '0.8rem',
-                  color: 'var(--text-secondary)',
-                  marginTop: '2px',
-                }}
-              >
-                👤 {empresa.administrador}
-              </div>
-            )}
-          </div>
+        <div className="executive-brand__copy">
+          <h1>{empresa.nombre || 'Cartera Dashboard'}</h1>
+          {empresa.administrador && (
+            <span>👤 {empresa.administrador}</span>
+          )}
         </div>
       </div>
 
-      <div className="header-right">
-        <div className="header-info">
-          <span className="info-label">🔧</span>
-          <span className="info-value">React + Electron + SQLite</span>
-        </div>
-
-        <div className="header-info">
-          <span className="info-label">📦</span>
-          <span className="info-value">Contifico Import</span>
-        </div>
-
-        <div className="header-info">
-          <span className="info-label">🔗</span>
-          <span className="info-value info-ok">Detectado</span>
-        </div>
-
-        <div
-          className={`header-info header-info-clickable url-button cloudflare-button ${
-            remoteUrl ? '' : 'disabled'
+      <div className="executive-header-actions">
+        <button
+          type="button"
+          className={`executive-status-chip ${
+            remoteUrl && remoteUrlHealthy
+              ? 'is-healthy'
+              : remoteUrl
+                ? 'is-warning'
+                : 'is-muted'
           }`}
           onClick={() => remoteUrl && onCopyUrl(remoteUrl)}
+          disabled={!remoteUrl}
           title={
             remoteUrl
-              ? `Acceso Remoto (ngrok) - ${remoteUrl} - Clic para copiar`
-              : 'Acceso Remoto - Iniciando...'
+              ? `Acceso remoto: ${remoteUrl}. Clic para copiar.`
+              : 'Acceso remoto no disponible'
           }
         >
-          <span className="info-label">
-            {!remoteUrl ? '🔌' : remoteUrlHealthy ? '🌐' : '🔴'}
-          </span>
-          <span className="info-value info-url url-max-width">Remoto</span>
-          {remoteUrl && !remoteUrlHealthy && <span className="health-badge">⚠️</span>}
-        </div>
+          <span className="executive-status-dot" />
+          Remoto
+        </button>
 
-        <div
-          className={`header-info header-info-clickable url-button local-button ${
-            repoUrl ? '' : 'disabled'
+        <button
+          type="button"
+          className={`executive-status-chip ${
+            repoUrl && localUrlHealthy
+              ? 'is-healthy'
+              : repoUrl
+                ? 'is-warning'
+                : 'is-muted'
           }`}
           onClick={() => repoUrl && onCopyUrl(repoUrl)}
+          disabled={!repoUrl}
           title={
             repoUrl
-              ? `Red Local - ${repoUrl} - Clic para copiar`
-              : 'Red Local - Conectando...'
+              ? `Red local: ${repoUrl}. Clic para copiar.`
+              : 'Red local no disponible'
           }
         >
-          <span className="info-label">
-            {!repoUrl ? '🔌' : localUrlHealthy ? '🟢' : '🔴'}
-          </span>
-          <span className="info-value info-url url-max-width">Local</span>
-          {repoUrl && !localUrlHealthy && <span className="health-badge">⚠️</span>}
-          {!repoUrl && <span className="health-badge">⏳</span>}
+          <span className="executive-status-dot" />
+          Local
+        </button>
+
+        <div
+          className="executive-base-chip"
+          title={
+            isWeb
+              ? 'Aplicación ejecutándose en modo web'
+              : 'Base SQLite local conectada'
+          }
+        >
+          <span>▣</span>
+          <strong>{baseLabel}</strong>
         </div>
 
-        <div className="header-info">
-          <span className="info-label">💾</span>
-          <span className="info-value info-path">
-            {isWeb ? 'Modo Web' : 'C:\\Users\\...\\cartera.db'}
-          </span>
-        </div>
-
-        <div className="header-info">
-          <button
-            className="refresh-btn"
-            style={{
-              padding: '4px 12px',
-              borderRadius: 6,
-              background: '#2563eb',
-              color: '#fff',
-              fontWeight: 'bold',
-              border: 'none',
-              cursor: 'pointer',
-              marginLeft: 8,
-            }}
-            title="Refrescar todo el sistema"
-            onClick={onRefresh}
-          >
-            🔄 Refrescar
-          </button>
-        </div>
+        <button
+          type="button"
+          className="executive-refresh-button"
+          title="Actualizar toda la información"
+          onClick={onRefresh}
+        >
+          ↻ Actualizar
+        </button>
       </div>
     </header>
   );

@@ -1189,3 +1189,167 @@
 .bi-alert-list small { font-size: 0.53rem; }
 .bi-alert-list b { font-size: 0.63rem; }
 .bi-footer { font-size: 0.55rem; }
+
+
+/* POWER BI EXECUTIVE DASHBOARD POLISH 001 */
+
+/* Aprovecha la altura recuperada de la nueva cabecera */
+.powerbi-dashboard {
+  height: calc(100vh - 138px);
+  min-height: 690px;
+  padding-top: 8px;
+}
+
+/* KPI Premium */
+.bi-kpi-grid {
+  height: 132px;
+}
+
+.bi-kpi {
+  padding: 13px 15px;
+  border-radius: 15px;
+}
+
+.bi-kpi__content {
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.bi-kpi-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.bi-kpi__title {
+  font-size: 0.69rem;
+  letter-spacing: 0.035em;
+}
+
+.bi-kpi__value {
+  margin-top: 6px;
+  font-size: clamp(1.52rem, 1.68vw, 1.95rem);
+  letter-spacing: -0.03em;
+}
+
+.bi-kpi__subtitle {
+  margin-top: 7px;
+  font-size: 0.72rem;
+}
+
+/* Aging Premium */
+.bi-aging-table {
+  gap: 4px;
+}
+
+.bi-aging-row {
+  min-height: 20px;
+}
+
+.bi-aging-row__bar {
+  height: 9px;
+  background: #e9eef5;
+}
+
+.bi-aging-row:hover .bi-aging-row__bar i {
+  transform: scaleY(1.35);
+}
+
+.bi-aging-row > span,
+.bi-aging-row > strong,
+.bi-aging-row > small,
+.bi-aging-row > em {
+  font-size: 0.64rem;
+}
+
+/* Evolución más limpia */
+.bi-panel--evolution .bi-panel__header p {
+  display: none;
+}
+
+.bi-panel--evolution .bi-panel__body {
+  padding-top: 12px;
+}
+
+.bi-chart-legend {
+  min-height: 22px;
+  gap: 10px;
+  font-size: 0.56rem;
+}
+
+.bi-chart-legend em {
+  font-size: 0.5rem;
+}
+
+/* Estado operativo */
+.bi-operation {
+  padding: 7px 8px;
+  gap: 7px;
+}
+
+.bi-operation__icon {
+  width: 29px;
+  height: 29px;
+  border-radius: 9px;
+}
+
+.bi-operation__text strong {
+  font-size: 0.82rem;
+}
+
+.bi-operation__text small {
+  font-size: 0.61rem;
+}
+
+/* Rankings y alertas */
+.bi-ranking > div,
+.bi-critical-list > div,
+.bi-alert-list button {
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.bi-ranking > div:hover,
+.bi-critical-list > div:hover,
+.bi-alert-list button:hover {
+  transform: translateX(2px);
+  background: #f8faff;
+}
+
+.bi-ranking strong,
+.bi-critical-list strong,
+.bi-alert-list strong {
+  font-size: 0.65rem;
+}
+
+.bi-ranking > div > i {
+  height: 4px;
+}
+
+.bi-critical-list > div > em {
+  padding: 4px 6px;
+  color: #b42345;
+  background: #ffe2e8;
+  box-shadow: inset 0 0 0 1px rgba(190, 18, 60, 0.08);
+}
+
+/* Sistema uniforme de sombras */
+.bi-panel,
+.bi-kpi,
+.bi-filterbar {
+  box-shadow: 0 6px 20px rgba(38, 52, 82, 0.055);
+}
+
+.bi-panel:hover {
+  box-shadow: 0 9px 24px rgba(38, 52, 82, 0.075);
+}
+
+@media (max-width: 1550px) {
+  .powerbi-dashboard {
+    height: auto;
+    min-height: calc(100vh - 138px);
+  }
+}
