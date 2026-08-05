@@ -62,19 +62,19 @@ const CHART_COLORS = [
   '#f59e0b',
   '#f97316',
   '#ef4444',
-  '#be123c',
-  '#7f1d1d',
 ];
 
 function formatDate(value?: string | null): string {
   if (!value) return 'Sin información';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
+
   return new Intl.DateTimeFormat('es-EC', {
     dateStyle: 'medium',
-    timeStyle: value.includes('T') || value.includes(':')
-      ? 'short'
-      : undefined,
+    timeStyle:
+      value.includes('T') || value.includes(':')
+        ? 'short'
+        : undefined,
   }).format(date);
 }
 
@@ -84,120 +84,36 @@ function shortPath(value?: string): string {
   return parts.slice(-3).join('/');
 }
 
-function Icon({
-  name,
-}: {
-  name:
-    | 'wallet'
-    | 'warning'
-    | 'shield'
-    | 'cash'
-    | 'users'
-    | 'docs'
-    | 'calendar'
-    | 'policy'
-    | 'cancelled'
-    | 'promise'
-    | 'quality'
-    | 'database'
-    | 'chart'
-    | 'target'
-    | 'agent';
-}) {
-  const icons = {
-    wallet: '◫',
-    warning: '△',
-    shield: '◇',
-    cash: '$',
-    users: '◎',
-    docs: '▤',
-    calendar: '▦',
-    policy: '⬡',
-    cancelled: '⊘',
-    promise: '⌁',
-    quality: '◈',
-    database: '◉',
-    chart: '⌁',
-    target: '◉',
-    agent: '♙',
-  };
-
-  return <span className="pro-icon">{icons[name]}</span>;
-}
-
 function KpiCard({
   title,
   value,
-  subtitle,
-  badge,
+  meta,
   tone,
-  icon,
-  warning,
+  critical = false,
 }: {
   title: string;
   value: string;
-  subtitle: string;
-  badge?: string;
-  tone: 'blue' | 'pink' | 'violet' | 'teal' | 'green' | 'indigo';
-  icon: Parameters<typeof Icon>[0]['name'];
-  warning?: boolean;
+  meta: string;
+  tone: 'blue' | 'red' | 'violet' | 'teal' | 'green' | 'indigo';
+  critical?: boolean;
 }) {
   return (
-    <article className={`pro-kpi pro-kpi--${tone}`}>
-      <div className="pro-kpi__head">
-        <span className="pro-kpi__title">{title}</span>
-        <span className="pro-kpi__info" title={subtitle}>i</span>
-      </div>
-      <div className="pro-kpi__body">
-        <div>
-          <strong className="pro-kpi__value">{value}</strong>
-          <span className="pro-kpi__subtitle">{subtitle}</span>
-        </div>
-        <div className="pro-kpi__glyph"><Icon name={icon} /></div>
-      </div>
-      <div className="pro-kpi__foot">
-        <span className={warning ? 'pro-badge pro-badge--warning' : 'pro-badge'}>
-          {badge || 'Dato auditado'}
-        </span>
-        <span className="pro-kpi__pulse" aria-hidden="true">
-          <i /><i /><i /><i /><i />
-        </span>
-      </div>
+    <article className={`exec-kpi exec-kpi--${tone}`}>
+      <header>
+        <span>{title}</span>
+        <i>{critical ? '!' : 'i'}</i>
+      </header>
+      <strong>{value}</strong>
+      <footer>
+        <span>{meta}</span>
+        <b aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+        </b>
+      </footer>
     </article>
-  );
-}
-
-function MiniMetric({
-  label,
-  value,
-  detail,
-  icon,
-  tone,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: Parameters<typeof Icon>[0]['name'];
-  tone: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="pro-mini"
-      onClick={onClick}
-      disabled={!onClick}
-    >
-      <span className={`pro-mini__icon pro-mini__icon--${tone}`}>
-        <Icon name={icon} />
-      </span>
-      <span>
-        <small>{label}</small>
-        <strong>{value}</strong>
-        <em>{detail}</em>
-      </span>
-    </button>
   );
 }
 
@@ -206,55 +122,65 @@ function Panel({
   subtitle,
   children,
   action,
+  className = '',
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="pro-panel">
-      <header className="pro-panel__head">
+    <section className={`exec-panel ${className}`}>
+      <header className="exec-panel__header">
         <div>
           <h2>{title}</h2>
           {subtitle && <p>{subtitle}</p>}
         </div>
-        {action || <button type="button" className="pro-more">•••</button>}
+        {action || <span className="exec-panel__menu">•••</span>}
       </header>
-      <div className="pro-panel__body">{children}</div>
+      <div className="exec-panel__body">{children}</div>
     </section>
   );
 }
 
-function EmptyFuture({
-  title,
-  icon,
-  reason,
+function StatusItem({
+  label,
+  value,
+  detail,
+  tone,
+  onClick,
 }: {
-  title: string;
-  icon: Parameters<typeof Icon>[0]['name'];
-  reason: string;
+  label: string;
+  value: string;
+  detail: string;
+  tone: 'blue' | 'amber' | 'red' | 'violet' | 'teal';
+  onClick?: () => void;
 }) {
   return (
-    <article className="pro-future">
-      <span className="pro-future__icon"><Icon name={icon} /></span>
-      <div>
-        <strong>{title}</strong>
-        <span>Próximamente</span>
-        <small>{reason}</small>
-      </div>
-    </article>
+    <button
+      type="button"
+      className="exec-status-item"
+      onClick={onClick}
+      disabled={!onClick}
+    >
+      <i className={`exec-status-dot exec-status-dot--${tone}`} />
+      <span>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <em>{detail}</em>
+      </span>
+      {onClick && <b>→</b>}
+    </button>
   );
 }
 
 function DashboardLoading() {
   return (
-    <div className="professional-dashboard">
-      <div className="pro-loading">
-        <div className="pro-loading__orb" />
-        <h2>Preparando inteligencia financiera</h2>
-        <p>Cargando la fuente ejecutiva auditada del dashboard.</p>
-      </div>
+    <div className="executive-dashboard executive-dashboard--loading">
+      <div className="exec-loader" />
+      <h2>Preparando inteligencia financiera</h2>
+      <p>Cargando la fuente ejecutiva auditada.</p>
     </div>
   );
 }
@@ -283,54 +209,46 @@ export function DashboardPage({
     moraCritica,
     alertas,
     historico,
-    kpisFuturos,
   } = executiveStats;
+
+  const navigateReports = () => {
+    if (onNavigate) {
+      onNavigate('reportes');
+      return;
+    }
+
+    onOpenReports?.();
+  };
 
   const sellerTotal = carteraPorVendedor.reduce(
     (sum, seller) => sum + seller.saldo,
     0,
   );
 
-  const collectionVisible = cobrosMes.valorOficial === null
-    ? 'Pendiente'
-    : money.format(cobrosMes.valorOficial);
+  const collectionLabel =
+    cobrosMes.valorOficial === null
+      ? 'Pendiente'
+      : money.format(cobrosMes.valorOficial);
 
-  const qualityLabel = calidadDatos.puntuacion === null
-    ? calidadDatos.estado
-    : `${calidadDatos.puntuacion.toFixed(1)}%`;
-
-  const collectionBreakdown = [
-    {
-      name: 'Abonos parciales',
-      value: cobrosMes.abonosParcialesDetectados,
-    },
-    {
-      name: 'Cierres por desaparición',
-      value: cobrosMes.cierresPorDesaparicionDetectados,
-    },
-  ];
-
-  const navigateReports = () => {
-    if (onNavigate) onNavigate('reportes');
-    else onOpenReports?.();
-  };
+  const qualityLabel =
+    calidadDatos.puntuacion === null
+      ? calidadDatos.estado
+      : `${calidadDatos.puntuacion.toFixed(1)}%`;
 
   return (
-    <div className="professional-dashboard">
-      <section className="pro-commandbar">
-        <div className="pro-commandbar__identity">
-          <span className="pro-commandbar__mark">
-            <Icon name="chart" />
-          </span>
+    <div className="executive-dashboard">
+      <section className="exec-topbar">
+        <div className="exec-topbar__brand">
+          <span className="exec-topbar__logo">◆</span>
           <div>
             <small>Centro de inteligencia de cartera</small>
             <strong>{empresa?.nombre || 'Dashboard ejecutivo'}</strong>
           </div>
         </div>
 
-        <div className="pro-commandbar__meta">
+        <div className="exec-topbar__meta">
           <span>
-            <small>Fecha de corte</small>
+            <small>Corte</small>
             <strong>{formatDate(executiveStats.fechaCorte)}</strong>
           </span>
           <span>
@@ -338,8 +256,10 @@ export function DashboardPage({
             <strong>{formatDate(executiveStats.ultimaImportacion)}</strong>
           </span>
           <span>
-            <small>Calidad del dato</small>
-            <strong className={`pro-status pro-status--${calidadDatos.estado.toLowerCase()}`}>
+            <small>Calidad</small>
+            <strong
+              className={`exec-quality exec-quality--${calidadDatos.estado.toLowerCase()}`}
+            >
               {qualityLabel}
             </strong>
           </span>
@@ -351,147 +271,66 @@ export function DashboardPage({
 
         <button
           type="button"
-          className="pro-refresh"
+          className="exec-refresh"
           onClick={() => void onRefresh?.()}
         >
           ↻ Actualizar
         </button>
       </section>
 
-      {(descuadresDetectados > 0 ||
-        operacion.documentosCreditoPendiente > 0) && (
-        <section className="pro-attention">
-          <span><Icon name="warning" /></span>
-          <div>
-            <strong>Atención operativa requerida</strong>
-            <p>
-              {operacion.documentosCreditoPendiente} documentos tienen
-              política de crédito pendiente
-              {descuadresDetectados > 0
-                ? ` y existen ${descuadresDetectados} descuadres activos.`
-                : '.'}
-            </p>
-          </div>
-          <button type="button" onClick={() => onNavigate?.('creditos')}>
-            Revisar ahora →
-          </button>
-        </section>
-      )}
-
-      <section className="pro-kpi-grid">
+      <section className="exec-kpi-grid">
         <KpiCard
           title="CARTERA PENDIENTE"
           value={money.format(cartera.pendiente)}
-          subtitle="Saldo activo por cobrar"
-          badge="Universo depurado"
+          meta="Saldo activo por cobrar"
           tone="blue"
-          icon="wallet"
         />
         <KpiCard
           title="CARTERA VENCIDA"
           value={money.format(cartera.vencida)}
-          subtitle={`${cartera.porcentajeVencida.toFixed(2)}% de la cartera`}
-          badge="Riesgo elevado"
-          tone="pink"
-          icon="warning"
-          warning
+          meta={`${cartera.porcentajeVencida.toFixed(1)}% de la cartera`}
+          tone="red"
+          critical
         />
         <KpiCard
           title="MORA > 90 DÍAS"
           value={money.format(cartera.mora90)}
-          subtitle={`${cartera.porcentajeMora90.toFixed(2)}% de la cartera`}
-          badge="Cartera crítica"
+          meta={`${cartera.porcentajeMora90.toFixed(1)}% de la cartera`}
           tone="violet"
-          icon="shield"
-          warning
+          critical
         />
         <KpiCard
           title="COBROS DEL MES"
-          value={collectionVisible}
-          subtitle="Requiere conciliación bancaria"
-          badge={`${money.format(cobrosMes.totalDetectado)} detectado`}
+          value={collectionLabel}
+          meta={`${money.format(cobrosMes.totalDetectado)} detectado`}
           tone="teal"
-          icon="cash"
-          warning
+          critical
         />
         <KpiCard
-          title="CLIENTES CON SALDO"
+          title="CLIENTES"
           value={integer.format(cartera.clientesConSaldo)}
-          subtitle="Clientes activos en cartera"
-          badge={`${calidadDatos.coberturaPoliticaCredito.toFixed(1)}% con política`}
+          meta="Con saldo activo"
           tone="green"
-          icon="users"
         />
         <KpiCard
-          title="DOCUMENTOS PENDIENTES"
+          title="DOCUMENTOS"
           value={integer.format(cartera.documentosPendientes)}
-          subtitle="Documentos con saldo positivo"
-          badge="Sin anulados"
+          meta="Pendientes de cobro"
           tone="indigo"
-          icon="docs"
         />
       </section>
 
-      <section className="pro-mini-grid">
-        <MiniMetric
-          label="VENCE 0–7 DÍAS"
-          value={money.format(operacion.vence7Dias)}
-          detail={`${operacion.documentosVence7Dias} documentos`}
-          icon="calendar"
-          tone="amber"
-          onClick={navigateReports}
-        />
-        <MiniMetric
-          label="VENCE 8–30 DÍAS"
-          value={money.format(operacion.vence8a30Dias)}
-          detail={`${operacion.documentosVence8a30Dias} documentos`}
-          icon="calendar"
-          tone="orange"
-          onClick={navigateReports}
-        />
-        <MiniMetric
-          label="SIN POLÍTICA"
-          value={integer.format(operacion.clientesSinPolitica)}
-          detail={`${operacion.documentosCreditoPendiente} docs. pendientes`}
-          icon="policy"
-          tone="violet"
-          onClick={() => onNavigate?.('creditos')}
-        />
-        <MiniMetric
-          label="ANULADOS NO ENCONTRADOS"
-          value={integer.format(operacion.anuladosNoEncontrados)}
-          detail={`${calidadDatos.coincidenciaAnulaciones.toFixed(1)}% coincidencia`}
-          icon="cancelled"
-          tone="rose"
-          onClick={() => onNavigate?.('anulados')}
-        />
-        <MiniMetric
-          label="PROMESAS VENCIDAS"
-          value={integer.format(operacion.promesasVencidas)}
-          detail="Compromisos pendientes"
-          icon="promise"
-          tone="red"
-          onClick={() => onNavigate?.('gestion')}
-        />
-        <MiniMetric
-          label="CALIDAD DEL DATO"
-          value={qualityLabel}
-          detail={`${calidadDatos.documentosEvaluados} docs. evaluados`}
-          icon="quality"
-          tone="teal"
-        />
-      </section>
-
-      <section className="pro-analytics-grid">
+      <section className="exec-layout">
         <Panel
           title="Aging de cartera"
-          subtitle="Distribución del saldo pendiente por antigüedad"
+          subtitle="Saldo pendiente por antigüedad"
+          className="exec-panel--aging"
         >
-          <div className="pro-aging">
+          <div className="exec-aging">
             {aging.map((item, index) => (
-              <div className="pro-aging__row" key={item.key}>
+              <div className="exec-aging__row" key={item.key}>
                 <span>{item.label}</span>
-                <div className="pro-aging__track">
+                <div className="exec-aging__track">
                   <i
                     style={{
                       width: `${Math.max(item.porcentaje, 1)}%`,
@@ -499,84 +338,166 @@ export function DashboardPage({
                     }}
                   />
                 </div>
-                <strong>{money.format(item.saldo)}</strong>
+                <strong>{compactMoney.format(item.saldo)}</strong>
                 <small>{item.porcentaje.toFixed(1)}%</small>
-                <em>{item.documentos} docs.</em>
               </div>
             ))}
           </div>
         </Panel>
 
         <Panel
-          title="Evolución de cartera y cobros"
+          title="Evolución de cartera"
           subtitle={
             historico.disponible
               ? 'Comparación mensual'
-              : 'Preparado para snapshots mensuales'
+              : 'Esperando histórico comparable'
           }
+          className="exec-panel--history"
         >
           {historico.disponible ? (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={historico.series}>
                 <defs>
-                  <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
+                  <linearGradient
+                    id="executiveGradient"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="1"
+                  >
+                    <stop
+                      offset="0%"
+                      stopColor="#6366f1"
+                      stopOpacity={0.36}
+                    />
+                    <stop
+                      offset="100%"
+                      stopColor="#6366f1"
+                      stopOpacity={0.02}
+                    />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e8edf7" />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={(v) => compactMoney.format(v)} tickLine={false} axisLine={false} />
-                <Tooltip formatter={(value) => money.format(Number(value))} />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#edf1f7"
+                />
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  tickFormatter={(value) =>
+                    compactMoney.format(Number(value))
+                  }
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  formatter={(value) =>
+                    money.format(Number(value))
+                  }
+                />
                 <Area
                   type="monotone"
                   dataKey="cartera"
                   stroke="#6366f1"
-                  fill="url(#portfolioGradient)"
+                  fill="url(#executiveGradient)"
                   strokeWidth={3}
                 />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="pro-history-empty">
-              <div className="pro-history-empty__visual">
-                <span /><span /><span /><span /><span /><span />
+            <div className="exec-history-empty">
+              <div className="exec-history-empty__chart">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
               </div>
               <strong>Histórico insuficiente</strong>
-              <p>{historico.motivo}</p>
+              <small>Se habilitará después de dos cortes comparables.</small>
             </div>
           )}
         </Panel>
 
         <Panel
-          title="Top clientes por saldo"
-          subtitle="Concentración de cartera activa"
+          title="Estado operativo"
+          subtitle="Incidencias y próximos vencimientos"
+          className="exec-panel--operations"
+        >
+          <div className="exec-status-list">
+            <StatusItem
+              label="Vence 0–7 días"
+              value={money.format(operacion.vence7Dias)}
+              detail={`${operacion.documentosVence7Dias} documentos`}
+              tone="amber"
+              onClick={navigateReports}
+            />
+            <StatusItem
+              label="Vence 8–30 días"
+              value={money.format(operacion.vence8a30Dias)}
+              detail={`${operacion.documentosVence8a30Dias} documentos`}
+              tone="blue"
+              onClick={navigateReports}
+            />
+            <StatusItem
+              label="Clientes sin política"
+              value={integer.format(operacion.clientesSinPolitica)}
+              detail={`${operacion.documentosCreditoPendiente} docs. pendientes`}
+              tone="violet"
+              onClick={() => onNavigate?.('creditos')}
+            />
+            <StatusItem
+              label="Anulados no encontrados"
+              value={integer.format(operacion.anuladosNoEncontrados)}
+              detail={`${calidadDatos.coincidenciaAnulaciones.toFixed(1)}% coincidencia`}
+              tone="red"
+              onClick={() => onNavigate?.('anulados')}
+            />
+            <StatusItem
+              label="Promesas vencidas"
+              value={integer.format(operacion.promesasVencidas)}
+              detail="Compromisos pendientes"
+              tone="amber"
+              onClick={() => onNavigate?.('gestion')}
+            />
+            <StatusItem
+              label="Calidad del dato"
+              value={qualityLabel}
+              detail={`${calidadDatos.documentosEvaluados} docs. evaluados`}
+              tone="teal"
+            />
+          </div>
+        </Panel>
+
+        <Panel
+          title="Top clientes"
+          subtitle="Concentración por saldo"
           action={
-            <button type="button" className="pro-link" onClick={navigateReports}>
+            <button
+              type="button"
+              className="exec-link"
+              onClick={navigateReports}
+            >
               Ver detalle →
             </button>
           }
+          className="exec-panel--clients"
         >
-          <div className="pro-ranking">
-            {topClientes.slice(0, 6).map((client, index) => (
-              <div className="pro-ranking__row" key={`${client.cliente}-${index}`}>
-                <span className="pro-ranking__number">{index + 1}</span>
-                <div className="pro-ranking__name">
+          <div className="exec-ranking">
+            {topClientes.slice(0, 5).map((client, index) => (
+              <div key={`${client.cliente}-${index}`}>
+                <span>{index + 1}</span>
+                <div>
                   <strong>{client.cliente}</strong>
                   <small>
-                    Vencido {money.format(client.vencido)} ·
-                    {' '}{client.porcentajeVencido.toFixed(1)}%
+                    Vencido {client.porcentajeVencido.toFixed(1)}%
                   </small>
                 </div>
-                <div className="pro-ranking__value">
-                  <strong>{money.format(client.saldo)}</strong>
-                  <i style={{
-                    width: `${Math.min(
-                      100,
-                      (client.saldo / Math.max(topClientes[0]?.saldo || 1, 1)) * 100,
-                    )}%`,
-                  }} />
-                </div>
+                <b>{compactMoney.format(client.saldo)}</b>
               </div>
             ))}
           </div>
@@ -584,47 +505,59 @@ export function DashboardPage({
 
         <Panel
           title="Cartera por vendedor"
-          subtitle="Participación sobre saldo pendiente"
+          subtitle="Participación del saldo"
+          className="exec-panel--sellers"
         >
-          <div className="pro-seller-layout">
-            <div className="pro-donut">
-              <ResponsiveContainer width="100%" height={210}>
+          <div className="exec-seller-grid">
+            <div className="exec-donut">
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={carteraPorVendedor.slice(0, 6)}
+                    data={carteraPorVendedor.slice(0, 5)}
                     dataKey="saldo"
                     nameKey="vendedor"
-                    innerRadius={58}
-                    outerRadius={84}
+                    innerRadius={44}
+                    outerRadius={65}
                     paddingAngle={2}
                     stroke="none"
                   >
-                    {carteraPorVendedor.slice(0, 6).map((seller, index) => (
-                      <Cell
-                        key={seller.vendedor}
-                        fill={CHART_COLORS[index]}
-                      />
-                    ))}
+                    {carteraPorVendedor
+                      .slice(0, 5)
+                      .map((seller, index) => (
+                        <Cell
+                          key={seller.vendedor}
+                          fill={CHART_COLORS[index]}
+                        />
+                      ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value) => money.format(Number(value))}
+                    formatter={(value) =>
+                      money.format(Number(value))
+                    }
                   />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="pro-donut__center">
+              <div>
                 <small>Total</small>
                 <strong>{compactMoney.format(sellerTotal)}</strong>
               </div>
             </div>
-            <div className="pro-seller-list">
+
+            <div className="exec-sellers">
               {carteraPorVendedor.slice(0, 5).map((seller, index) => (
                 <div key={seller.vendedor}>
                   <i style={{ background: CHART_COLORS[index] }} />
-                  <span title={seller.vendedor}>{seller.vendedor}</span>
+                  <span title={seller.vendedor}>
+                    {seller.vendedor}
+                  </span>
                   <strong>
                     {sellerTotal > 0
-                      ? ((seller.saldo / sellerTotal) * 100).toFixed(1)
-                      : '0.0'}%
+                      ? (
+                          (seller.saldo / sellerTotal) *
+                          100
+                        ).toFixed(1)
+                      : '0.0'}
+                    %
                   </strong>
                 </div>
               ))}
@@ -634,25 +567,28 @@ export function DashboardPage({
 
         <Panel
           title="Mora crítica"
-          subtitle="Clientes con saldo superior a 90 días"
+          subtitle="Clientes con más de 90 días"
           action={
-            <button type="button" className="pro-link" onClick={navigateReports}>
-              Reporte completo →
+            <button
+              type="button"
+              className="exec-link"
+              onClick={navigateReports}
+            >
+              Reporte →
             </button>
           }
+          className="exec-panel--critical"
         >
-          <div className="pro-critical-list">
-            {moraCritica.slice(0, 6).map((debtor, index) => (
+          <div className="exec-critical">
+            {moraCritica.slice(0, 5).map((debtor, index) => (
               <div key={`${debtor.cliente}-${index}`}>
-                <span className="pro-critical-list__rank">{index + 1}</span>
+                <span>{index + 1}</span>
                 <div>
                   <strong>{debtor.cliente}</strong>
-                  <small>{debtor.vendedor} · {debtor.documentos} docs.</small>
+                  <small>{debtor.documentos} documentos</small>
                 </div>
-                <span className="pro-critical-list__days">
-                  {debtor.maxDias} días
-                </span>
-                <strong>{money.format(debtor.mora90)}</strong>
+                <em>{debtor.maxDias} d</em>
+                <b>{compactMoney.format(debtor.mora90)}</b>
               </div>
             ))}
           </div>
@@ -660,96 +596,54 @@ export function DashboardPage({
 
         <Panel
           title="Alertas críticas"
-          subtitle="Acciones que requieren atención"
+          subtitle="Acciones prioritarias"
+          className="exec-panel--alerts"
         >
-          <div className="pro-alert-list">
-            {alertas.map((alert) => (
+          <div className="exec-alerts">
+            {alertas.slice(0, 5).map((alert) => (
               <button
                 key={alert.key}
                 type="button"
                 onClick={() => {
                   const target = alert.target.toLowerCase() as
-                    'reportes' | 'creditos' | 'anulados' | 'gestion';
+                    | 'reportes'
+                    | 'creditos'
+                    | 'anulados'
+                    | 'gestion';
+
                   onNavigate?.(target);
                 }}
               >
-                <span className={`pro-alert-list__dot pro-alert-list__dot--${alert.severity.toLowerCase()}`} />
-                <div>
+                <i
+                  className={`exec-alert-dot exec-alert-dot--${alert.severity.toLowerCase()}`}
+                />
+                <span>
                   <strong>{alert.label}</strong>
                   <small>
                     {alert.severity === 'CRITICAL'
                       ? 'Prioridad alta'
-                      : alert.severity === 'WARNING'
-                        ? 'Requiere revisión'
-                        : 'Informativo'}
+                      : 'Requiere revisión'}
                   </small>
-                </div>
+                </span>
                 <b>{integer.format(alert.count)}</b>
                 <em>→</em>
               </button>
             ))}
           </div>
         </Panel>
-
-        <Panel
-          title="Composición de movimientos detectados"
-          subtitle="No equivale a cobranza bancaria oficial"
-        >
-          <div className="pro-collection-layout">
-            <ResponsiveContainer width="42%" height={220}>
-              <PieChart>
-                <Pie
-                  data={collectionBreakdown}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={54}
-                  outerRadius={78}
-                  stroke="none"
-                >
-                  <Cell fill="#14b8a6" />
-                  <Cell fill="#8b5cf6" />
-                </Pie>
-                <Tooltip formatter={(value) => money.format(Number(value))} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="pro-collection-legend">
-              <span>
-                <i className="pro-dot-teal" />
-                <small>Abonos parciales</small>
-                <strong>{money.format(cobrosMes.abonosParcialesDetectados)}</strong>
-                <em>{cobrosMes.movimientosParciales} movimientos</em>
-              </span>
-              <span>
-                <i className="pro-dot-violet" />
-                <small>Cierres por desaparición</small>
-                <strong>{money.format(cobrosMes.cierresPorDesaparicionDetectados)}</strong>
-                <em>{cobrosMes.movimientosPorDesaparicion} movimientos</em>
-              </span>
-              <p>{cobrosMes.nota}</p>
-            </div>
-          </div>
-        </Panel>
       </section>
 
-      <section className="pro-future-grid">
-        {kpisFuturos.slice(0, 3).map((item, index) => (
-          <EmptyFuture
-            key={item.key}
-            title={item.label}
-            icon={index === 0 ? 'chart' : index === 1 ? 'target' : 'agent'}
-            reason={item.motivo}
-          />
-        ))}
-      </section>
-
-      <footer className="pro-footer">
+      <footer className="exec-footer">
         <span>
-          <i className="pro-online-dot" />
-          Fuente ejecutiva conectada
+          ● Fuente ejecutiva conectada
         </span>
         <span>
-          Corte {formatDate(executiveStats.fechaCorte)} ·
-          {' '}Última detección {formatDate(executiveStats.ultimaDeteccionAbono)}
+          {descuadresDetectados > 0
+            ? `${descuadresDetectados} descuadres activos`
+            : 'Sin descuadres activos'}
+        </span>
+        <span>
+          Cobros detectados: {money.format(cobrosMes.totalDetectado)}
         </span>
       </footer>
     </div>
