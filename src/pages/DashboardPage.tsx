@@ -1,2 +1,7 @@
-export { DashboardPage } from './dashboard/ProfessionalDashboardPage';
-export type { DashboardPageProps } from './dashboard/ProfessionalDashboardPage';
+﻿export {
+  DashboardPage,
+} from "./dashboard/DashboardPage";
+
+export type {
+  DashboardPageProps,
+} from "./dashboard/DashboardPage";

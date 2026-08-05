@@ -1,5 +1,14 @@
-﻿import { DashboardPage as ProfessionalDashboardPage } from "./ProfessionalDashboardPage";
+﻿import {
+  DashboardPage as ProfessionalDashboardPage,
+  type DashboardPageProps,
+} from "./ProfessionalDashboardPage";
 
-export default function DashboardPage() {
-  return <ProfessionalDashboardPage />;
+export type { DashboardPageProps };
+
+export function DashboardPage(
+  props: DashboardPageProps,
+) {
+  return (
+    <ProfessionalDashboardPage {...props} />
+  );
 }
