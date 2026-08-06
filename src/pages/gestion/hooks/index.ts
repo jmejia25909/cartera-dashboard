@@ -7,3 +7,12 @@ export type {
   GestionViewState,
   GestionViewStateOptions,
 } from "./useGestionViewState";
+
+export {
+  useGestion,
+} from "./useGestion";
+
+export type {
+  GestionController,
+  UseGestionOptions,
+} from "./useGestion";
