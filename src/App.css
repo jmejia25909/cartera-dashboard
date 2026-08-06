@@ -4903,3 +4903,246 @@ button:disabled {
     min-height: 360px !important;
   }
 }
+
+
+/* GESTION OPERATIONAL WORKSPACE PACK 003 */
+
+.gestion-powerbi-page {
+  display: grid !important;
+  grid-template-rows: auto auto minmax(0, 1fr) !important;
+  gap: 8px !important;
+  height: calc(100vh - 142px) !important;
+  min-height: 600px !important;
+  padding: 8px 12px 10px !important;
+  overflow: hidden !important;
+}
+
+.gestion-executive-layout {
+  display: grid !important;
+  grid-template-columns: minmax(480px, 0.85fr) minmax(680px, 1.65fr) !important;
+  gap: 8px !important;
+  align-items: start !important;
+}
+
+.gestion-kpi-panel,
+.gestion-toolbar-panel {
+  min-height: 96px !important;
+  max-height: 112px !important;
+  height: 100% !important;
+  padding: 9px 11px !important;
+  overflow: hidden !important;
+}
+
+.gestion-kpi-panel {
+  display: grid !important;
+  grid-template-columns: 128px minmax(0, 1fr) !important;
+  gap: 9px !important;
+  align-items: center !important;
+}
+
+.gestion-toolbar-panel {
+  display: grid !important;
+  grid-template-columns: 138px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  align-items: center !important;
+}
+
+.gestion-kpi-panel .gestion-panel-title,
+.gestion-toolbar-panel .gestion-panel-title {
+  margin: 0 !important;
+}
+
+.gestion-panel-title__icon {
+  width: 30px !important;
+  height: 30px !important;
+  flex-basis: 30px !important;
+  border-radius: 8px !important;
+  font-size: 0.8rem !important;
+}
+
+.gestion-panel-title strong {
+  font-size: 0.76rem !important;
+}
+
+.gestion-panel-title small {
+  font-size: 0.56rem !important;
+  line-height: 1.2 !important;
+}
+
+.gestion-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 6px !important;
+}
+
+.gestion-kpi-card {
+  min-height: 60px !important;
+  height: 60px !important;
+  padding: 8px 9px !important;
+  border-radius: 10px !important;
+}
+
+.gestion-kpi-title {
+  font-size: 0.55rem !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.gestion-kpi-value {
+  margin-top: 4px !important;
+  font-size: clamp(1rem, 1.2vw, 1.28rem) !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.gestion-toolbar-panel > div:not(.gestion-panel-title) {
+  display: grid !important;
+  grid-template-columns:
+    minmax(170px, 1.4fr)
+    minmax(140px, 0.9fr)
+    118px
+    118px
+    auto
+    auto
+    auto !important;
+  gap: 6px !important;
+  align-items: end !important;
+  min-width: 0 !important;
+}
+
+.gestion-toolbar-panel .field {
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.gestion-toolbar-panel .field span {
+  display: block !important;
+  margin-bottom: 3px !important;
+  font-size: 0.57rem !important;
+}
+
+.gestion-toolbar-panel select,
+.gestion-toolbar-panel input[type="date"] {
+  width: 100% !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 8px !important;
+  font-size: 0.64rem !important;
+  border-radius: 8px !important;
+}
+
+.gestion-toolbar-panel .btn {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 9px !important;
+  font-size: 0.61rem !important;
+  white-space: nowrap !important;
+}
+
+.gestion-toolbar-panel br,
+.gestion-toolbar-panel hr {
+  display: none !important;
+}
+
+.gestion-clients-panel {
+  display: grid !important;
+  grid-template-rows: 42px minmax(0, 1fr) !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+.gestion-table-title {
+  min-height: 42px !important;
+  height: 42px !important;
+  padding: 7px 12px !important;
+}
+
+.gestion-table-title strong {
+  font-size: 0.78rem !important;
+}
+
+.gestion-table-title small {
+  font-size: 0.56rem !important;
+}
+
+.gestion-table-wrapper {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: none !important;
+  overflow: auto !important;
+  scrollbar-gutter: stable !important;
+}
+
+.gestion-data-table {
+  width: 100% !important;
+  min-width: 920px !important;
+}
+
+.gestion-data-table thead {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 5 !important;
+}
+
+.gestion-data-table thead th {
+  height: 32px !important;
+  padding: 0 8px !important;
+  font-size: 0.58rem !important;
+}
+
+.gestion-data-table tbody td {
+  height: 34px !important;
+  padding: 4px 8px !important;
+  font-size: 0.64rem !important;
+}
+
+.gestion-data-table tbody tr:nth-child(even) {
+  background: #fbfcff !important;
+}
+
+.gestion-data-table tbody tr:hover {
+  background: #f0f4ff !important;
+}
+
+.gestion-data-table .btn {
+  min-height: 26px !important;
+  height: 26px !important;
+  padding: 0 8px !important;
+  font-size: 0.59rem !important;
+}
+
+@media (max-width: 1360px) {
+  .gestion-executive-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page {
+    height: auto !important;
+    overflow: auto !important;
+  }
+
+  .gestion-kpi-panel,
+  .gestion-toolbar-panel {
+    max-height: none !important;
+  }
+
+  .gestion-clients-panel {
+    min-height: 520px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .gestion-kpi-panel,
+  .gestion-toolbar-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .gestion-toolbar-panel > div:not(.gestion-panel-title) {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
