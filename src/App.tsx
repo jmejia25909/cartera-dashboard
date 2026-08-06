@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
+import "./pages/gestion/gestion.css";
 import {
   AppHeader,
   AppNavigation,
