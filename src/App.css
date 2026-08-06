@@ -4451,3 +4451,161 @@ button:disabled {
     overflow-x: auto;
   }
 }
+
+
+/* GESTION COMPACT LAYOUT PACK 021 */
+
+.gestion-powerbi-page,
+.gestion-page,
+.gestion-executive-layout {
+  min-height: auto !important;
+}
+
+.gestion-executive-layout {
+  display: grid !important;
+  grid-template-columns: minmax(440px, 0.95fr) minmax(0, 1.8fr) !important;
+  gap: 12px !important;
+  align-items: stretch !important;
+  margin: 12px 14px 0 !important;
+}
+
+.gestion-kpi-panel,
+.gestion-toolbar-panel {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 14px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+.gestion-kpi-panel {
+  display: grid !important;
+  grid-template-columns: 110px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.gestion-toolbar-panel {
+  display: grid !important;
+  grid-template-columns: 110px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.gestion-kpi-panel .gestion-section-title,
+.gestion-toolbar-panel .gestion-section-title {
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+
+.gestion-kpi-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 !important;
+}
+
+.gestion-kpi-card {
+  min-height: 74px !important;
+  padding: 10px 12px !important;
+  overflow: hidden !important;
+}
+
+.gestion-kpi-card .kpi-label,
+.gestion-kpi-card small,
+.gestion-kpi-card span:first-child {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.gestion-kpi-card .kpi-value,
+.gestion-kpi-card strong {
+  font-size: clamp(1rem, 1.35vw, 1.45rem) !important;
+  line-height: 1.1 !important;
+}
+
+.gestion-filters-panel {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1.25fr) minmax(180px, 0.9fr) minmax(280px, 1.3fr) auto !important;
+  gap: 10px !important;
+  align-items: end !important;
+  width: 100% !important;
+}
+
+.gestion-filters-panel > * {
+  min-width: 0 !important;
+}
+
+.gestion-filters-panel select,
+.gestion-filters-panel input {
+  width: 100% !important;
+  min-height: 34px !important;
+}
+
+.gestion-filters-panel .gestion-date-range,
+.gestion-filters-panel .date-range,
+.gestion-filters-panel [class*="date"] {
+  min-width: 0 !important;
+}
+
+.gestion-clients-panel,
+.gestion-clients-panel.card,
+.gestion-clients-panel + .card,
+.gestion-executive-layout + .card {
+  margin-top: 12px !important;
+}
+
+.gestion-clients-panel {
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.gestion-clients-panel .table-wrapper,
+.gestion-clients-panel .gestion-table-shell,
+.gestion-clients-panel .gestion-data-table {
+  margin-top: 0 !important;
+}
+
+.gestion-data-table,
+.gestion-clients-panel table {
+  font-size: 0.82rem !important;
+}
+
+.gestion-data-table th,
+.gestion-clients-panel table th {
+  padding: 9px 10px !important;
+}
+
+.gestion-data-table td,
+.gestion-clients-panel table td {
+  padding: 8px 10px !important;
+}
+
+.gestion-clients-panel .btn,
+.gestion-data-table .btn {
+  min-height: 30px !important;
+  padding: 5px 10px !important;
+}
+
+@media (max-width: 1180px) {
+  .gestion-executive-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-filters-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .gestion-kpi-panel,
+  .gestion-toolbar-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-kpi-grid,
+  .gestion-filters-panel {
+    grid-template-columns: 1fr !important;
+  }
+}
