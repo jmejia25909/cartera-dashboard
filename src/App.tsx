@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
 import { GestionFiltersPanel, GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { buildGestionClientSummaries } from "./pages/gestion/services";
 import {
   AppHeader,
   AppNavigation,
@@ -1751,13 +1752,13 @@ export default function App() {
                           </td>
                         </GestionClientRow>
                       ) : (
-                        [...clientesUnicos]
-                          .map(cliente => {
-                            const docsCliente = todosDocsVencidos.filter(d => d.razon_social === cliente || d.cliente === cliente);
-                            const totalCliente = docsCliente.reduce((sum, d) => sum + getDocAmount(d), 0);
-                            return { cliente, docsCliente, totalCliente };
-                          })
-                          .sort((a, b) => b.totalCliente - a.totalCliente)
+                        buildGestionClientSummaries({
+                          clientes: clientesUnicos,
+                          documentos: todosDocsVencidos,
+                          getClientName: (documento) =>
+                            documento.razon_social || documento.cliente || "",
+                          getAmount: getDocAmount,
+                        })
                           .map(({ cliente, docsCliente, totalCliente }) => {
                             const maxDias = docsCliente.length > 0 ? Math.max(...docsCliente.map(d => d.dias_vencidos || 0)) : 0;
                             const gestionesSemana = allGestiones.filter(g =>
