@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionKpiCard, GestionSectionTitle } from "./pages/gestion/components";
+import { GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1252,13 +1252,8 @@ export default function App() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="gestion-executive-layout gestion-powerbi-page">
           {/* KPIs de Gestión */}
-          <div className="card gestion-kpi-panel">
-            <GestionSectionTitle
-  icon="▦"
-  title="Resumen de gestión"
-  subtitle="Indicadores operativos de cobranza"
-/>
-            <div className="kpis-grid gestion-kpi-grid">
+          <GestionKpisPanel>
+<div className="kpis-grid gestion-kpi-grid">
               <GestionKpiCard
   label={<>Clientes con Vencidos</>}
   value={<>{clientesConVencidos.length}</>}
@@ -1281,17 +1276,11 @@ export default function App() {
   tone="violet"
 />
             </div>
-          </div>
+</GestionKpisPanel>
           
           {/* Filtros y Acciones */}
-          <div className="card gestion-toolbar-panel">
-            <GestionSectionTitle
-  icon="⌕"
-  title="Filtros y acciones"
-  subtitle="Consulta, reportes y gestión masiva"
-/>
-            
-            {/* Fila 1: Filtros principales - CENTRADA */}
+          <GestionToolbarPanel>
+{/* Fila 1: Filtros principales - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
               <label className="field" style={{marginBottom: 0, minWidth: '150px'}}>
                 <span style={{fontSize: '0.8rem'}}>Cliente</span>
@@ -1417,7 +1406,7 @@ export default function App() {
                 📧 Estados
               </button>
             </div>
-          </div>
+</GestionToolbarPanel>
           </div>
           
           {/* GESTOR INTEGRADO DE CLIENTE - UNA SOLA INTERFAZ FUNCIONAL */}
