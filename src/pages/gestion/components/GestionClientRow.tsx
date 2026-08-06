@@ -1,15 +1,4 @@
-import type {
-  MouseEventHandler,
-  ReactNode,
-} from "react";
-
-interface GestionClientRowProps {
-  children: ReactNode;
-  className?: string;
-  onClick?: MouseEventHandler<HTMLTableRowElement>;
-  style?: React.CSSProperties;
-  title?: string;
-}
+import type { GestionClientRowProps } from "../types";
 
 export function GestionClientRow({
   children,

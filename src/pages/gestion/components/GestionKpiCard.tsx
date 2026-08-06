@@ -1,17 +1,4 @@
-import type { ReactNode } from "react";
-
-type GestionKpiTone =
-  | "primary"
-  | "danger"
-  | "success"
-  | "violet";
-
-interface GestionKpiCardProps {
-  label: ReactNode;
-  value: ReactNode;
-  tone?: GestionKpiTone;
-  negative?: boolean;
-}
+import type { GestionKpiCardProps } from "../types";
 
 export function GestionKpiCard({
   label,

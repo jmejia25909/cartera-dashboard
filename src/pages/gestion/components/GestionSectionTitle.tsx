@@ -1,9 +1,4 @@
-interface GestionSectionTitleProps {
-  icon: string;
-  title: string;
-  subtitle: string;
-  className?: string;
-}
+import type { GestionSectionTitleProps } from "../types";
 
 export function GestionSectionTitle({
   icon,

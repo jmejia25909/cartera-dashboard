@@ -1,15 +1,11 @@
-import type { ReactNode } from "react";
+import type { GestionChildrenProps } from "../types";
 import {
   GestionSectionTitle,
 } from "./GestionSectionTitle";
 
-interface GestionPanelProps {
-  children: ReactNode;
-}
-
 export function GestionKpisPanel({
   children,
-}: GestionPanelProps) {
+}: GestionChildrenProps) {
   return (
     <section className="card gestion-kpi-panel">
       <GestionSectionTitle
@@ -24,7 +20,7 @@ export function GestionKpisPanel({
 
 export function GestionToolbarPanel({
   children,
-}: GestionPanelProps) {
+}: GestionChildrenProps) {
   return (
     <section className="card gestion-toolbar-panel">
       <GestionSectionTitle

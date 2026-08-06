@@ -1,12 +1,8 @@
-import type { ReactNode } from "react";
-
-interface GestionClientsPanelProps {
-  children: ReactNode;
-}
+import type { GestionChildrenProps } from "../types";
 
 export function GestionClientsPanel({
   children,
-}: GestionClientsPanelProps) {
+}: GestionChildrenProps) {
   return (
     <section className="card gestion-clients-panel">
       {children}

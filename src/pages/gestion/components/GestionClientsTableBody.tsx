@@ -1,11 +1,7 @@
-import type { ReactNode } from "react";
-
-interface GestionClientsTableBodyProps {
-  children: ReactNode;
-}
+import type { GestionChildrenProps } from "../types";
 
 export function GestionClientsTableBody({
   children,
-}: GestionClientsTableBodyProps) {
+}: GestionChildrenProps) {
   return <tbody>{children}</tbody>;
 }

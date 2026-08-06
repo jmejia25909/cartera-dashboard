@@ -1,11 +1,7 @@
-import type { ReactNode } from "react";
-
-interface GestionClientsRowsProps {
-  children: ReactNode;
-}
+import type { GestionChildrenProps } from "../types";
 
 export function GestionClientsRows({
   children,
-}: GestionClientsRowsProps) {
+}: GestionChildrenProps) {
   return <>{children}</>;
 }

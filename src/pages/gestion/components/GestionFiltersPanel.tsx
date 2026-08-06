@@ -1,12 +1,8 @@
-import type { ReactNode } from "react";
-
-interface GestionFiltersPanelProps {
-  children: ReactNode;
-}
+import type { GestionChildrenProps } from "../types";
 
 export function GestionFiltersPanel({
   children,
-}: GestionFiltersPanelProps) {
+}: GestionChildrenProps) {
   return (
     <div className="gestion-filters-panel">
       {children}
