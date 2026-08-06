@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1411,7 +1411,7 @@ export default function App() {
           
           {/* GESTOR INTEGRADO DE CLIENTE - UNA SOLA INTERFAZ FUNCIONAL */}
           {selectedCliente && selectedCliente !== "Todos" ? (
-            <div className="card gestion-clients-panel">
+            <GestionClientsPanel>
               {/* HEADER DEL CLIENTE */}
               <div style={{
                 display: 'flex',
@@ -1724,7 +1724,7 @@ export default function App() {
                   </p>
                 )}
               </div>
-            </div>
+            </GestionClientsPanel>
           ) : (
             /* TABLA DE CLIENTES PARA SELECCIONAR */
             <div className="card" style={{marginTop: '20px'}}>

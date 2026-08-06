@@ -10,3 +10,7 @@ export {
   GestionKpisPanel,
   GestionToolbarPanel,
 } from "./GestionPanels";
+
+export {
+  GestionClientsPanel,
+} from "./GestionClientsPanel";
