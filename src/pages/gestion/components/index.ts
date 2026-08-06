@@ -14,3 +14,7 @@ export {
 export {
   GestionClientsPanel,
 } from "./GestionClientsPanel";
+
+export {
+  GestionClientsTableShell,
+} from "./GestionClientsTableShell";

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1570,7 +1570,7 @@ export default function App() {
                   <h3 style={{fontSize: '1.1rem', fontWeight: '700', marginBottom: '12px', color: '#1f2937'}}>
                     📋 Documentos Vencidos ({docsVencidosCliente.length})
                   </h3>
-                  <div className="table-wrapper gestion-table-wrapper">
+                  <GestionClientsTableShell>
                     <table className="data-table" style={{fontSize: '0.85rem', marginBottom: 0}}>
                       <thead>
                         <tr>
@@ -1604,7 +1604,7 @@ export default function App() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </GestionClientsTableShell>
                 </div>
               )}
 
