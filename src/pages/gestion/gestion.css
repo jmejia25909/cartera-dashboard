@@ -710,3 +710,10 @@
 .gestion-kpi-card--violet::after {
   background: linear-gradient(#8b5cf6, #5b7bea) !important;
 }
+
+
+/* GESTION FILTERS PANEL PACK 013 */
+
+.gestion-filters-panel {
+  display: contents;
+}

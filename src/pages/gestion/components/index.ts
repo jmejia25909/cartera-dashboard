@@ -42,3 +42,7 @@ export {
 export {
   GestionClientRow,
 } from "./GestionClientRow";
+
+export {
+  GestionFiltersPanel,
+} from "./GestionFiltersPanel";

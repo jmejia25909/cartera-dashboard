@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionFiltersPanel, GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1279,7 +1279,7 @@ export default function App() {
 </GestionKpisPanel>
           
           {/* Filtros y Acciones */}
-          <GestionToolbarPanel>
+          <GestionToolbarPanel><GestionFiltersPanel>
 {/* Fila 1: Filtros principales - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
               <label className="field" style={{marginBottom: 0, minWidth: '150px'}}>
@@ -1406,7 +1406,7 @@ export default function App() {
                 📧 Estados
               </button>
             </div>
-</GestionToolbarPanel>
+</GestionFiltersPanel></GestionToolbarPanel>
           </div>
           
           {/* GESTOR INTEGRADO DE CLIENTE - UNA SOLA INTERFAZ FUNCIONAL */}
