@@ -22,3 +22,11 @@ export {
 export {
   GestionClientsTable,
 } from "./GestionClientsTable";
+
+export {
+  GestionClientsTableHeader,
+} from "./GestionClientsTableHeader";
+
+export {
+  GestionClientsTableBody,
+} from "./GestionClientsTableBody";

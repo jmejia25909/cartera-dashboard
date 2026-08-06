@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1732,7 +1732,7 @@ export default function App() {
               <div className="table-wrapper">
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
                   <GestionClientsTable>
-                    <thead>
+                    <GestionClientsTableHeader>
                       <tr>
                         <th>Cliente</th>
                         <th className="num">Vencido</th>
@@ -1742,8 +1742,8 @@ export default function App() {
                         <th className="text-center" title="Último estado de cuenta">📄</th>
                         <th style={{width: '100px'}}>Acción</th>
                       </tr>
-                    </thead>
-                    <tbody>
+                    </GestionClientsTableHeader>
+                    <GestionClientsTableBody>
                       {clientesUnicos.length === 0 ? (
                         <tr>
                           <td colSpan={7} style={{textAlign: 'center', color: '#9ca3af', padding: '24px'}}>
@@ -1804,7 +1804,7 @@ export default function App() {
                             );
                           })
                       )}
-                    </tbody>
+                    </GestionClientsTableBody>
                   </GestionClientsTable>
                 </div>
               </div>
