@@ -813,7 +813,7 @@ export default function App() {
       setDescuadresDetectados(descuadres);
 
       if (descuadres > 0) {
-        addToast(`âš ï¸ Importado: ${resultTyped.insertedDocs} docs (${descuadres} con descuadres en tramos)`, "warning");
+        addToast(`⚠️ Importado: ${resultTyped.insertedDocs} docs (${descuadres} con descuadres en tramos)`, "warning");
       } else {
         addToast(`✅ Importación exitosa: ${resultTyped.insertedDocs} documentos perfectamente cuadrados`, "success");
       }
@@ -864,7 +864,7 @@ export default function App() {
         context: createPdfContext(empresa),
       });
 
-      addToast("âœ… Reporte de abonos generado", "success");
+      addToast("✅ Reporte de abonos generado", "success");
     } catch (error: unknown) {
       console.error(error);
       const message =
@@ -988,7 +988,7 @@ export default function App() {
         context: createPdfContext(empresa),
       });
 
-      addToast("âœ… Reporte de tendencias generado", "success");
+      addToast("✅ Reporte de tendencias generado", "success");
     } catch (error: unknown) {
       console.error(error);
       const message =
@@ -1250,29 +1250,29 @@ export default function App() {
       };
 
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="gestion-executive-layout gestion-powerbi-page">
+        <div className="gestion-powerbi-page" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="gestion-executive-layout">
           {/* KPIs de Gestión */}
           <GestionKpisPanel>
 <div className="kpis-grid gestion-kpi-grid">
               <GestionKpiCard
-  label={<>Clientes con Vencidos</>}
+  label={<>Clientes con vencimientos</>}
   value={<>{clientesConVencidos.length}</>}
   tone="primary"
 />
               <GestionKpiCard
-  label={<>Total por Gestionar</>}
+  label={<>Total vencido</>}
   value={<>{fmtMoney(totalPorGestionar)}</>}
   tone="danger"
   negative
 />
               <GestionKpiCard
-  label={<>Contactados Hoy</>}
+  label={<>En gestión esta semana</>}
   value={<>{gestionesHoy}</>}
   tone="success"
 />
               <GestionKpiCard
-  label={<>PDFs Generados</>}
+  label={<>Estados generados</>}
   value={<>{pdfsGenerados}</>}
   tone="violet"
 />
@@ -1282,7 +1282,7 @@ export default function App() {
           {/* Filtros y Acciones */}
           <GestionToolbarPanel><GestionFiltersPanel>
 {/* Fila 1: Filtros principales - CENTRADA */}
-            <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
+            <div className="gestion-filter-fields" style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
               <label className="field" style={{marginBottom: 0, minWidth: '150px'}}>
                 <span style={{fontSize: '0.8rem'}}>Cliente</span>
                 <select
@@ -1317,10 +1317,10 @@ export default function App() {
             </div>
 
             {/* Separador visual */}
-            <div style={{height: '1px', backgroundColor: '#e5e7eb', margin: '8px 0'}}></div>
+            <div className="gestion-filter-divider" style={{height: '1px', backgroundColor: '#e5e7eb', margin: '8px 0'}}></div>
 
             {/* Fila 2: Reportes - CENTRADA */}
-            <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
+            <div className="gestion-filter-actions" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
               <span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>📅 Fechas:</span>
               <input 
                 type="date" 
@@ -1709,7 +1709,7 @@ export default function App() {
                                 disabled={!hasWritePermissions}
                                 title="Eliminar gestión"
                               >
-                                âŒ
+                                ❌
                               </button>
                             </td>
                           </tr>
@@ -1728,7 +1728,7 @@ export default function App() {
             </GestionClientsPanel>
           ) : (
             /* TABLA DE CLIENTES PARA SELECCIONAR */
-            <div className="card" style={{marginTop: '20px'}}>
+            <div className="card gestion-clients-panel" style={{marginTop: '20px'}}>
               <div className="card-title gestion-table-title"><span><strong>Clientes con vencimientos</strong><small>Selecciona un cliente para iniciar la gestión</small></span></div>
               <div className="table-wrapper">
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
@@ -1781,16 +1781,16 @@ export default function App() {
                                 <td style={{fontWeight: '600', color: '#7c3aed'}}>{cliente}</td>
                                 <td className="num" style={{fontWeight: '700', fontSize: '0.95rem'}}>{fmtMoney(totalCliente)}</td>
                                 <td className="text-center" title={lastCall ? lastCall.fecha : 'Sin contacto'}>
-                                  {lastCall ? <span style={{color:'#10b981', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
+                                  {lastCall ? <span style={{color:'#10b981', fontSize: '1.1rem'}}>✅</span> : '—'}
                                 </td>
                                 <td className="text-center" title={lastEmail ? lastEmail.fecha : 'Sin envío'}>
-                                  {lastEmail ? <span style={{color:'#3b82f6', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
+                                  {lastEmail ? <span style={{color:'#3b82f6', fontSize: '1.1rem'}}>✅</span> : '—'}
                                 </td>
                                 <td className="text-center" title={lastWhatsapp ? lastWhatsapp.fecha : 'Sin envío'}>
-                                  {lastWhatsapp ? <span style={{color:'#22c55e', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
+                                  {lastWhatsapp ? <span style={{color:'#22c55e', fontSize: '1.1rem'}}>✅</span> : '—'}
                                 </td>
                                 <td className="text-center" title={lastPdf ? lastPdf.fecha : 'Sin estado de cuenta'}>
-                                  {lastPdf ? <span style={{color:'#6366f1', fontSize: '1.1rem'}}>âœ…</span> : 'â—‹'}
+                                  {lastPdf ? <span style={{color:'#6366f1', fontSize: '1.1rem'}}>✅</span> : '—'}
                                 </td>
                                 <td>
                                   <button 
@@ -1798,7 +1798,7 @@ export default function App() {
                                     style={{padding: '6px 12px', fontSize: '0.85rem', width: '100%'}}
                                     onClick={() => setSelectedCliente(cliente)}
                                   >
-                                    Gestionar â†’
+                                    Gestionar →
                                   </button>
                                 </td>
                               </tr>
@@ -1858,12 +1858,12 @@ export default function App() {
             context: createPdfContext(empresa),
           });
 
-          addToast('âœ… Reporte PDF generado correctamente', 'success');
+          addToast('✅ Reporte PDF generado correctamente', 'success');
         } catch (error: unknown) {
           console.error('Error generando reporte PDF:', error);
           const mensaje =
             error instanceof Error ? error.message : 'Error desconocido';
-          addToast(`âŒ Error al generar PDF: ${mensaje}`, 'error');
+          addToast(`❌ Error al generar PDF: ${mensaje}`, 'error');
         }
       };
 
@@ -1910,11 +1910,11 @@ export default function App() {
             context: createPdfContext(empresa),
           });
 
-          addToast("âœ… Reporte de promesas generado", "success");
+          addToast("✅ Reporte de promesas generado", "success");
         } catch (error: unknown) {
           console.error("Error generando reporte de promesas:", error);
           const message = error instanceof Error ? error.message : "Error desconocido";
-          addToast(`âŒ Error generando reporte: ${message}`, "error");
+          addToast(`❌ Error generando reporte: ${message}`, "error");
         }
       };
 
@@ -2182,7 +2182,7 @@ export default function App() {
         localStorage.removeItem("cartera_gestiones_locales");
         localStorage.removeItem("cartera_theme");
         localStorage.removeItem("electron_data");
-        console.log("âœ… Almacenamiento local limpio");
+        console.log("✅ Almacenamiento local limpio");
       } catch (storageError) {
         console.error("Error limpiando almacenamiento local:", storageError);
       }
@@ -2358,10 +2358,10 @@ export default function App() {
                   onChange={e => setPromesaEditando({...promesaEditando, estado_promesa: e.target.value})}
                   style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
                 >
-                  <option value="Pendiente">â³ Pendiente</option>
-                  <option value="Parcialmente Cumplida">âš ï¸ Parcialmente Cumplida</option>
-                  <option value="Cumplida">âœ… Cumplida</option>
-                  <option value="Incumplida">âŒ Incumplida</option>
+                  <option value="Pendiente">⏳ Pendiente</option>
+                  <option value="Parcialmente Cumplida">⚠️ Parcialmente Cumplida</option>
+                  <option value="Cumplida">✅ Cumplida</option>
+                  <option value="Incumplida">❌ Incumplida</option>
                   <option value="Reprogramada">🔄 Reprogramada</option>
                 </select>
               </label>
@@ -2450,4 +2450,6 @@ export default function App() {
     </div>
   );
 }
+
+
 

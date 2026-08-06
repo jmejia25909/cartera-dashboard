@@ -1,0 +1,3 @@
+import fs from "node:fs";
+const checks=[["src/App.tsx",'className="gestion-filter-fields"'],["src/App.tsx",'className="gestion-filter-actions"'],["src/App.tsx",'className="card gestion-clients-panel"'],["src/App.css","GESTION UI POLISH SCROLL PACK 023"],["src/App.css","max-height:calc(100vh - 405px)"],["src/App.css","position:sticky!important"]];
+let fail=false; for(const [f,t] of checks){const c=fs.existsSync(f)?fs.readFileSync(f,"utf8"):"";const ok=c.includes(t);console.log(`${ok?"OK":"ERROR"} - ${f}: ${t}`);if(!ok)fail=true;} if(fail)process.exit(1); console.log("Diseño aprobado verificado.");
