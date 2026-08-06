@@ -691,3 +691,22 @@
     grid-template-columns: 1fr 1fr !important;
   }
 }
+
+
+/* GESTION HEADER KPIS PACK 005 */
+
+.gestion-kpi-card--primary::after {
+  background: linear-gradient(#4568eb, #7657d8) !important;
+}
+
+.gestion-kpi-card--danger::after {
+  background: linear-gradient(#e24a60, #f28a56) !important;
+}
+
+.gestion-kpi-card--success::after {
+  background: linear-gradient(#10a57b, #38bda0) !important;
+}
+
+.gestion-kpi-card--violet::after {
+  background: linear-gradient(#8b5cf6, #5b7bea) !important;
+}

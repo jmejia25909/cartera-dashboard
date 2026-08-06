@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
+import { GestionKpiCard, GestionSectionTitle } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1252,30 +1253,43 @@ export default function App() {
           <div className="gestion-executive-layout gestion-powerbi-page">
           {/* KPIs de Gestión */}
           <div className="card gestion-kpi-panel">
-            <div className="card-title gestion-panel-title"><span className="gestion-panel-title__icon">▦</span><span><strong>Resumen de gestión</strong><small>Indicadores operativos de cobranza</small></span></div>
+            <GestionSectionTitle
+  icon="▦"
+  title="Resumen de gestión"
+  subtitle="Indicadores operativos de cobranza"
+/>
             <div className="kpis-grid gestion-kpi-grid">
-              <div className="kpi-card gestion-kpi-card">
-                <div className="kpi-title gestion-kpi-title">Clientes con Vencidos</div>
-                <div className="kpi-value gestion-kpi-value">{clientesConVencidos.length}</div>
-              </div>
-              <div className="kpi-card gestion-kpi-card">
-                <div className="kpi-title gestion-kpi-title">Total por Gestionar</div>
-                <div className="kpi-value kpi-negative gestion-kpi-value">{fmtMoney(totalPorGestionar)}</div>
-              </div>
-              <div className="kpi-card gestion-kpi-card">
-                <div className="kpi-title gestion-kpi-title">Contactados Hoy</div>
-                <div className="kpi-value gestion-kpi-value">{gestionesHoy}</div>
-              </div>
-              <div className="kpi-card gestion-kpi-card">
-                <div className="kpi-title gestion-kpi-title">PDFs Generados</div>
-                <div className="kpi-value gestion-kpi-value">{pdfsGenerados}</div>
-              </div>
+              <GestionKpiCard
+  label={<>Clientes con Vencidos</>}
+  value={<>{clientesConVencidos.length}</>}
+  tone="primary"
+/>
+              <GestionKpiCard
+  label={<>Total por Gestionar</>}
+  value={<>{fmtMoney(totalPorGestionar)}</>}
+  tone="danger"
+  negative
+/>
+              <GestionKpiCard
+  label={<>Contactados Hoy</>}
+  value={<>{gestionesHoy}</>}
+  tone="success"
+/>
+              <GestionKpiCard
+  label={<>PDFs Generados</>}
+  value={<>{pdfsGenerados}</>}
+  tone="violet"
+/>
             </div>
           </div>
           
           {/* Filtros y Acciones */}
           <div className="card gestion-toolbar-panel">
-            <div className="card-title gestion-panel-title"><span className="gestion-panel-title__icon">⌕</span><span><strong>Filtros y acciones</strong><small>Consulta, reportes y gestión masiva</small></span></div>
+            <GestionSectionTitle
+  icon="⌕"
+  title="Filtros y acciones"
+  subtitle="Consulta, reportes y gestión masiva"
+/>
             
             {/* Fila 1: Filtros principales - CENTRADA */}
             <div style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
