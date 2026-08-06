@@ -4746,3 +4746,117 @@ button:disabled {
 .gestion-clients-panel tbody td{font-size:.82rem!important;padding:9px 12px!important}.gestion-clients-panel tbody tr:hover{background:rgba(90,85,235,.045)!important}.gestion-clients-panel .btn{min-height:32px!important;padding:5px 12px!important;border-radius:8px!important}
 @media(max-width:1380px){.gestion-powerbi-page>.gestion-executive-layout{grid-template-columns:1fr!important}.gestion-powerbi-page .gestion-filters-panel{grid-template-columns:minmax(300px,1fr) minmax(420px,1fr)!important}.gestion-clients-panel .gestion-table-shell,.gestion-clients-panel .table-wrapper{max-height:calc(100vh - 560px)!important}}
 @media(max-width:900px){.gestion-powerbi-page .gestion-filters-panel{grid-template-columns:1fr!important;grid-template-areas:"fields" "actions"!important}.gestion-filter-actions{grid-template-columns:1fr 18px 1fr!important}}
+
+
+/* GESTION TABLE STICKY HEADER PACK 024 */
+
+/*
+ * El scroll ocurre dentro del contenedor de la tabla.
+ * El sticky se aplica directamente a cada TH para evitar
+ * que el encabezado desaparezca en Chromium/Electron.
+ */
+.gestion-clients-panel .gestion-table-shell,
+.gestion-clients-panel .table-wrapper {
+  position: relative !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  isolation: isolate !important;
+}
+
+.gestion-clients-panel table {
+  position: relative !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.gestion-clients-panel thead {
+  position: static !important;
+}
+
+.gestion-clients-panel thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 20 !important;
+  height: 52px !important;
+  min-height: 52px !important;
+  padding: 13px 14px !important;
+  background:
+    linear-gradient(
+      180deg,
+      #f4f2ff 0%,
+      #eceffd 100%
+    ) !important;
+  border-top: 1px solid #dfe3f4 !important;
+  border-bottom: 1px solid #cfd6ec !important;
+  box-shadow:
+    0 2px 6px rgba(49, 46, 129, 0.08),
+    inset 0 -1px 0 rgba(99, 102, 241, 0.08) !important;
+  color: #18213a !important;
+  font-size: 0.98rem !important;
+  font-weight: 800 !important;
+  line-height: 1.1 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+}
+
+/* Esquinas del encabezado */
+.gestion-clients-panel thead th:first-child {
+  border-top-left-radius: 10px !important;
+}
+
+.gestion-clients-panel thead th:last-child {
+  border-top-right-radius: 10px !important;
+}
+
+/* Iconos de columnas operativas */
+.gestion-clients-panel thead th.text-center,
+.gestion-clients-panel thead th[title] {
+  font-size: 1.22rem !important;
+  line-height: 1 !important;
+}
+
+/* Conserva texto grande en Cliente, Vencido y Acción */
+.gestion-clients-panel thead th:first-child,
+.gestion-clients-panel thead th:nth-child(2),
+.gestion-clients-panel thead th:last-child {
+  font-size: 0.98rem !important;
+}
+
+/* Filas un poco más legibles sin perder densidad */
+.gestion-clients-panel tbody td {
+  min-height: 38px !important;
+  padding: 10px 13px !important;
+  font-size: 0.84rem !important;
+  line-height: 1.2 !important;
+}
+
+/* Primera fila no debe quedar debajo del sticky */
+.gestion-clients-panel tbody tr:first-child td {
+  border-top: 0 !important;
+}
+
+/* Scrollbar integrada */
+.gestion-clients-panel .gestion-table-shell::-webkit-scrollbar,
+.gestion-clients-panel .table-wrapper::-webkit-scrollbar {
+  width: 10px !important;
+}
+
+.gestion-clients-panel .gestion-table-shell::-webkit-scrollbar-track,
+.gestion-clients-panel .table-wrapper::-webkit-scrollbar-track {
+  background: #f2f4fb !important;
+  border-radius: 10px !important;
+}
+
+.gestion-clients-panel .gestion-table-shell::-webkit-scrollbar-thumb,
+.gestion-clients-panel .table-wrapper::-webkit-scrollbar-thumb {
+  background: #aeb6cc !important;
+  border: 2px solid #f2f4fb !important;
+  border-radius: 10px !important;
+}
+
+.gestion-clients-panel .gestion-table-shell::-webkit-scrollbar-thumb:hover,
+.gestion-clients-panel .table-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #8f99b4 !important;
+}
