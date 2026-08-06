@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1731,7 +1731,7 @@ export default function App() {
               <div className="card-title gestion-table-title"><span><strong>Clientes con vencimientos</strong><small>Selecciona un cliente para iniciar la gestión</small></span></div>
               <div className="table-wrapper">
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
-                  <table className="data-table gestion-data-table" style={{minWidth: 900, width: '100%', tableLayout: 'auto'}}>
+                  <GestionClientsTable>
                     <thead>
                       <tr>
                         <th>Cliente</th>
@@ -1805,7 +1805,7 @@ export default function App() {
                           })
                       )}
                     </tbody>
-                  </table>
+                  </GestionClientsTable>
                 </div>
               </div>
             </div>

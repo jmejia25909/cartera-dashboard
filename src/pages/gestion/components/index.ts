@@ -18,3 +18,7 @@ export {
 export {
   GestionClientsTableShell,
 } from "./GestionClientsTableShell";
+
+export {
+  GestionClientsTable,
+} from "./GestionClientsTable";
