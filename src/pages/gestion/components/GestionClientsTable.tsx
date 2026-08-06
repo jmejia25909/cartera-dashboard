@@ -4,7 +4,7 @@ export function GestionClientsTable({
   children,
 }: GestionChildrenProps) {
   return (
-    <table className="data-table gestion-data-table">
+    <table className="gestion-data-table data-table">
       {children}
     </table>
   );

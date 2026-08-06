@@ -1320,7 +1320,7 @@ export default function App() {
             <div className="gestion-filter-divider" style={{height: '1px', backgroundColor: '#e5e7eb', margin: '8px 0'}}></div>
 
             {/* Fila 2: Reportes - CENTRADA */}
-            <div className="gestion-filter-actions" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
+            <div className="gestion-report-row" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
               <span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>📅 Fechas:</span>
               <input 
                 type="date" 
@@ -1366,7 +1366,7 @@ export default function App() {
             <div style={{height: '1px', backgroundColor: '#e5e7eb', margin: '8px 0'}}></div>
 
             {/* Fila 3: Acciones Masivas - CENTRADA */}
-            <div style={{display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap'}}>
+            <div className="gestion-bulk-actions" style={{display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap'}}>
               <button
                 className="btn secondary"
                 onClick={() => {
