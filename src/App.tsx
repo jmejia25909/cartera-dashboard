@@ -1251,165 +1251,225 @@ export default function App() {
 
       return (
         <div className="gestion-powerbi-page" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="gestion-executive-layout">
-          {/* KPIs de Gestión */}
-          <GestionKpisPanel>
-<div className="kpis-grid gestion-kpi-grid">
-              <GestionKpiCard
-  label={<>Clientes con vencimientos</>}
-  value={<>{clientesConVencidos.length}</>}
-  tone="primary"
-/>
-              <GestionKpiCard
-  label={<>Total vencido</>}
-  value={<>{fmtMoney(totalPorGestionar)}</>}
-  tone="danger"
-  negative
-/>
-              <GestionKpiCard
-  label={<>En gestión esta semana</>}
-  value={<>{gestionesHoy}</>}
-  tone="success"
-/>
-              <GestionKpiCard
-  label={<>Estados generados</>}
-  value={<>{pdfsGenerados}</>}
-  tone="violet"
-/>
-            </div>
-</GestionKpisPanel>
-          
-          {/* Filtros y Acciones */}
-          <GestionToolbarPanel><GestionFiltersPanel>
-{/* Fila 1: Filtros principales - CENTRADA */}
-            <div className="gestion-filter-fields" style={{display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '10px', flexWrap: 'wrap'}}>
-              <label className="field" style={{marginBottom: 0, minWidth: '150px'}}>
-                <span style={{fontSize: '0.8rem'}}>Cliente</span>
-                <select
-                  value={selectedCliente}
-                  onChange={e => {
-                    const value = e.target.value;
-                    if (value === 'Todos') {
-                      setSelectedCliente('');
-                    } else {
-                      setSelectedCliente(value);
-                    }
-                  }}
-                  style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
-                >
-                  <option value="Todos">Todos</option>
-                  {clientes.map(c => (
-                    <option key={c.cliente || c.razon_social} value={c.cliente || c.razon_social}>
-                      {c.razon_social || c.cliente}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field" style={{marginBottom: 0, minWidth: '150px'}}>
-                <span style={{fontSize: '0.8rem'}}>Estado</span>
-                <select value={filtroVistaGestion} onChange={e => setFiltroVistaGestion(e.target.value)} style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}>
-                  <option value="Todos">Todos</option>
-                  <option value="Con Vencidos">Con Vencidos</option>
-                  <option value="Mayor Deuda">Mayor Deuda</option>
-                  <option value="Más Días Vencidos">Más Días Vencidos</option>
-                </select>
-              </label>
-            </div>
+          <div className="gestion-executive-layout gestion-workspace-header">
+            <GestionKpisPanel>
+              <div className="gestion-kpi-grid">
+                <GestionKpiCard
+                  label={<>Clientes con vencimientos</>}
+                  value={<>{clientesConVencidos.length}</>}
+                  tone="primary"
+                />
+                <GestionKpiCard
+                  label={<>Total vencido</>}
+                  value={<>{fmtMoney(totalPorGestionar)}</>}
+                  tone="danger"
+                  negative
+                />
+                <GestionKpiCard
+                  label={<>En gestión esta semana</>}
+                  value={<>{gestionesHoy}</>}
+                  tone="success"
+                />
+                <GestionKpiCard
+                  label={<>Estados generados</>}
+                  value={<>{pdfsGenerados}</>}
+                  tone="violet"
+                />
+              </div>
+            </GestionKpisPanel>
 
-            {/* Separador visual */}
-            <div className="gestion-filter-divider" style={{height: '1px', backgroundColor: '#e5e7eb', margin: '8px 0'}}></div>
+            <GestionToolbarPanel>
+              <GestionFiltersPanel>
+                <div className="gestion-toolbar-content">
+                  <div className="gestion-filter-column">
+                    <label className="gestion-field">
+                      <span>Cliente</span>
+                      <select
+                        value={selectedCliente}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setSelectedCliente(
+                            value === "Todos" ? "" : value,
+                          );
+                        }}
+                      >
+                        <option value="Todos">Todos</option>
+                        {clientes.map((cliente) => (
+                          <option
+                            key={
+                              cliente.cliente ||
+                              cliente.razon_social
+                            }
+                            value={
+                              cliente.cliente ||
+                              cliente.razon_social
+                            }
+                          >
+                            {cliente.razon_social ||
+                              cliente.cliente}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-            {/* Fila 2: Reportes - CENTRADA */}
-            <div className="gestion-report-row" style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap'}}>
-              <span style={{fontSize: '0.85rem', fontWeight: '500', color: '#475569', whiteSpace: 'nowrap'}}>📅 Fechas:</span>
-              <input 
-                type="date" 
-                value={filtroFechaDesde} 
-                onChange={e => setFiltroFechaDesde(e.target.value)}
-                style={{
-                  padding: '4px 6px',
-                  borderRadius: '3px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '0.8rem'
-                }}
-              />
-              <span style={{color: '#94a3b8', fontSize: '0.75rem'}}>•</span>
-              <input 
-                type="date" 
-                value={filtroFechaHasta} 
-                onChange={e => setFiltroFechaHasta(e.target.value)}
-                style={{
-                  padding: '4px 6px',
-                  borderRadius: '3px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '0.8rem'
-                }}
-              />
-              <button 
-                className="btn primary"
-                onClick={exportarReporteGestion}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: '0.8rem',
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                📊 Reporte
-              </button>
-            </div>
+                    <label className="gestion-field">
+                      <span>Estado</span>
+                      <select
+                        value={filtroVistaGestion}
+                        onChange={(event) =>
+                          setFiltroVistaGestion(
+                            event.target.value,
+                          )
+                        }
+                      >
+                        <option value="Todos">Todos</option>
+                        <option value="Con Vencidos">
+                          Con vencidos
+                        </option>
+                        <option value="Mayor Deuda">
+                          Mayor deuda
+                        </option>
+                        <option value="Más Días Vencidos">
+                          Más días vencidos
+                        </option>
+                      </select>
+                    </label>
+                  </div>
 
-            {/* Separador visual */}
-            <div style={{height: '1px', backgroundColor: '#e5e7eb', margin: '8px 0'}}></div>
+                  <div className="gestion-report-column">
+                    <div className="gestion-date-title">
+                      <span aria-hidden="true">📅</span>
+                      <span>Periodo del reporte</span>
+                    </div>
 
-            {/* Fila 3: Acciones Masivas - CENTRADA */}
-            <div className="gestion-bulk-actions" style={{display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap'}}>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  if (resumenVencidos.length === 0) {
-                    addToast("No hay clientes con vencidos", "info");
-                    return;
-                  }
-                  const top = resumenVencidos.slice(0, 50);
-                  const lines = top.map(r => `${r.cliente}: ${fmtMoney(r.total)}`);
-                  copyToClipboard(lines.join('\r\n'));
-                  addToast("Lista masiva copiada al portapapeles", "success");
-                }}
-                disabled={!hasWritePermissions}
-                style={{padding: '4px 10px', fontSize: '0.8rem'}}
-              >
-                📞 Masiva
-              </button>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  if (resumenVencidos.length === 0) {
-                    addToast("No hay clientes con vencidos", "info");
-                    return;
-                  }
-                  const top = resumenVencidos.slice(0, 30);
-                  const lines = [
-                    `Resumen de vencidos - ${new Date().toLocaleDateString()}`,
-                    '',
-                    ...top.map(r => `- ${r.cliente}: ${fmtMoney(r.total)}`)
-                  ];
-                  const cuerpo = encodeURIComponent(lines.join('\r\n'));
-                  window.open(`mailto:?subject=Resumen%20de%20Vencidos&body=${cuerpo}`, '_blank');
-                  addToast("Resumen masivo listo para enviar", "success");
-                }}
-                disabled={!hasWritePermissions}
-                style={{padding: '4px 10px', fontSize: '0.8rem'}}
-              >
-                📧 Estados
-              </button>
-            </div>
-</GestionFiltersPanel></GestionToolbarPanel>
+                    <div className="gestion-date-range">
+                      <label className="gestion-date-field">
+                        <span>Desde</span>
+                        <input
+                          type="date"
+                          value={filtroFechaDesde}
+                          onChange={(event) =>
+                            setFiltroFechaDesde(
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </label>
+
+                      <span
+                        className="gestion-date-separator"
+                        aria-hidden="true"
+                      >
+                        →
+                      </span>
+
+                      <label className="gestion-date-field">
+                        <span>Hasta</span>
+                        <input
+                          type="date"
+                          value={filtroFechaHasta}
+                          onChange={(event) =>
+                            setFiltroFechaHasta(
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <div className="gestion-action-row">
+                      <button
+                        className="btn primary gestion-action-button"
+                        onClick={exportarReporteGestion}
+                      >
+                        <span aria-hidden="true">📊</span>
+                        Reporte
+                      </button>
+
+                      <button
+                        className="btn secondary gestion-action-button"
+                        onClick={() => {
+                          if (resumenVencidos.length === 0) {
+                            addToast(
+                              "No hay clientes con vencidos",
+                              "info",
+                            );
+                            return;
+                          }
+
+                          const top =
+                            resumenVencidos.slice(0, 50);
+                          const lines = top.map(
+                            (item) =>
+                              `${item.cliente}: ${fmtMoney(
+                                item.total,
+                              )}`,
+                          );
+
+                          copyToClipboard(
+                            lines.join("\r\n"),
+                          );
+                          addToast(
+                            "Lista masiva copiada al portapapeles",
+                            "success",
+                          );
+                        }}
+                        disabled={!hasWritePermissions}
+                      >
+                        <span aria-hidden="true">📞</span>
+                        Masiva
+                      </button>
+
+                      <button
+                        className="btn secondary gestion-action-button"
+                        onClick={() => {
+                          if (resumenVencidos.length === 0) {
+                            addToast(
+                              "No hay clientes con vencidos",
+                              "info",
+                            );
+                            return;
+                          }
+
+                          const top =
+                            resumenVencidos.slice(0, 30);
+                          const lines = [
+                            `Resumen de vencidos - ${new Date().toLocaleDateString()}`,
+                            "",
+                            ...top.map(
+                              (item) =>
+                                `- ${item.cliente}: ${fmtMoney(
+                                  item.total,
+                                )}`,
+                            ),
+                          ];
+
+                          const cuerpo = encodeURIComponent(
+                            lines.join("\r\n"),
+                          );
+
+                          window.open(
+                            `mailto:?subject=Resumen%20de%20Vencidos&body=${cuerpo}`,
+                            "_blank",
+                          );
+
+                          addToast(
+                            "Resumen masivo listo para enviar",
+                            "success",
+                          );
+                        }}
+                        disabled={!hasWritePermissions}
+                      >
+                        <span aria-hidden="true">📧</span>
+                        Estados
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </GestionFiltersPanel>
+            </GestionToolbarPanel>
           </div>
-          
+
           {/* GESTOR INTEGRADO DE CLIENTE - UNA SOLA INTERFAZ FUNCIONAL */}
           {selectedCliente && selectedCliente !== "Todos" ? (
             <GestionClientsPanel>
@@ -1728,7 +1788,7 @@ export default function App() {
             </GestionClientsPanel>
           ) : (
             /* TABLA DE CLIENTES PARA SELECCIONAR */
-            <div className="card gestion-clients-panel" style={{marginTop: '20px'}}>
+            <div className="card gestion-clients-panel gestion-clients-overview">
               <div className="card-title gestion-table-title"><span><strong>Clientes con vencimientos</strong><small>Selecciona un cliente para iniciar la gestión</small></span></div>
               <div className="table-wrapper">
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>

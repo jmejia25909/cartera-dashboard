@@ -717,3 +717,474 @@
 .gestion-filters-panel {
   display: contents;
 }
+
+/* GESTION WORKSPACE REBUILD PACK 026 - START */
+
+/*
+ * Capa visual definitiva del módulo Gestión.
+ * Se carga después de App.css y neutraliza los packs
+ * visuales anteriores sin alterar otros módulos.
+ */
+
+.gestion-powerbi-page {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+  padding: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-workspace-header {
+  display: grid !important;
+  grid-template-columns:
+    minmax(620px, 0.92fr)
+    minmax(720px, 1.08fr) !important;
+  gap: 16px !important;
+  align-items: stretch !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-panel,
+.gestion-powerbi-page .gestion-toolbar-panel {
+  position: relative !important;
+  display: grid !important;
+  min-width: 0 !important;
+  min-height: 178px !important;
+  margin: 0 !important;
+  padding: 20px !important;
+  overflow: visible !important;
+  transform: none !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 16px !important;
+  background: var(--bg-surface) !important;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.07) !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-panel:hover,
+.gestion-powerbi-page .gestion-toolbar-panel:hover,
+.gestion-powerbi-page .gestion-clients-overview:hover {
+  transform: none !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-panel {
+  grid-template-columns: 106px minmax(0, 1fr) !important;
+  gap: 16px !important;
+  align-items: center !important;
+}
+
+.gestion-powerbi-page .gestion-toolbar-panel {
+  grid-template-columns: 110px minmax(0, 1fr) !important;
+  gap: 18px !important;
+  align-items: center !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title {
+  min-width: 0 !important;
+  align-self: center !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title strong {
+  display: block !important;
+  font-size: 0.96rem !important;
+  line-height: 1.15 !important;
+  color: var(--text-main) !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title small {
+  display: block !important;
+  margin-top: 5px !important;
+  font-size: 0.71rem !important;
+  line-height: 1.25 !important;
+  color: var(--text-secondary) !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-grid {
+  display: grid !important;
+  grid-template-columns:
+    repeat(4, minmax(118px, 1fr)) !important;
+  gap: 10px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-card {
+  display: flex !important;
+  min-width: 0 !important;
+  min-height: 112px !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  padding: 14px 13px !important;
+  overflow: hidden !important;
+  transform: none !important;
+  border-width: 1px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 3px 12px rgba(30, 64, 175, 0.06) !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-title {
+  display: block !important;
+  min-height: 31px !important;
+  margin: 0 0 9px !important;
+  overflow: visible !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.69rem !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  white-space: normal !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-value {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  color: var(--text-main) !important;
+  background: none !important;
+  -webkit-text-fill-color: currentColor !important;
+  font-size: clamp(1.35rem, 1.62vw, 1.9rem) !important;
+  font-weight: 900 !important;
+  line-height: 1.05 !important;
+  letter-spacing: -0.055em !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-card--danger
+  .gestion-kpi-value {
+  color: #172033 !important;
+}
+
+.gestion-powerbi-page .gestion-filters-panel {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-toolbar-content {
+  display: grid !important;
+  grid-template-columns:
+    minmax(270px, 0.9fr)
+    minmax(390px, 1.1fr) !important;
+  gap: 22px !important;
+  align-items: end !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-filter-column {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 11px !important;
+  min-width: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-field,
+.gestion-powerbi-page .gestion-date-field {
+  display: grid !important;
+  min-width: 0 !important;
+  gap: 5px !important;
+  margin: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-field > span,
+.gestion-powerbi-page .gestion-date-field > span {
+  color: var(--text-secondary) !important;
+  font-size: 0.73rem !important;
+  font-weight: 750 !important;
+  line-height: 1 !important;
+}
+
+.gestion-powerbi-page .gestion-field select,
+.gestion-powerbi-page .gestion-date-field input {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 40px !important;
+  margin: 0 !important;
+  padding: 0 11px !important;
+  border: 1px solid #cfd8e8 !important;
+  border-radius: 9px !important;
+  background: var(--bg-surface) !important;
+  color: var(--text-main) !important;
+  font-size: 0.81rem !important;
+  outline: none !important;
+}
+
+.gestion-powerbi-page .gestion-field select:focus,
+.gestion-powerbi-page .gestion-date-field input:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12) !important;
+}
+
+.gestion-powerbi-page .gestion-report-column {
+  display: grid !important;
+  grid-template-rows: auto auto auto !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-date-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  color: var(--text-main) !important;
+  font-size: 0.8rem !important;
+  font-weight: 800 !important;
+}
+
+.gestion-powerbi-page .gestion-date-range {
+  display: grid !important;
+  grid-template-columns:
+    minmax(132px, 1fr)
+    22px
+    minmax(132px, 1fr) !important;
+  gap: 8px !important;
+  align-items: end !important;
+  min-width: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-date-separator {
+  display: flex !important;
+  height: 40px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #94a3b8 !important;
+  font-weight: 800 !important;
+}
+
+.gestion-powerbi-page .gestion-action-row {
+  display: grid !important;
+  grid-template-columns:
+    repeat(3, minmax(110px, 1fr)) !important;
+  gap: 9px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-action-button {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 39px !important;
+  margin: 0 !important;
+  padding: 0 12px !important;
+  transform: none !important;
+  justify-content: center !important;
+  border-radius: 9px !important;
+  font-size: 0.79rem !important;
+  font-weight: 800 !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  flex-direction: column !important;
+  margin: 0 !important;
+  padding: 18px 14px 12px !important;
+  overflow: hidden !important;
+  transform: none !important;
+  border-radius: 15px !important;
+}
+
+.gestion-powerbi-page .gestion-table-title {
+  flex: 0 0 auto !important;
+  margin: 0 8px 12px !important;
+  gap: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-table-title > span {
+  display: block !important;
+}
+
+.gestion-powerbi-page .gestion-table-title strong {
+  display: block !important;
+  color: var(--text-main) !important;
+  font-size: 1.12rem !important;
+  font-weight: 850 !important;
+  line-height: 1.2 !important;
+}
+
+.gestion-powerbi-page .gestion-table-title small {
+  display: block !important;
+  margin-top: 4px !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.79rem !important;
+  font-weight: 500 !important;
+  line-height: 1.2 !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  > .table-wrapper {
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  > .table-wrapper
+  > div {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: clamp(340px, calc(100vh - 430px), 620px) !important;
+  max-height: none !important;
+  min-height: 340px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+  isolation: isolate !important;
+  border: 1px solid #dce3f0 !important;
+  border-radius: 10px !important;
+  background: var(--bg-surface) !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table {
+  position: relative !important;
+  width: 100% !important;
+  min-width: 980px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  transform: none !important;
+  contain: none !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table thead {
+  position: static !important;
+  display: table-header-group !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table thead th {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 50 !important;
+  height: 50px !important;
+  padding: 11px 13px !important;
+  background: #eef0ff !important;
+  background-image:
+    linear-gradient(
+      180deg,
+      #f7f5ff 0%,
+      #eaedfb 100%
+    ) !important;
+  color: #172033 !important;
+  border-top: 0 !important;
+  border-bottom: 2px solid #cdd5ea !important;
+  box-shadow: 0 3px 7px rgba(30, 41, 59, 0.12) !important;
+  font-size: 0.91rem !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.025em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table thead th.text-center {
+  font-size: 1.14rem !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table tbody td {
+  padding: 9px 13px !important;
+  font-size: 0.8rem !important;
+  line-height: 1.2 !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table tbody tr {
+  background: var(--bg-surface) !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table tbody tr:nth-child(even) {
+  background: color-mix(
+    in srgb,
+    var(--bg-main) 45%,
+    var(--bg-surface)
+  ) !important;
+}
+
+.gestion-powerbi-page
+  .gestion-clients-overview
+  .gestion-data-table tbody tr:hover {
+  background: var(--bg-hover) !important;
+}
+
+@media (max-width: 1500px) {
+  .gestion-powerbi-page .gestion-workspace-header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page .gestion-kpi-panel,
+  .gestion-powerbi-page .gestion-toolbar-panel {
+    min-height: 164px !important;
+  }
+
+  .gestion-powerbi-page
+    .gestion-clients-overview
+    > .table-wrapper
+    > div {
+    height: clamp(
+      300px,
+      calc(100vh - 590px),
+      540px
+    ) !important;
+  }
+}
+
+@media (max-width: 920px) {
+  .gestion-powerbi-page .gestion-kpi-panel,
+  .gestion-powerbi-page .gestion-toolbar-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page .gestion-kpi-grid {
+    grid-template-columns:
+      repeat(2, minmax(130px, 1fr)) !important;
+  }
+
+  .gestion-powerbi-page .gestion-toolbar-content {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page .gestion-action-row {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* GESTION WORKSPACE REBUILD PACK 026 - END */
