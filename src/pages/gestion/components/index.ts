@@ -38,3 +38,7 @@ export {
 export {
   GestionClientsRows,
 } from "./GestionClientsRows";
+
+export {
+  GestionClientRow,
+} from "./GestionClientRow";

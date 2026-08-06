@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1745,11 +1745,11 @@ export default function App() {
                     </GestionClientsTableHeader>
                     <GestionClientsTableBody><GestionClientsRows>
                       {clientesUnicos.length === 0 ? (
-                        <tr>
+                        <GestionClientRow>
                           <td colSpan={7} style={{textAlign: 'center', color: '#9ca3af', padding: '24px'}}>
                             No se encontraron clientes con vencimientos
                           </td>
-                        </tr>
+                        </GestionClientRow>
                       ) : (
                         [...clientesUnicos]
                           .map(cliente => {
