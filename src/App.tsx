@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
-import { GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
+import { GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import {
   AppHeader,
   AppNavigation,
@@ -1733,7 +1733,7 @@ export default function App() {
                 <div style={{overflowX: 'auto', width: '100%', padding: 0, margin: 0}}>
                   <GestionClientsTable>
                     <GestionClientsTableHeader>
-                      <tr>
+                      <GestionClientsHeaderRow>
                         <th>Cliente</th>
                         <th className="num">Vencido</th>
                         <th className="text-center" title="Última llamada">📞</th>
@@ -1741,9 +1741,9 @@ export default function App() {
                         <th className="text-center" title="Último WhatsApp">💬</th>
                         <th className="text-center" title="Último estado de cuenta">📄</th>
                         <th style={{width: '100px'}}>Acción</th>
-                      </tr>
+                      </GestionClientsHeaderRow>
                     </GestionClientsTableHeader>
-                    <GestionClientsTableBody>
+                    <GestionClientsTableBody><GestionClientsRows>
                       {clientesUnicos.length === 0 ? (
                         <tr>
                           <td colSpan={7} style={{textAlign: 'center', color: '#9ca3af', padding: '24px'}}>
@@ -1804,7 +1804,7 @@ export default function App() {
                             );
                           })
                       )}
-                    </GestionClientsTableBody>
+                    </GestionClientsRows></GestionClientsTableBody>
                   </GestionClientsTable>
                 </div>
               </div>

@@ -30,3 +30,11 @@ export {
 export {
   GestionClientsTableBody,
 } from "./GestionClientsTableBody";
+
+export {
+  GestionClientsHeaderRow,
+} from "./GestionClientsHeaderRow";
+
+export {
+  GestionClientsRows,
+} from "./GestionClientsRows";
