@@ -4609,3 +4609,110 @@ button:disabled {
     grid-template-columns: 1fr !important;
   }
 }
+
+
+/* GESTION ROOT LAYOUT FIX PACK 022 */
+
+/* El contenedor raíz no debe reservar altura intermedia */
+.gestion-powerbi-page {
+  display: block !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 12px 14px 24px !important;
+  margin: 0 !important;
+}
+
+/* Cabecera compacta */
+.gestion-powerbi-page > .gestion-executive-layout {
+  display: grid !important;
+  grid-template-columns: minmax(460px, 0.95fr) minmax(0, 1.75fr) !important;
+  gap: 12px !important;
+  align-items: start !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Evita que los paneles superiores se recorten */
+.gestion-powerbi-page .gestion-kpi-panel,
+.gestion-powerbi-page .gestion-toolbar-panel {
+  min-height: 96px !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  align-self: start !important;
+  padding: 12px !important;
+}
+
+/* Los hijos internos tampoco deben forzar altura */
+.gestion-powerbi-page .gestion-kpi-panel > *,
+.gestion-powerbi-page .gestion-toolbar-panel > * {
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+/* El panel de filtros debe permitir múltiples líneas sin recorte */
+.gestion-powerbi-page .gestion-filters-panel {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.75fr) minmax(300px, 1.25fr) auto !important;
+  column-gap: 10px !important;
+  row-gap: 8px !important;
+  align-items: end !important;
+  overflow: visible !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.gestion-powerbi-page .gestion-filters-panel label,
+.gestion-powerbi-page .gestion-filters-panel .form-group {
+  margin: 0 !important;
+}
+
+/* La tabla debe aparecer inmediatamente después de la cabecera */
+.gestion-powerbi-page > .card,
+.gestion-powerbi-page > .gestion-clients-panel,
+.gestion-powerbi-page .gestion-clients-panel {
+  margin-top: 12px !important;
+  margin-bottom: 0 !important;
+  position: static !important;
+  transform: none !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+/* Neutraliza separadores artificiales */
+.gestion-powerbi-page > div:not(.gestion-executive-layout):not(.card):not(.gestion-clients-panel) {
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+/* Evita filas demasiado pequeñas o texto cortado */
+.gestion-powerbi-page .gestion-data-table th,
+.gestion-powerbi-page .gestion-data-table td,
+.gestion-powerbi-page .gestion-clients-panel table th,
+.gestion-powerbi-page .gestion-clients-panel table td {
+  line-height: 1.25 !important;
+  vertical-align: middle !important;
+}
+
+@media (max-width: 1180px) {
+  .gestion-powerbi-page > .gestion-executive-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page .gestion-filters-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .gestion-powerbi-page {
+    padding: 10px !important;
+  }
+
+  .gestion-powerbi-page .gestion-filters-panel {
+    grid-template-columns: 1fr !important;
+  }
+}
