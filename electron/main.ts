@@ -6,6 +6,10 @@ import { computeDashboardExecutiveStats } from "./dashboardExecutive";
 import { importContificoExcel } from "./importContifico";
 import { reconcileCollections } from "./collectionReconciliation";
 import {
+  getCollectionPeriodReconciliation,
+  saveCollectionPeriodReconciliation,
+} from "./collectionPeriodReconciliation";
+import {
   importCancelledDocumentsExcel,
   previewCancelledDocumentsExcel,
 } from "./importCancelledDocuments";
@@ -1707,6 +1711,7 @@ ipcMain.handle("limpiarBaseDatos", async () => {
       db.prepare("DELETE FROM clientes").run();
       db.prepare("DELETE FROM disputas").run();
       db.prepare("DELETE FROM cuentas_aplicar").run();
+      db.prepare("DELETE FROM conciliaciones_cobros").run();
       db.prepare("DELETE FROM abonos").run();
       db.prepare("DELETE FROM campana_clientes").run();
       db.prepare("DELETE FROM campanas").run();
@@ -1998,6 +2003,81 @@ ipcMain.handle("abonosListar", async () => {
 ipcMain.handle("clientesListar", async () => {
   return clientesListar();
 });
+
+ipcMain.handle(
+  "collectionReconciliationGet",
+  (_evt, payload: { year: number; month: number }) => {
+    try {
+      const row = getCollectionPeriodReconciliation(
+        db,
+        Number(payload?.year),
+        Number(payload?.month),
+      );
+
+      return { ok: true, row };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        row: null,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Error consultando la conciliación.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "collectionReconciliationSave",
+  (
+    _evt,
+    payload: {
+      year: number;
+      month: number;
+      officialValue: number;
+      observation?: string;
+      user?: string;
+    },
+  ) => {
+    try {
+      const year = Number(payload?.year);
+      const month = Number(payload?.month);
+
+      const stats = computeDashboardExecutiveStats(
+        db,
+        new Date(),
+        { year, month },
+      );
+
+      const row = saveCollectionPeriodReconciliation(
+        db,
+        {
+          year,
+          month,
+          officialValue: Number(payload?.officialValue),
+          observation: payload?.observation,
+          user: payload?.user,
+        },
+        {
+          detectedValue: stats.cobrosMes.totalDetectado,
+          detectedMovements: stats.cobrosMes.movimientosDetectados,
+        },
+      );
+
+      return { ok: true, row };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        row: null,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Error guardando la conciliación.",
+      };
+    }
+  },
+);
 
 ipcMain.handle("cuentaAplicarActualizar", (_evt, data) => {
   db.prepare(`

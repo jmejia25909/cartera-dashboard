@@ -53,6 +53,33 @@ function ensureSchema(db: Database.Database) {
       CREATE INDEX IF NOT EXISTS idx_abonos_documento ON abonos(documento);
     `);
 
+    // Conciliación financiera mensual.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conciliaciones_cobros (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        anio INTEGER NOT NULL,
+        mes INTEGER NOT NULL,
+        valor_detectado REAL NOT NULL DEFAULT 0,
+        valor_oficial REAL NOT NULL DEFAULT 0,
+        diferencia REAL NOT NULL DEFAULT 0,
+        movimientos_detectados INTEGER NOT NULL DEFAULT 0,
+        estado TEXT NOT NULL DEFAULT 'CONCILIADO'
+          CHECK (estado IN ('CONCILIADO', 'ANULADO')),
+        observacion TEXT DEFAULT '',
+        conciliado_por TEXT NOT NULL DEFAULT 'sistema',
+        conciliado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        actualizado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+        UNIQUE(anio, mes)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_conciliaciones_cobros_periodo
+        ON conciliaciones_cobros(anio, mes);
+
+      CREATE INDEX IF NOT EXISTS idx_conciliaciones_cobros_estado
+        ON conciliaciones_cobros(estado);
+    `);
+
+
 
   // LIMPIEZA: Eliminar columnas de aging estático si existen (ahora se calculan dinámicamente)
   const agingCols = ["por_vencer", "dias_30", "dias_60", "dias_90", "dias_120", "dias_mas_120"];

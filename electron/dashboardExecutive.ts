@@ -9,6 +9,10 @@ import type {
   DashboardSellerPortfolio,
   DashboardTopClient,
 } from "../src/types/dashboardExecutive";
+import {
+  getCollectionPeriodReconciliation,
+  isCollectionReconciliationCurrent,
+} from "./collectionPeriodReconciliation";
 
 type NumericRow = {
   value?: number | null;
@@ -302,6 +306,34 @@ export function computeDashboardExecutiveStats(
     abonosParcialesDetectados +
     cierresPorDesaparicionDetectados +
     otrosDetectados;
+
+  const collectionReconciliation =
+    period.selectedMonth === null
+      ? null
+      : getCollectionPeriodReconciliation(
+          db,
+          period.selectedYear,
+          period.selectedMonth,
+        );
+
+  const collectionReconciliationCurrent =
+    period.selectedMonth !== null &&
+    isCollectionReconciliationCurrent(
+      collectionReconciliation,
+      totalDetectado,
+      movimientosDetectados,
+    );
+
+  const collectionStatus =
+    collectionReconciliationCurrent
+      ? "CONCILIADO"
+      : "REQUIERE_CONCILIACION";
+
+  const collectionOfficialValue =
+    collectionReconciliationCurrent &&
+    collectionReconciliation
+      ? roundMoney(collectionReconciliation.officialValue)
+      : null;
 
   const monthlyRows = db.prepare(`
     SELECT
@@ -865,8 +897,8 @@ export function computeDashboardExecutiveStats(
     },
 
     cobrosMes: {
-      estado: "REQUIERE_CONCILIACION",
-      valorOficial: null,
+      estado: collectionStatus,
+      valorOficial: collectionOfficialValue,
       totalDetectado: roundMoney(totalDetectado),
       movimientosDetectados,
       abonosParcialesDetectados:
