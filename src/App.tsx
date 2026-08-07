@@ -1473,8 +1473,9 @@ export default function App() {
           {/* GESTOR INTEGRADO DE CLIENTE - UNA SOLA INTERFAZ FUNCIONAL */}
           {selectedCliente && selectedCliente !== "Todos" ? (
             <GestionClientsPanel>
+              <div className="gestion-client-workspace">
               {/* HEADER DEL CLIENTE */}
-              <div style={{
+              <div className="gestion-client-header" style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -1484,11 +1485,10 @@ export default function App() {
                 flexWrap: 'wrap',
                 gap: '12px'
               }}>
-                <div>
-                  <h2 style={{margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 700, color: '#1f2937'}}>
+                <div className="gestion-client-identity">\n                  <h2 className="gestion-client-name" style={{margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 700, color: '#1f2937'}}>
                     👤 {selectedCliente}
                   </h2>
-                  <div style={{
+                  <div className="gestion-client-summary" style={{
                     display: 'flex',
                     gap: '24px',
                     fontSize: '0.9rem',
@@ -1505,7 +1505,7 @@ export default function App() {
                   </div>
                 </div>
                 <button 
-                  className="btn secondary"
+                  className="btn secondary gestion-client-back"
                   style={{padding: '8px 16px', fontSize: '0.9rem'}}
                   onClick={() => setSelectedCliente(null)}
                   title="Volver a lista de clientes"
@@ -1515,14 +1515,14 @@ export default function App() {
               </div>
 
               {/* ACCIONES RÁPIDAS */}
-              <div style={{
+              <div className="gestion-client-actions" style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
                 gap: '12px',
                 marginBottom: '24px'
               }}>
                 <button 
-                  className="btn secondary"
+                  className="btn secondary gestion-client-action"
                   style={{
                     padding: '14px',
                     fontSize: '0.95rem',
@@ -1541,7 +1541,7 @@ export default function App() {
                 </button>
 
                 <button 
-                  className="btn secondary"
+                  className="btn secondary gestion-client-action"
                   style={{
                     padding: '14px',
                     fontSize: '0.95rem',
@@ -1559,7 +1559,7 @@ export default function App() {
                 </button>
 
                 <button 
-                  className="btn secondary"
+                  className="btn secondary gestion-client-action"
                   style={{
                     padding: '14px',
                     fontSize: '0.95rem',
@@ -1607,7 +1607,7 @@ export default function App() {
                 </button>
 
                 <button 
-                  className="btn primary"
+                  className="btn primary gestion-client-action"
                   style={{
                     padding: '14px',
                     fontSize: '0.95rem',
@@ -1627,8 +1627,8 @@ export default function App() {
 
               {/* DOCUMENTOS VENCIDOS DEL CLIENTE */}
               {docsVencidosCliente.length > 0 && (
-                <div style={{marginBottom: '24px'}}>
-                  <h3 style={{fontSize: '1.1rem', fontWeight: '700', marginBottom: '12px', color: '#1f2937'}}>
+                <div className="gestion-client-documents" style={{marginBottom: '24px'}}>
+                  <h3 className="gestion-client-section-title" style={{fontSize: '1.1rem', fontWeight: '700', marginBottom: '12px', color: '#1f2937'}}>
                     📋 Documentos Vencidos ({docsVencidosCliente.length})
                   </h3>
                   <GestionClientsTableShell>
@@ -1670,8 +1670,8 @@ export default function App() {
               )}
 
               {/* HISTORIAL DE GESTIONES */}
-              <div>
-                <div style={{
+              <div className="gestion-client-history">
+                <div className="gestion-client-history-header" style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -1679,7 +1679,7 @@ export default function App() {
                   flexWrap: 'wrap',
                   gap: '12px'
                 }}>
-                  <h3 style={{fontSize: '1.1rem', fontWeight: '700', margin: 0, color: '#1f2937'}}>
+                  <h3 className="gestion-client-section-title" style={{fontSize: '1.1rem', fontWeight: '700', margin: 0, color: '#1f2937'}}>
                     📞 Historial de Gestiones ({gestiones.length})
                   </h3>
                   {gestiones.length > 0 && (
@@ -1785,6 +1785,7 @@ export default function App() {
                   </p>
                 )}
               </div>
+                          </div>
             </GestionClientsPanel>
           ) : (
             /* TABLA DE CLIENTES PARA SELECCIONAR */

@@ -1477,3 +1477,283 @@
 }
 
 /* GESTION VISUAL POLISH PACK 027 - END */
+
+/* GESTION CLIENT WORKSPACE PACK 028 - START */
+
+/*
+ * Vista individual de Gestión.
+ * Estas reglas neutralizan estilos generales del listado
+ * sin alterar la vista general estabilizada en PACK 026/027.
+ */
+
+.gestion-powerbi-page
+  .gestion-clients-panel:has(.gestion-client-workspace) {
+  display: block !important;
+  flex: 0 0 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  transform: none !important;
+  contain: none !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 15px !important;
+  background: var(--bg-surface) !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06) !important;
+}
+
+.gestion-client-workspace {
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex-direction: column !important;
+  gap: 18px !important;
+  padding: 18px !important;
+  overflow: visible !important;
+}
+
+/* Cabecera */
+.gestion-client-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  gap: 18px !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 0 16px !important;
+  border-bottom: 1px solid #dfe5f0 !important;
+}
+
+.gestion-client-identity {
+  min-width: 0 !important;
+}
+
+.gestion-client-name {
+  margin: 0 0 10px !important;
+  overflow: hidden !important;
+  color: var(--text-main) !important;
+  font-size: 1.28rem !important;
+  font-weight: 850 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.025em !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.gestion-client-summary {
+  display: flex !important;
+  gap: 20px !important;
+  align-items: center !important;
+  margin: 0 !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.82rem !important;
+  line-height: 1.2 !important;
+  flex-wrap: wrap !important;
+}
+
+.gestion-client-summary > span {
+  display: inline-flex !important;
+  gap: 5px !important;
+  align-items: baseline !important;
+}
+
+.gestion-client-summary strong {
+  font-size: 0.96rem !important;
+  font-weight: 850 !important;
+}
+
+.gestion-client-back {
+  position: static !important;
+  inset: auto !important;
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 96px !important;
+  min-height: 38px !important;
+  margin: 0 !important;
+  padding: 0 14px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 9px !important;
+  transform: none !important;
+  font-size: 0.81rem !important;
+  font-weight: 800 !important;
+}
+
+/* Acciones rápidas */
+.gestion-client-actions {
+  display: grid !important;
+  grid-template-columns:
+    repeat(4, minmax(150px, 1fr)) !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.gestion-client-action {
+  position: static !important;
+  inset: auto !important;
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 76px !important;
+  height: 76px !important;
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  flex-direction: row !important;
+  gap: 9px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: visible !important;
+  border-radius: 11px !important;
+  transform: none !important;
+  font-size: 0.86rem !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
+}
+
+.gestion-client-action > span {
+  flex: 0 0 auto !important;
+  font-size: 1.32rem !important;
+  line-height: 1 !important;
+}
+
+.gestion-client-action:hover {
+  transform: none !important;
+  box-shadow: 0 5px 14px rgba(59, 130, 246, 0.12) !important;
+}
+
+/* Secciones */
+.gestion-client-documents,
+.gestion-client-history {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.gestion-client-section-title {
+  margin: 0 0 11px !important;
+  color: var(--text-main) !important;
+  font-size: 1.04rem !important;
+  font-weight: 850 !important;
+  line-height: 1.2 !important;
+}
+
+.gestion-client-history-header {
+  display: flex !important;
+  gap: 12px !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  margin: 0 0 11px !important;
+  flex-wrap: wrap !important;
+}
+
+/* Tablas internas: no heredar alto/scroll del listado general */
+.gestion-client-workspace
+  .gestion-table-wrapper,
+.gestion-client-workspace
+  .table-wrapper {
+  display: block !important;
+  width: 100% !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+  border: 1px solid #dfe5f0 !important;
+  border-radius: 10px !important;
+  background: var(--bg-surface) !important;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.045) !important;
+}
+
+.gestion-client-workspace
+  .gestion-table-wrapper
+  .gestion-data-table,
+.gestion-client-workspace
+  .table-wrapper
+  .data-table {
+  width: 100% !important;
+  min-width: 760px !important;
+  table-layout: auto !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+}
+
+.gestion-client-workspace
+  .gestion-data-table thead th,
+.gestion-client-workspace
+  .data-table thead th {
+  position: static !important;
+  top: auto !important;
+  z-index: auto !important;
+  height: 44px !important;
+  padding: 10px 12px !important;
+  background: #eef0ff !important;
+  color: #172033 !important;
+  border-bottom: 1px solid #ced6ea !important;
+  box-shadow: none !important;
+  font-size: 0.82rem !important;
+  font-weight: 850 !important;
+  line-height: 1 !important;
+  letter-spacing: 0.015em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+
+.gestion-client-workspace
+  .gestion-data-table tbody td,
+.gestion-client-workspace
+  .data-table tbody td {
+  height: 39px !important;
+  padding: 9px 12px !important;
+  border-bottom: 1px solid #edf0f5 !important;
+  font-size: 0.80rem !important;
+  line-height: 1.2 !important;
+}
+
+.gestion-client-workspace
+  .gestion-data-table tbody tr:hover td,
+.gestion-client-workspace
+  .data-table tbody tr:hover td {
+  background: #f7f9ff !important;
+}
+
+@media (max-width: 1180px) {
+  .gestion-client-actions {
+    grid-template-columns:
+      repeat(2, minmax(160px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .gestion-client-workspace {
+    padding: 14px !important;
+  }
+
+  .gestion-client-header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-client-back {
+    justify-self: start !important;
+  }
+
+  .gestion-client-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-client-name {
+    white-space: normal !important;
+  }
+}
+
+/* GESTION CLIENT WORKSPACE PACK 028 - END */
