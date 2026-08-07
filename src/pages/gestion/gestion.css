@@ -1856,3 +1856,266 @@
 }
 
 /* GESTION CLIENT SCROLL FIX PACK 029 - END */
+
+/* GESTION HEADER FINAL POLISH PACK 030 - START */
+
+/*
+ * Ajuste final del encabezado general de Gestión.
+ * Objetivo: evitar títulos partidos, mejorar jerarquía,
+ * dar más aire a filtros y mantener el contenido compacto.
+ */
+
+.gestion-powerbi-page .gestion-workspace-header {
+  grid-template-columns:
+    minmax(760px, 0.96fr)
+    minmax(830px, 1.04fr) !important;
+  gap: 16px !important;
+}
+
+/* ==================================================
+   BLOQUE RESUMEN
+   ================================================== */
+
+.gestion-powerbi-page .gestion-kpi-panel {
+  grid-template-columns:
+    150px minmax(0, 1fr) !important;
+  gap: 18px !important;
+  padding: 20px 22px !important;
+}
+
+.gestion-powerbi-page
+  .gestion-kpi-panel
+  .gestion-panel-title {
+  grid-template-columns:
+    46px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.gestion-powerbi-page
+  .gestion-kpi-panel
+  .gestion-panel-title__icon {
+  width: 46px !important;
+  height: 46px !important;
+  flex-basis: 46px !important;
+}
+
+.gestion-powerbi-page
+  .gestion-kpi-panel
+  .gestion-panel-title strong {
+  font-size: 1.04rem !important;
+  line-height: 1.12 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+}
+
+.gestion-powerbi-page
+  .gestion-kpi-panel
+  .gestion-panel-title small {
+  margin-top: 6px !important;
+  font-size: 0.74rem !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+
+/* Tarjetas un poco más compactas para ganar ancho */
+.gestion-powerbi-page .gestion-kpi-grid {
+  grid-template-columns:
+    repeat(4, minmax(125px, 1fr)) !important;
+  gap: 11px !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-card {
+  min-height: 106px !important;
+  padding: 14px 13px !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-title {
+  min-height: 29px !important;
+  font-size: 0.69rem !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-value {
+  font-size:
+    clamp(1.38rem, 1.48vw, 1.82rem) !important;
+}
+
+/* ==================================================
+   BLOQUE FILTROS Y ACCIONES
+   ================================================== */
+
+.gestion-powerbi-page .gestion-toolbar-panel {
+  grid-template-columns:
+    155px minmax(0, 1fr) !important;
+  gap: 18px !important;
+  padding: 20px 22px !important;
+}
+
+.gestion-powerbi-page
+  .gestion-toolbar-panel
+  .gestion-panel-title {
+  grid-template-columns:
+    46px minmax(0, 1fr) !important;
+  gap: 12px !important;
+  align-items: center !important;
+}
+
+.gestion-powerbi-page
+  .gestion-toolbar-panel
+  .gestion-panel-title__icon {
+  width: 46px !important;
+  height: 46px !important;
+  flex-basis: 46px !important;
+}
+
+.gestion-powerbi-page
+  .gestion-toolbar-panel
+  .gestion-panel-title strong {
+  font-size: 1.04rem !important;
+  line-height: 1.12 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+}
+
+.gestion-powerbi-page
+  .gestion-toolbar-panel
+  .gestion-panel-title small {
+  margin-top: 6px !important;
+  font-size: 0.74rem !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+}
+
+/* Más ancho útil para Cliente/Estado */
+.gestion-powerbi-page .gestion-toolbar-content {
+  grid-template-columns:
+    minmax(320px, 0.92fr)
+    minmax(430px, 1.08fr) !important;
+  gap: 24px !important;
+}
+
+/* El selector deja ver más texto y no se siente apretado */
+.gestion-powerbi-page .gestion-filter-column {
+  gap: 12px !important;
+}
+
+.gestion-powerbi-page .gestion-field select {
+  min-width: 0 !important;
+  width: 100% !important;
+  padding-right: 34px !important;
+  font-size: 0.82rem !important;
+}
+
+/* Periodo y acciones más compactos y alineados */
+.gestion-powerbi-page .gestion-report-column {
+  grid-template-rows: auto auto auto !important;
+  gap: 9px !important;
+}
+
+.gestion-powerbi-page .gestion-date-title {
+  margin: 0 !important;
+  font-size: 0.84rem !important;
+}
+
+.gestion-powerbi-page .gestion-date-range {
+  grid-template-columns:
+    minmax(145px, 1fr)
+    22px
+    minmax(145px, 1fr) !important;
+  gap: 8px !important;
+}
+
+.gestion-powerbi-page .gestion-action-row {
+  grid-template-columns:
+    repeat(3, minmax(116px, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.gestion-powerbi-page .gestion-action-button {
+  min-height: 40px !important;
+  padding: 0 13px !important;
+  font-size: 0.80rem !important;
+  white-space: nowrap !important;
+}
+
+/* ==================================================
+   ALTURA / ALINEACIÓN GENERAL
+   ================================================== */
+
+.gestion-powerbi-page .gestion-kpi-panel,
+.gestion-powerbi-page .gestion-toolbar-panel {
+  min-height: 176px !important;
+  height: 176px !important;
+}
+
+.gestion-powerbi-page
+  .gestion-kpi-panel
+  > *,
+.gestion-powerbi-page
+  .gestion-toolbar-panel
+  > * {
+  align-self: center !important;
+}
+
+/* ==================================================
+   RESPONSIVE
+   ================================================== */
+
+@media (max-width: 1650px) {
+  .gestion-powerbi-page .gestion-workspace-header {
+    grid-template-columns:
+      minmax(700px, 0.95fr)
+      minmax(760px, 1.05fr) !important;
+  }
+
+  .gestion-powerbi-page .gestion-kpi-panel {
+    grid-template-columns:
+      140px minmax(0, 1fr) !important;
+  }
+
+  .gestion-powerbi-page .gestion-toolbar-panel {
+    grid-template-columns:
+      145px minmax(0, 1fr) !important;
+  }
+
+  .gestion-powerbi-page .gestion-toolbar-content {
+    grid-template-columns:
+      minmax(285px, 0.9fr)
+      minmax(390px, 1.1fr) !important;
+  }
+}
+
+@media (max-width: 1500px) {
+  .gestion-powerbi-page .gestion-workspace-header {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page .gestion-kpi-panel,
+  .gestion-powerbi-page .gestion-toolbar-panel {
+    height: auto !important;
+    min-height: 164px !important;
+  }
+}
+
+@media (max-width: 920px) {
+  .gestion-powerbi-page .gestion-kpi-panel,
+  .gestion-powerbi-page .gestion-toolbar-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .gestion-powerbi-page
+    .gestion-kpi-panel
+    .gestion-panel-title,
+  .gestion-powerbi-page
+    .gestion-toolbar-panel
+    .gestion-panel-title {
+    grid-template-columns:
+      46px minmax(0, 1fr) !important;
+  }
+
+  .gestion-powerbi-page .gestion-toolbar-content {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* GESTION HEADER FINAL POLISH PACK 030 - END */
