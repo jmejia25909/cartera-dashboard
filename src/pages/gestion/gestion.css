@@ -1188,3 +1188,292 @@
 }
 
 /* GESTION WORKSPACE REBUILD PACK 026 - END */
+
+/* GESTION VISUAL POLISH PACK 027 - START */
+
+.gestion-powerbi-page .gestion-kpi-panel,
+.gestion-powerbi-page .gestion-toolbar-panel {
+  align-items: center !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title {
+  display: grid !important;
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+  gap: 11px !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title__icon {
+  display: inline-flex !important;
+  width: 42px !important;
+  height: 42px !important;
+  flex: 0 0 42px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 11px !important;
+  background: linear-gradient(145deg, #6258e8 0%, #4f46e5 100%) !important;
+  color: #ffffff !important;
+  font-size: 1.08rem !important;
+  line-height: 1 !important;
+  box-shadow: 0 5px 14px rgba(79, 70, 229, 0.22) !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title strong {
+  display: block !important;
+  margin: 0 !important;
+  color: var(--text-main) !important;
+  font-size: 1.02rem !important;
+  font-weight: 850 !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.015em !important;
+}
+
+.gestion-powerbi-page .gestion-panel-title small {
+  display: block !important;
+  margin-top: 5px !important;
+  color: var(--text-secondary) !important;
+  font-size: 0.73rem !important;
+  font-weight: 500 !important;
+  line-height: 1.26 !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-grid {
+  gap: 11px !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-card {
+  min-height: 112px !important;
+  padding: 15px 14px !important;
+  border-radius: 12px !important;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-card:hover {
+  transform: none !important;
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border)) !important;
+  box-shadow: 0 6px 18px rgba(30, 64, 175, 0.10) !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-title {
+  min-height: 30px !important;
+  margin-bottom: 9px !important;
+  font-size: 0.70rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.02em !important;
+}
+
+.gestion-powerbi-page .gestion-kpi-value {
+  font-size: clamp(1.42rem, 1.65vw, 1.88rem) !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.gestion-powerbi-page .gestion-toolbar-content {
+  column-gap: 24px !important;
+}
+
+.gestion-powerbi-page .gestion-field > span,
+.gestion-powerbi-page .gestion-date-field > span {
+  font-size: 0.75rem !important;
+  font-weight: 750 !important;
+}
+
+.gestion-powerbi-page .gestion-date-title {
+  font-size: 0.84rem !important;
+  font-weight: 850 !important;
+}
+
+.gestion-powerbi-page .gestion-field select,
+.gestion-powerbi-page .gestion-date-field input {
+  height: 41px !important;
+  border-color: #cbd5e1 !important;
+  border-radius: 9px !important;
+}
+
+.gestion-powerbi-page .gestion-action-row {
+  gap: 10px !important;
+}
+
+.gestion-powerbi-page .gestion-action-button {
+  min-height: 40px !important;
+  border-radius: 9px !important;
+  font-size: 0.80rem !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview {
+  padding: 17px 14px 12px !important;
+}
+
+.gestion-powerbi-page .gestion-table-title {
+  margin: 0 10px 12px !important;
+}
+
+.gestion-powerbi-page .gestion-table-title strong {
+  font-size: 1.23rem !important;
+  font-weight: 850 !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.025em !important;
+}
+
+.gestion-powerbi-page .gestion-table-title small {
+  margin-top: 5px !important;
+  font-size: 0.82rem !important;
+  line-height: 1.25 !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table {
+  table-layout: fixed !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(1),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(1) {
+  width: 40% !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(2),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(2) {
+  width: 18% !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(3),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(3),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(4),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(4),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(5),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(5),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(6),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(6) {
+  width: 8% !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(7),
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(7) {
+  width: 10% !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table thead th {
+  height: 52px !important;
+  padding: 12px 14px !important;
+  font-size: 0.94rem !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table thead th.text-center {
+  font-size: 1.20rem !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table tbody td {
+  height: 42px !important;
+  padding: 9px 14px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent) !important;
+  font-size: 0.81rem !important;
+  transition: background-color 120ms ease, color 120ms ease !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-main) 34%, var(--bg-surface)) !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--primary-light) 32%, var(--bg-surface)) !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:first-child {
+  overflow: hidden !important;
+  color: #3156c8 !important;
+  font-weight: 750 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(2) {
+  color: #172033 !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:last-child {
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:last-child .btn {
+  width: 100% !important;
+  min-width: 88px !important;
+  min-height: 31px !important;
+  padding: 0 12px !important;
+  border-width: 1.5px !important;
+  border-radius: 8px !important;
+  font-size: 0.76rem !important;
+  font-weight: 750 !important;
+  transform: none !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:last-child .btn:hover {
+  transform: none !important;
+  background: #eff6ff !important;
+  box-shadow: 0 3px 9px rgba(59, 130, 246, 0.16) !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview > .table-wrapper > div {
+  padding-right: 5px !important;
+  scrollbar-gutter: stable !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview > .table-wrapper > div::-webkit-scrollbar {
+  width: 11px !important;
+  height: 11px !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview > .table-wrapper > div::-webkit-scrollbar-track {
+  background: #f4f6fb !important;
+  border-radius: 10px !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview > .table-wrapper > div::-webkit-scrollbar-thumb {
+  background: #b8c0d2 !important;
+  border: 3px solid #f4f6fb !important;
+  border-radius: 10px !important;
+}
+
+.gestion-powerbi-page .gestion-clients-overview > .table-wrapper > div::-webkit-scrollbar-thumb:hover {
+  background: #909bb4 !important;
+}
+
+@media (max-width: 1500px) {
+  .gestion-powerbi-page .gestion-panel-title {
+    grid-template-columns: 40px minmax(0, 1fr) !important;
+  }
+
+  .gestion-powerbi-page .gestion-panel-title__icon {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(1),
+  .gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(1) {
+    width: 38% !important;
+  }
+
+  .gestion-powerbi-page .gestion-clients-overview .gestion-data-table th:nth-child(2),
+  .gestion-powerbi-page .gestion-clients-overview .gestion-data-table td:nth-child(2) {
+    width: 18% !important;
+  }
+}
+
+@media (max-width: 920px) {
+  .gestion-powerbi-page .gestion-table-title strong {
+    font-size: 1.10rem !important;
+  }
+
+  .gestion-powerbi-page .gestion-table-title small {
+    font-size: 0.77rem !important;
+  }
+
+  .gestion-powerbi-page .gestion-clients-overview .gestion-data-table {
+    table-layout: auto !important;
+  }
+}
+
+/* GESTION VISUAL POLISH PACK 027 - END */
