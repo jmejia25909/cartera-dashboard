@@ -1757,3 +1757,102 @@
 }
 
 /* GESTION CLIENT WORKSPACE PACK 028 - END */
+
+/* GESTION CLIENT SCROLL FIX PACK 029 - START */
+
+/*
+ * La vista individual debe desplazarse como un único workspace.
+ * Evita scroll anidado en documentos/historial y deja visible
+ * la última gestión.
+ */
+
+.gestion-powerbi-page
+  .gestion-clients-panel:has(.gestion-client-workspace) {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow: hidden !important;
+}
+
+.gestion-client-workspace {
+  display: flex !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: calc(100vh - 310px) !important;
+  height: auto !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  scrollbar-gutter: stable !important;
+  padding: 18px 18px 34px !important;
+}
+
+.gestion-client-header,
+.gestion-client-actions,
+.gestion-client-documents,
+.gestion-client-history {
+  flex: 0 0 auto !important;
+}
+
+/* Evitar scroll vertical interno en tablas de la vista individual */
+.gestion-client-workspace
+  .gestion-table-wrapper,
+.gestion-client-workspace
+  .table-wrapper {
+  max-height: none !important;
+  height: auto !important;
+  overflow-x: auto !important;
+  overflow-y: visible !important;
+}
+
+/* La tabla de historial crece naturalmente */
+.gestion-client-history {
+  min-height: auto !important;
+  padding-bottom: 8px !important;
+}
+
+/* Separación inferior para que la última fila no quede cortada */
+.gestion-client-history
+  .gestion-table-wrapper,
+.gestion-client-history
+  .table-wrapper {
+  margin-bottom: 6px !important;
+}
+
+/* Scrollbar del workspace individual */
+.gestion-client-workspace::-webkit-scrollbar {
+  width: 11px !important;
+}
+
+.gestion-client-workspace::-webkit-scrollbar-track {
+  background: #f3f5fa !important;
+  border-radius: 10px !important;
+}
+
+.gestion-client-workspace::-webkit-scrollbar-thumb {
+  background: #b7bfd1 !important;
+  border: 3px solid #f3f5fa !important;
+  border-radius: 10px !important;
+}
+
+.gestion-client-workspace::-webkit-scrollbar-thumb:hover {
+  background: #8f9ab4 !important;
+}
+
+@media (max-width: 1500px) {
+  .gestion-client-workspace {
+    max-height: calc(100vh - 430px) !important;
+  }
+}
+
+@media (max-width: 920px) {
+  .gestion-client-workspace {
+    max-height: none !important;
+    overflow-y: visible !important;
+    padding-bottom: 28px !important;
+  }
+}
+
+/* GESTION CLIENT SCROLL FIX PACK 029 - END */
