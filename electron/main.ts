@@ -1995,7 +1995,6 @@ ipcMain.handle("abonosListar", async () => {
     FROM abonos a
     LEFT JOIN documentos d ON a.documento = d.documento
     ORDER BY a.fecha DESC
-    LIMIT 50
   `).all();
   return data;
 });

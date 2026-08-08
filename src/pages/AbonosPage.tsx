@@ -28,6 +28,8 @@ export interface AbonosPageProps {
   onReconciled?: () => Promise<void> | void;
 }
 
+const PAGE_SIZE = 50;
+
 const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 
 const parseMoney = (value: string): number | null => {
@@ -53,6 +55,7 @@ export function AbonosPage({ abonos, fechaDesde, fechaHasta, onFechaDesdeChange,
   const [officialValue, setOfficialValue] = useState("");
   const [auditTypeFilter, setAuditTypeFilter] = useState<"ALL" | "PARTIAL" | "DISAPPEARANCE" | "OTHER">("ALL");
   const [auditSearch, setAuditSearch] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
   const [observation, setObservation] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -160,6 +163,38 @@ export function AbonosPage({ abonos, fechaDesde, fechaHasta, onFechaDesdeChange,
   });
   const auditedAmount = audited.reduce((sum, abono) => sum + Math.max(0, abono.total_anterior - abono.total_nuevo), 0);
 
+  useEffect(() => {
+    setAuditPage(1);
+  }, [
+    auditTypeFilter,
+    auditSearch,
+    fechaDesde,
+    fechaHasta,
+  ]);
+
+  const totalAuditPages = Math.max(
+    1,
+    Math.ceil(audited.length / PAGE_SIZE),
+  );
+
+  const safeAuditPage = Math.min(
+    auditPage,
+    totalAuditPages,
+  );
+
+  const auditStartIndex =
+    (safeAuditPage - 1) * PAGE_SIZE;
+
+  const auditEndIndex = Math.min(
+    auditStartIndex + PAGE_SIZE,
+    audited.length,
+  );
+
+  const paginatedAudited = audited.slice(
+    auditStartIndex,
+    auditEndIndex,
+  );
+
   return (
     <div className="collections-page">
       <section className="collections-reconciliation-card">
@@ -214,15 +249,71 @@ export function AbonosPage({ abonos, fechaDesde, fechaHasta, onFechaDesdeChange,
             <option value="OTHER">Otros</option>
           </select>
           <input type="search" value={auditSearch} onChange={(e)=>setAuditSearch(e.target.value)} placeholder="Buscar cliente, documento u observación" />
-          <div className="collections-audit-summary"><strong>{audited.length}</strong> movimientos · <strong>{fmtMoney(auditedAmount)}</strong></div>
+          <div className="collections-audit-summary">
+            <span>
+              Mostrando{" "}
+              <strong>
+                {audited.length === 0
+                  ? 0
+                  : auditStartIndex + 1}
+              </strong>
+              –
+              <strong>{auditEndIndex}</strong>
+              {" "}de{" "}
+              <strong>{audited.length}</strong>
+              {" "}movimientos
+            </span>
+            <span>
+              · <strong>{fmtMoney(auditedAmount)}</strong>
+            </span>
+          </div>
         </div>
         <div className="table-wrapper collections-table-wrapper"><table className="data-table collections-table"><thead><tr><th>Fecha Detección</th><th>Tipo</th><th>Cliente</th><th>Documento</th><th className="num">Saldo Anterior</th><th className="num">Movimiento</th><th className="num">Nuevo Saldo</th><th>Observación</th></tr></thead><tbody>
-          {audited.length>0 ? audited.map((abono)=>{
+          {paginatedAudited.length>0 ? paginatedAudited.map((abono)=>{
             const type = classifyMovement(abono);
             const typeLabel = type === "PARTIAL" ? "Reducción de saldo" : type === "DISAPPEARANCE" ? "Documento desaparecido" : "Otro";
             return <tr key={abono.id}><td>{abono.fecha.split("T")[0]}</td><td><span className={`collections-movement-type collections-movement-type--${type.toLowerCase()}`}>{typeLabel}</span></td><td><strong>{abono.cliente||abono.razon_social||"-"}</strong></td><td><strong>{abono.documento}</strong></td><td className="num">{fmtMoney(abono.total_anterior)}</td><td className="num kpi-positive">{fmtMoney(Math.max(0, abono.total_anterior-abono.total_nuevo))}</td><td className="num">{fmtMoney(abono.total_nuevo)}</td><td className="collections-observation-cell">{abono.observacion||"-"}</td></tr>;
           }) : <tr><td colSpan={8} className="collections-empty"><strong>No hay movimientos para los filtros seleccionados.</strong><span>Ajusta el rango, tipo o búsqueda.</span></td></tr>}
         </tbody></table></div>
+
+        <div className="collections-pagination">
+          <button
+            type="button"
+            className="btn secondary"
+            disabled={safeAuditPage <= 1}
+            onClick={() =>
+              setAuditPage((current) =>
+                Math.max(1, current - 1),
+              )
+            }
+          >
+            Anterior
+          </button>
+
+          <span>
+            Página <strong>{safeAuditPage}</strong>
+            {" "}de{" "}
+            <strong>{totalAuditPages}</strong>
+          </span>
+
+          <button
+            type="button"
+            className="btn secondary"
+            disabled={
+              safeAuditPage >= totalAuditPages
+            }
+            onClick={() =>
+              setAuditPage((current) =>
+                Math.min(
+                  totalAuditPages,
+                  current + 1,
+                ),
+              )
+            }
+          >
+            Siguiente
+          </button>
+        </div>
       </section>
     </div>
   );
