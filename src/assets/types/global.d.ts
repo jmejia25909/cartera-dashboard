@@ -18,6 +18,10 @@ import type {
   DashboardExecutiveFilters,
   DashboardExecutiveStats,
 } from '../../types/dashboardExecutive';
+import type {
+  CollectionReconciliationResult,
+  SaveCollectionPeriodReconciliationInput,
+} from '../../types/collectionReconciliation';
 
 declare global {
   interface Window {
@@ -160,8 +164,9 @@ declare global {
         filters?: DashboardExecutiveFilters,
       ) => Promise<DashboardExecutiveStats>;
 
-      dashboardExecutiveStats: () =>
-        Promise<DashboardExecutiveStats>;
+      collectionReconciliationGet: (payload: { year: number; month: number }) => Promise<CollectionReconciliationResult>;
+      collectionReconciliationSave: (payload: SaveCollectionPeriodReconciliationInput) => Promise<CollectionReconciliationResult>;
+
 
       topClientes: (limit?: number) => Promise<TopCliente[]>;
       limpiarBaseDatos: () => Promise<{ ok: boolean; message: string }>;

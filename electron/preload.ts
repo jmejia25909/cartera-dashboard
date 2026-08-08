@@ -18,6 +18,8 @@ const apiMethods = {
       "dashboardExecutiveStats",
       filters,
     ),
+  collectionReconciliationGet: (payload: { year: number; month: number }) => ipcRenderer.invoke("collectionReconciliationGet", payload),
+  collectionReconciliationSave: (payload: { year: number; month: number; officialValue: number; observation?: string; user?: string }) => ipcRenderer.invoke("collectionReconciliationSave", payload),
   filtrosListar: () => ipcRenderer.invoke("filtrosListar"),
   topClientes: (limit?: number) => ipcRenderer.invoke("topClientes", limit),
   documentosListar: (args: unknown) => ipcRenderer.invoke("documentosListar", args),

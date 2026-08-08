@@ -2222,6 +2222,7 @@ export default function App() {
           onFechaDesdeChange={setAbonosFechaDesde}
           onFechaHastaChange={setAbonosFechaHasta}
           onExportPdf={exportarAbonosPDF}
+          onReconciled={cargarDatos}
         />
       );
     }
