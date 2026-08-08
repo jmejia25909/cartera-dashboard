@@ -1,1 +1,51 @@
 .collections-page{display:flex;flex:1;min-height:0;flex-direction:column;gap:16px;overflow:auto;padding:2px 2px 22px}.collections-reconciliation-card,.collections-history-card{border:1px solid #dfe5ef;border-radius:14px;background:var(--bg-surface);box-shadow:0 8px 24px rgba(15,23,42,.06)}.collections-reconciliation-card{padding:20px}.collections-reconciliation-header,.collections-history-header{display:flex;gap:18px;align-items:flex-start;justify-content:space-between}.collections-eyebrow{margin-bottom:5px;color:#6573e8;font-size:.72rem;font-weight:850;letter-spacing:.12em}.collections-reconciliation-header h2{margin:0;color:var(--text-main);font-size:1.35rem}.collections-reconciliation-header p,.collections-history-header p{margin:6px 0 0;color:var(--text-secondary);font-size:.82rem}.collections-status{display:inline-flex;min-height:34px;padding:0 12px;align-items:center;gap:8px;border-radius:999px;font-size:.73rem;font-weight:850;white-space:nowrap}.collections-status--warning{color:#9a5b07;background:#fff6db;border:1px solid #f4d277}.collections-status--success{color:#087443;background:#e9f9f1;border:1px solid #93d8b5}.collections-status-dot{width:8px;height:8px;border-radius:50%;background:currentColor}.collections-period-row{display:flex;gap:12px;align-items:end;margin-top:18px;padding-top:16px;border-top:1px solid #e8ecf3}.collections-field{display:flex;min-width:0;flex-direction:column;gap:6px}.collections-field>span{color:#4b5565;font-size:.74rem;font-weight:750}.collections-field input,.collections-field select,.collections-field textarea{width:100%;border:1px solid #cfd6e4;border-radius:8px;background:var(--bg-surface);color:var(--text-main);font:inherit;font-size:.82rem;outline:none}.collections-field input,.collections-field select{min-height:38px;padding:0 10px}.collections-field textarea{resize:vertical;min-height:82px;padding:10px}.collections-metrics{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px;margin-top:16px}.collections-metric{padding:15px 16px;border:1px solid #e0e5ee;border-radius:11px;background:#fafbfe}.collections-metric>span,.collections-breakdown span{display:block;color:#687386;font-size:.69rem;font-weight:800;text-transform:uppercase}.collections-metric>strong{display:block;margin-top:7px;color:#1c2738;font-size:1.25rem}.collections-metric small,.collections-breakdown small{display:block;margin-top:5px;color:#8a94a6;font-size:.68rem}.collections-metric--official{background:#f2f3ff;border-color:#cfd3ff}.collections-metric--balanced{background:#edf9f3;border-color:#b4e1ca}.collections-metric--difference{background:#fff8e8;border-color:#efd696}.collections-breakdown{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:10px;margin-top:12px;padding:12px;border:1px dashed #d7ddea;border-radius:10px;background:#fcfdff}.collections-breakdown>div{padding:4px 10px;border-right:1px solid #e3e8f1}.collections-breakdown>div:last-child{border-right:0}.collections-breakdown strong{display:block;margin-top:5px;color:var(--text-main);font-size:.92rem}.collections-form-grid{display:grid;grid-template-columns:minmax(220px,.55fr) minmax(360px,1.45fr) auto;gap:14px;align-items:end;margin-top:16px;padding-top:16px;border-top:1px solid #e8ecf3}.collections-form-actions{display:flex;align-items:end}.collections-save{min-height:38px;white-space:nowrap}.collections-audit{display:flex;gap:18px;flex-wrap:wrap;margin-top:14px;padding:10px 12px;border-radius:8px;background:#edf8f3;color:#47705b;font-size:.74rem}.collections-note,.collections-message{margin-top:12px;padding:10px 12px;border-radius:8px;font-size:.76rem;line-height:1.4}.collections-note,.collections-message--info{color:#53627a;background:#f4f6fa}.collections-message--success{color:#11613d;background:#e9f8f0}.collections-message--error{color:#9d2c2c;background:#fff0f0}.collections-history-card{display:flex;min-height:380px;flex:1 0 420px;flex-direction:column;padding:18px;overflow:hidden}.collections-history-header{align-items:end;margin-bottom:12px}.collections-history-actions{display:flex;gap:10px;align-items:end}.collections-field--compact{min-width:145px}.collections-table-wrapper{min-height:0;flex:1;overflow:auto}.collections-table thead th{position:sticky;top:0;z-index:5}.collections-observation-cell{max-width:360px;color:var(--text-secondary);font-size:.78rem}.collections-empty{padding:40px!important;text-align:center;color:#8993a5}.collections-empty strong,.collections-empty span{display:block}.collections-empty span{margin-top:6px;font-size:.82rem}@media(max-width:1200px){.collections-metrics{grid-template-columns:repeat(2,minmax(180px,1fr))}.collections-form-grid{grid-template-columns:1fr 1.5fr}.collections-form-actions{grid-column:1/-1}}@media(max-width:760px){.collections-reconciliation-header,.collections-history-header,.collections-period-row,.collections-history-actions{flex-direction:column;align-items:stretch}.collections-metrics,.collections-breakdown,.collections-form-grid{grid-template-columns:1fr}.collections-breakdown>div{border-right:0;border-bottom:1px solid #e3e8f1;padding:8px 4px}.collections-breakdown>div:last-child{border-bottom:0}}
+
+/* COLLECTION RECONCILIATION SEMANTIC AUDIT PACK 033 FIX-001 */
+.collections-semantic-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #f2cf79;
+  border-radius: 10px;
+  background: #fff9e8;
+  color: #6f5312;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.collections-audit-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(260px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0;
+}
+.collections-audit-toolbar select,
+.collections-audit-toolbar input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #cad5eb;
+  border-radius: 8px;
+  background: #fff;
+  padding: 0 11px;
+  color: #26344d;
+}
+.collections-audit-summary {
+  white-space: nowrap;
+  color: #5c6980;
+  font-size: 12px;
+}
+.collections-movement-type {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.collections-movement-type--partial { background:#e9f8ef; color:#147a43; }
+.collections-movement-type--disappearance { background:#fff3df; color:#9a5d00; }
+.collections-movement-type--other { background:#eef2f8; color:#53627a; }
+@media (max-width: 1100px) {
+  .collections-audit-toolbar { grid-template-columns: 1fr 1fr; }
+  .collections-audit-summary { grid-column: 1 / -1; }
+}

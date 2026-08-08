@@ -51,6 +51,8 @@ export function AbonosPage({ abonos, fechaDesde, fechaHasta, onFechaDesdeChange,
   const [stats, setStats] = useState<DashboardExecutiveStats | null>(null);
   const [reconciliation, setReconciliation] = useState<CollectionPeriodReconciliation | null>(null);
   const [officialValue, setOfficialValue] = useState("");
+  const [auditTypeFilter, setAuditTypeFilter] = useState<"ALL" | "PARTIAL" | "DISAPPEARANCE" | "OTHER">("ALL");
+  const [auditSearch, setAuditSearch] = useState("");
   const [observation, setObservation] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -141,6 +143,22 @@ export function AbonosPage({ abonos, fechaDesde, fechaHasta, onFechaDesdeChange,
     for (const available of stats?.periodo.availableYears ?? []) values.add(available);
     return Array.from(values).sort((a,b)=>b-a);
   }, [stats, year]);
+  const classifyMovement = (abono: AbonoItem): "PARTIAL" | "DISAPPEARANCE" | "OTHER" => {
+    const observationText = (abono.observacion ?? "").toLowerCase();
+    if (observationText.includes("ya no aparece") || observationText.includes("no presente") || observationText.includes("desapar")) return "DISAPPEARANCE";
+    if (abono.total_nuevo >= 0 && abono.total_nuevo < abono.total_anterior) return "PARTIAL";
+    return "OTHER";
+  };
+
+  const audited = filtered.filter((abono) => {
+    const type = classifyMovement(abono);
+    const matchesType = auditTypeFilter === "ALL" || type === auditTypeFilter;
+    const q = auditSearch.trim().toLowerCase();
+    const matchesSearch = !q || [abono.cliente, abono.razon_social, abono.documento, abono.observacion]
+      .some((value) => (value ?? "").toLowerCase().includes(q));
+    return matchesType && matchesSearch;
+  });
+  const auditedAmount = audited.reduce((sum, abono) => sum + Math.max(0, abono.total_anterior - abono.total_nuevo), 0);
 
   return (
     <div className="collections-page">
@@ -155,34 +173,55 @@ export function AbonosPage({ abonos, fechaDesde, fechaHasta, onFechaDesdeChange,
           <button type="button" className="btn secondary collections-refresh" onClick={()=>void loadPeriod()} disabled={loading||saving}>{loading ? "Actualizando..." : "Actualizar período"}</button>
         </div>
         <div className="collections-metrics">
-          <article className="collections-metric"><span>Detectado por sistema</span><strong>{fmtMoney(detected)}</strong><small>Movimientos inferidos del período</small></article>
-          <article className="collections-metric collections-metric--official"><span>Valor oficial</span><strong>{isReconciled ? fmtMoney(stats?.cobrosMes.valorOficial ?? 0) : "Pendiente"}</strong><small>Valor confirmado mediante conciliación</small></article>
-          <article className={Math.abs(difference)<=0.01 ? "collections-metric collections-metric--balanced" : "collections-metric collections-metric--difference"}><span>Diferencia</span><strong>{fmtMoney(difference)}</strong><small>Valor oficial menos detectado</small></article>
+          <article className="collections-metric"><span>Movimientos detectados</span><strong>{fmtMoney(detected)}</strong><small>Variaciones positivas inferidas del período</small></article>
+          <article className="collections-metric collections-metric--official"><span>Cobro oficial conciliado</span><strong>{isReconciled ? fmtMoney(stats?.cobrosMes.valorOficial ?? 0) : "Pendiente"}</strong><small>Valor confirmado mediante conciliación</small></article>
+          <article className={isReconciled && Math.abs(difference)<=0.01 ? "collections-metric collections-metric--balanced" : "collections-metric collections-metric--difference"}><span>Diferencia</span><strong>{isReconciled ? fmtMoney(difference) : "Pendiente"}</strong><small>{isReconciled ? "Cobro oficial menos movimientos detectados" : "Disponible al conciliar el período"}</small></article>
           <article className="collections-metric"><span>Movimientos</span><strong>{movements}</strong><small>Registros detectados en el período</small></article>
         </div>
         <div className="collections-breakdown">
-          <div><span>Abonos parciales</span><strong>{fmtMoney(stats?.cobrosMes.abonosParcialesDetectados ?? 0)}</strong><small>{stats?.cobrosMes.movimientosParciales ?? 0} movimientos</small></div>
-          <div><span>Cierres por desaparición</span><strong>{fmtMoney(stats?.cobrosMes.cierresPorDesaparicionDetectados ?? 0)}</strong><small>{stats?.cobrosMes.movimientosPorDesaparicion ?? 0} movimientos</small></div>
-          <div><span>Otros detectados</span><strong>{fmtMoney(stats?.cobrosMes.otrosDetectados ?? 0)}</strong><small>{stats?.cobrosMes.otrosMovimientos ?? 0} movimientos</small></div>
+          <div><span>Reducciones de saldo</span><strong>{fmtMoney(stats?.cobrosMes.abonosParcialesDetectados ?? 0)}</strong><small>{stats?.cobrosMes.movimientosParciales ?? 0} movimientos</small></div>
+          <div><span>Documentos desaparecidos</span><strong>{fmtMoney(stats?.cobrosMes.cierresPorDesaparicionDetectados ?? 0)}</strong><small>{stats?.cobrosMes.movimientosPorDesaparicion ?? 0} movimientos</small></div>
+          <div><span>Otros movimientos</span><strong>{fmtMoney(stats?.cobrosMes.otrosDetectados ?? 0)}</strong><small>{stats?.cobrosMes.otrosMovimientos ?? 0} movimientos</small></div>
         </div>
         <div className="collections-form-grid">
-          <label className="collections-field"><span>Valor oficial del período</span><input type="text" inputMode="decimal" value={officialValue} onChange={(e)=>setOfficialValue(e.target.value)} placeholder="0,00" disabled={saving}/></label>
+          <label className="collections-field"><span>Cobro oficial del período</span><input type="text" inputMode="decimal" value={officialValue} onChange={(e)=>setOfficialValue(e.target.value)} placeholder="0,00" disabled={saving}/></label>
           <label className="collections-field collections-field--observation"><span>Observación de conciliación</span><textarea value={observation} onChange={(e)=>setObservation(e.target.value)} rows={3} placeholder="Explica diferencias, ajustes, retenciones u observaciones del período." disabled={saving}/></label>
           <div className="collections-form-actions"><button type="button" className="btn primary collections-save" onClick={()=>void saveReconciliation()} disabled={saving||loading||!stats}>{saving ? "Guardando..." : isReconciled ? "Actualizar conciliación" : "Conciliar período"}</button></div>
         </div>
         {reconciliation && <div className="collections-audit"><span>Conciliado por <strong>{reconciliation.reconciledBy}</strong></span><span>Fecha <strong>{formatDateTime(reconciliation.reconciledAt)}</strong></span><span>Snapshot detectado <strong>{fmtMoney(reconciliation.detectedValue)}</strong></span></div>}
         {stats?.cobrosMes.nota && <div className="collections-note">{stats.cobrosMes.nota}</div>}
+        <div className="collections-semantic-warning">Los movimientos detectados representan cambios observados en la cartera. Una desaparición del documento no demuestra por sí sola un ingreso bancario; el cobro real se confirma mediante la conciliación del período.</div>
         {message && <div className={`collections-message collections-message--${messageTone}`}>{message}</div>}
       </section>
 
       <section className="card collections-history-card">
-        <div className="collections-history-header"><div><div className="card-title">Historial de Abonos Detectados</div><p>Movimientos positivos registrados por cambios de saldo.</p></div><div className="collections-history-actions">
-          <label className="collections-field collections-field--compact"><span>Desde</span><input type="date" value={fechaDesde} onChange={(e)=>onFechaDesdeChange(e.target.value)}/></label>
-          <label className="collections-field collections-field--compact"><span>Hasta</span><input type="date" value={fechaHasta} onChange={(e)=>onFechaHastaChange(e.target.value)}/></label>
-          <button type="button" className="btn secondary" onClick={()=>void onExportPdf()}>Exportar PDF</button>
-        </div></div>
-        <div className="table-wrapper collections-table-wrapper"><table className="data-table collections-table"><thead><tr><th>Fecha Detección</th><th>Cliente</th><th>Documento</th><th className="num">Saldo Anterior</th><th className="num">Pago Aplicado</th><th className="num">Nuevo Saldo</th><th>Observación</th></tr></thead><tbody>
-          {filtered.length>0 ? filtered.map((abono)=><tr key={abono.id}><td>{abono.fecha.split("T")[0]}</td><td><strong>{abono.cliente||abono.razon_social||"-"}</strong></td><td><strong>{abono.documento}</strong></td><td className="num">{fmtMoney(abono.total_anterior)}</td><td className="num kpi-positive">{fmtMoney(abono.total_anterior-abono.total_nuevo)}</td><td className="num">{fmtMoney(abono.total_nuevo)}</td><td className="collections-observation-cell">{abono.observacion||"-"}</td></tr>) : <tr><td colSpan={7} className="collections-empty"><strong>No hay abonos detectados en este rango.</strong><span>Importa el Excel para detectar cambios en los saldos.</span></td></tr>}
+        <div className="collections-history-header">
+          <div>
+            <div className="card-title">Auditoría de movimientos detectados</div>
+            <p>Trazabilidad de variaciones de saldo inferidas por el sistema. No equivale automáticamente a cobros bancarios.</p>
+          </div>
+          <div className="collections-history-actions">
+            <label className="collections-field collections-field--compact"><span>Desde</span><input type="date" value={fechaDesde} onChange={(e)=>onFechaDesdeChange(e.target.value)}/></label>
+            <label className="collections-field collections-field--compact"><span>Hasta</span><input type="date" value={fechaHasta} onChange={(e)=>onFechaHastaChange(e.target.value)}/></label>
+            <button type="button" className="btn secondary" onClick={()=>void onExportPdf()}>Exportar PDF</button>
+          </div>
+        </div>
+        <div className="collections-audit-toolbar">
+          <select value={auditTypeFilter} onChange={(e)=>setAuditTypeFilter(e.target.value as "ALL" | "PARTIAL" | "DISAPPEARANCE" | "OTHER")}>
+            <option value="ALL">Todos los movimientos</option>
+            <option value="PARTIAL">Reducciones de saldo</option>
+            <option value="DISAPPEARANCE">Documentos desaparecidos</option>
+            <option value="OTHER">Otros</option>
+          </select>
+          <input type="search" value={auditSearch} onChange={(e)=>setAuditSearch(e.target.value)} placeholder="Buscar cliente, documento u observación" />
+          <div className="collections-audit-summary"><strong>{audited.length}</strong> movimientos · <strong>{fmtMoney(auditedAmount)}</strong></div>
+        </div>
+        <div className="table-wrapper collections-table-wrapper"><table className="data-table collections-table"><thead><tr><th>Fecha Detección</th><th>Tipo</th><th>Cliente</th><th>Documento</th><th className="num">Saldo Anterior</th><th className="num">Movimiento</th><th className="num">Nuevo Saldo</th><th>Observación</th></tr></thead><tbody>
+          {audited.length>0 ? audited.map((abono)=>{
+            const type = classifyMovement(abono);
+            const typeLabel = type === "PARTIAL" ? "Reducción de saldo" : type === "DISAPPEARANCE" ? "Documento desaparecido" : "Otro";
+            return <tr key={abono.id}><td>{abono.fecha.split("T")[0]}</td><td><span className={`collections-movement-type collections-movement-type--${type.toLowerCase()}`}>{typeLabel}</span></td><td><strong>{abono.cliente||abono.razon_social||"-"}</strong></td><td><strong>{abono.documento}</strong></td><td className="num">{fmtMoney(abono.total_anterior)}</td><td className="num kpi-positive">{fmtMoney(Math.max(0, abono.total_anterior-abono.total_nuevo))}</td><td className="num">{fmtMoney(abono.total_nuevo)}</td><td className="collections-observation-cell">{abono.observacion||"-"}</td></tr>;
+          }) : <tr><td colSpan={8} className="collections-empty"><strong>No hay movimientos para los filtros seleccionados.</strong><span>Ajusta el rango, tipo o búsqueda.</span></td></tr>}
         </tbody></table></div>
       </section>
     </div>
