@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import fs from "node:fs";
 import type Database from "better-sqlite3";
 
 export type ImportResult = {
@@ -153,7 +154,13 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
   const docsImportados = new Set<string>();
 
   // 2. Leer archivo Excel
-  const wb = XLSX.readFile(filePath, { cellDates: true, cellNF: false, cellText: false });
+  const excelBuffer = fs.readFileSync(filePath);
+  const wb = XLSX.read(excelBuffer, {
+    type: "buffer",
+    cellDates: true,
+    cellNF: false,
+    cellText: false,
+  });
   const wsName = wb.SheetNames[0];
   const ws = wb.Sheets[wsName];
   if (!ws) {
