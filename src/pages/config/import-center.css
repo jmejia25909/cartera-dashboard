@@ -296,3 +296,21 @@
     justify-self: start;
   }
 }
+
+
+/* PACK 037 - HISTORY REVERSAL */
+.import-history-message--success {
+  background: #ecfdf3;
+  color: #067647;
+  border: 1px solid #abefc6;
+}
+
+.import-history-revert {
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 0.68rem;
+}
+
+.import-history-no-action {
+  color: #a0a8b5;
+}

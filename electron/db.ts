@@ -507,6 +507,20 @@ function ensureSchema(db: Database.Database) {
       CREATE INDEX IF NOT EXISTS idx_importaciones_hash ON importaciones(archivo_hash);
     `);
 
+  // Snapshot reversible de importaciones de cartera.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS importacion_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      importacion_id INTEGER NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (importacion_id) REFERENCES importaciones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_importacion_snapshots_importacion
+      ON importacion_snapshots(importacion_id);
+  `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }

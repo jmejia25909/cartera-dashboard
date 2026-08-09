@@ -15,6 +15,7 @@ import {
 } from "./importCancelledDocuments";
 import * as XLSX from "xlsx";
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import http from "node:http";
 import os from "node:os";
 import { spawn } from "child_process";
@@ -1457,6 +1458,150 @@ function _saveDocumentsToDb(db: any, docs: any[]) {
 }
 
 
+
+type PortfolioSnapshot = {
+  documentos: unknown[];
+  abonos: unknown[];
+  alertasCredito: unknown[];
+};
+
+function createPortfolioSnapshot(): PortfolioSnapshot {
+  return {
+    documentos: db.prepare("SELECT * FROM documentos").all(),
+    abonos: db.prepare("SELECT * FROM abonos").all(),
+    alertasCredito: db.prepare("SELECT * FROM alertas_credito").all(),
+  };
+}
+
+function restoreSnapshotTable(
+  tableName: "documentos" | "abonos" | "alertas_credito",
+  rows: Array<Record<string, unknown>>,
+): void {
+  db.prepare(`DELETE FROM ${tableName}`).run();
+
+  if (rows.length === 0) return;
+
+  const columns = Object.keys(rows[0]);
+  const quoted = columns.map((column) => `"${column.replace(/"/g, '""')}"`);
+  const placeholders = columns.map(() => "?").join(", ");
+
+  const insert = db.prepare(
+    `INSERT INTO ${tableName} (${quoted.join(", ")}) VALUES (${placeholders})`,
+  );
+
+  for (const row of rows) {
+    insert.run(...columns.map((column) => row[column] ?? null));
+  }
+}
+
+function restorePortfolioSnapshot(snapshot: PortfolioSnapshot): void {
+  restoreSnapshotTable(
+    "documentos",
+    snapshot.documentos as Array<Record<string, unknown>>,
+  );
+  restoreSnapshotTable(
+    "abonos",
+    snapshot.abonos as Array<Record<string, unknown>>,
+  );
+  restoreSnapshotTable(
+    "alertas_credito",
+    snapshot.alertasCredito as Array<Record<string, unknown>>,
+  );
+}
+
+function hashImportFile(filePath: string): string {
+  const content = fs.readFileSync(filePath);
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function startPortfolioImport(
+  filePath: string,
+  fileHash: string,
+): number {
+  const fileName = filePath.split(/[\\/]/).pop() || "cartera.xlsx";
+
+  const result = db.prepare(`
+    INSERT INTO importaciones (
+      tipo,
+      archivo_nombre,
+      archivo_hash,
+      estado,
+      observacion,
+      metadata_json
+    )
+    VALUES (
+      'CARTERA',
+      ?,
+      ?,
+      'PROCESANDO',
+      'Importación de cartera Contífico',
+      '{}'
+    )
+  `).run(fileName, fileHash);
+
+  const importacionId = Number(result.lastInsertRowid);
+
+  const snapshot = createPortfolioSnapshot();
+
+  db.prepare(`
+    INSERT INTO importacion_snapshots (
+      importacion_id,
+      payload_json
+    )
+    VALUES (?, ?)
+  `).run(
+    importacionId,
+    JSON.stringify(snapshot),
+  );
+
+  return importacionId;
+}
+
+function finishPortfolioImport(
+  importacionId: number,
+  result: Record<string, unknown>,
+): void {
+  const insertedDocs = Number(result.insertedDocs ?? 0);
+  const omittedRows = Number(result.omittedRows ?? 0);
+  const descuadres = Number(result.descuadresDetectados ?? 0);
+
+  db.prepare(`
+    UPDATE importaciones
+    SET
+      registros_leidos = ?,
+      registros_importados = ?,
+      registros_ignorados = ?,
+      registros_duplicados = 0,
+      estado = ?,
+      observacion = ?,
+      metadata_json = ?
+    WHERE id = ?
+  `).run(
+    insertedDocs + omittedRows,
+    insertedDocs,
+    omittedRows,
+    descuadres > 0 ? "COMPLETADA_ADVERTENCIAS" : "COMPLETADA",
+    descuadres > 0
+      ? `Cartera importada con ${descuadres} descuadres detectados.`
+      : "Cartera importada correctamente.",
+    JSON.stringify(result),
+    importacionId,
+  );
+}
+
+function failPortfolioImport(
+  importacionId: number,
+  message: string,
+): void {
+  db.prepare(`
+    UPDATE importaciones
+    SET
+      estado = 'ERROR',
+      observacion = ?
+    WHERE id = ?
+  `).run(message, importacionId);
+}
+
 // --- Centro de Importaciones ---
 type ImportType =
   | "CARTERA"
@@ -1525,17 +1670,79 @@ function requestImportReversal(
     };
   }
 
+  if (current.tipo !== "CARTERA") {
+    return {
+      ok: false,
+      code: "REVERSAL_NOT_IMPLEMENTED",
+      message:
+        "La reversión transaccional todavía no está habilitada para este tipo de importación.",
+    };
+  }
+
+  const later = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM importaciones
+    WHERE tipo = 'CARTERA'
+      AND estado NOT IN ('REVERTIDA', 'ERROR')
+      AND id > ?
+  `).get(id) as { total: number };
+
+  if (Number(later.total) > 0) {
+    return {
+      ok: false,
+      code: "LATER_IMPORTS_EXIST",
+      message:
+        "No se puede revertir esta importación porque existen importaciones de cartera posteriores activas. Revierte primero la más reciente.",
+    };
+  }
+
+  const snapshotRow = db.prepare(`
+    SELECT payload_json
+    FROM importacion_snapshots
+    WHERE importacion_id = ?
+  `).get(id) as { payload_json?: string } | undefined;
+
+  if (!snapshotRow?.payload_json) {
+    return {
+      ok: false,
+      code: "SNAPSHOT_NOT_FOUND",
+      message:
+        "La importación no tiene un snapshot reversible asociado.",
+    };
+  }
+
+  const snapshot = JSON.parse(
+    snapshotRow.payload_json,
+  ) as PortfolioSnapshot;
+
+  const tx = db.transaction(() => {
+    restorePortfolioSnapshot(snapshot);
+
+    db.prepare(`
+      UPDATE importaciones
+      SET
+        estado = 'REVERTIDA',
+        revertido_en = datetime('now', 'localtime'),
+        observacion = CASE
+          WHEN TRIM(COALESCE(observacion, '')) = '' THEN ?
+          ELSE observacion || ' | ' || ?
+        END
+      WHERE id = ?
+    `).run(
+      observacion || "Importación revertida",
+      observacion || "Importación revertida",
+      id,
+    );
+  });
+
+  tx();
+
   return {
-    ok: false,
-    code: "REVERSAL_NOT_IMPLEMENTED",
+    ok: true,
     message:
-      "La reversión se habilitará por tipo de importación. " +
-      "No se eliminó información.",
-    importacion: current,
-    observacion,
+      "Importación de cartera revertida correctamente. Se restauraron documentos, movimientos inferidos y alertas al estado previo.",
   };
 }
-
 ipcMain.handle(
   "importHistoryList",
   (
@@ -2263,24 +2470,126 @@ ipcMain.handle("importarContifico", async () => {
   const selection = await dialog.showOpenDialog({
     title: "Seleccionar cartera de Contifico",
     properties: ["openFile"],
-    filters: [{ name: "Archivos de Excel", extensions: ["xlsx", "xls"] }],
+    filters: [
+      {
+        name: "Archivos de Excel",
+        extensions: ["xlsx", "xls"],
+      },
+    ],
   });
 
-  if (selection.canceled || selection.filePaths.length === 0) {
-    return { ok: false, message: "Importacion cancelada" };
-  }
-
-  try {
-    const result = importContificoExcel(selection.filePaths[0], db);
-    reconcileCollections(db);
-    return result;
-  } catch (error: unknown) {
-    console.error("Error importando cartera de Contifico:", error);
+  if (
+    selection.canceled ||
+    selection.filePaths.length === 0
+  ) {
     return {
       ok: false,
-      message: error instanceof Error
+      message: "Importacion cancelada",
+    };
+  }
+
+  const filePath = selection.filePaths[0];
+  const fileHash = hashImportFile(filePath);
+
+  const duplicate = db.prepare(`
+    SELECT
+      id,
+      archivo_nombre,
+      importado_en
+    FROM importaciones
+    WHERE tipo = 'CARTERA'
+      AND archivo_hash = ?
+      AND estado IN (
+        'COMPLETADA',
+        'COMPLETADA_ADVERTENCIAS'
+      )
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(fileHash) as
+    | {
+        id: number;
+        archivo_nombre: string;
+        importado_en: string;
+      }
+    | undefined;
+
+  if (duplicate) {
+    return {
+      ok: false,
+      duplicateImport: true,
+      message:
+        "Este archivo de cartera ya fue importado anteriormente. " +
+        "No se ejecutó nuevamente para evitar duplicar movimientos inferidos.",
+      importacionId: duplicate.id,
+    };
+  }
+
+  let importacionId = 0;
+
+  try {
+    importacionId = startPortfolioImport(
+      filePath,
+      fileHash,
+    );
+
+    const result = importContificoExcel(
+      filePath,
+      db,
+    ) as Record<string, unknown>;
+
+    if (!result?.ok) {
+      const message = String(
+        result?.message ||
+          "La importación de cartera no pudo completarse.",
+      );
+
+      failPortfolioImport(
+        importacionId,
+        message,
+      );
+
+      return {
+        ...result,
+        importacionId,
+      };
+    }
+
+    reconcileCollections(db);
+
+    finishPortfolioImport(
+      importacionId,
+      result,
+    );
+
+    return {
+      ...result,
+      importacionId,
+    };
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
         ? error.message
-        : "Error desconocido durante la importacion",
+        : "Error desconocido durante la importacion";
+
+    if (importacionId > 0) {
+      failPortfolioImport(
+        importacionId,
+        message,
+      );
+    }
+
+    console.error(
+      "Error importando cartera de Contifico:",
+      error,
+    );
+
+    return {
+      ok: false,
+      importacionId:
+        importacionId > 0
+          ? importacionId
+          : undefined,
+      message,
     };
   }
 });

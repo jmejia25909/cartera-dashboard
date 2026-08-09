@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./import-center.css";
 
 type ImportType =
@@ -36,18 +36,22 @@ interface ImportHistoryResult {
   message?: string;
 }
 
+interface ImportReversalResult {
+  ok: boolean;
+  code?: string;
+  message?: string;
+}
+
 type ImportCenterApi = typeof window.carteraApi & {
   importHistoryList?: (args?: {
     tipo?: ImportType;
     limit?: number;
   }) => Promise<ImportHistoryResult>;
-
   importHistoryGet?: (id: number) => Promise<unknown>;
-
   importHistoryRevert?: (args: {
     id: number;
     observacion?: string;
-  }) => Promise<unknown>;
+  }) => Promise<ImportReversalResult>;
 };
 
 interface ImportCenterPanelProps {
@@ -73,7 +77,10 @@ function formatDate(value?: string | null): string {
     : value.replace(" ", "T");
 
   const parsed = new Date(normalized);
-  if (Number.isNaN(parsed.getTime())) return value;
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
 
   return new Intl.DateTimeFormat("es-EC", {
     dateStyle: "short",
@@ -92,10 +99,12 @@ export function ImportCenterPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const [historyNotice, setHistoryNotice] = useState("");
+  const [revertingId, setRevertingId] = useState<number | null>(null);
 
   const api = window.carteraApi as ImportCenterApi;
 
-  const loadHistory = async (): Promise<void> => {
+  const loadHistory = useCallback(async (): Promise<void> => {
     if (!api?.importHistoryList) {
       setHistory([]);
       setHistoryError(
@@ -108,9 +117,9 @@ export function ImportCenterPanel({
     setHistoryError("");
 
     try {
-      const result = (await api.importHistoryList({
+      const result = await api.importHistoryList({
         limit: 100,
-      })) as ImportHistoryResult;
+      });
 
       if (!result?.ok) {
         throw new Error(
@@ -129,10 +138,11 @@ export function ImportCenterPanel({
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, [api]);
 
   const openHistory = async (): Promise<void> => {
     setHistoryOpen(true);
+    setHistoryNotice("");
     await loadHistory();
   };
 
@@ -140,7 +150,7 @@ export function ImportCenterPanel({
     const result = new Map<ImportType, ImportHistoryRow>();
 
     for (const row of history) {
-      if (!result.has(row.tipo)) {
+      if (!result.has(row.tipo) && row.estado !== "REVERTIDA") {
         result.set(row.tipo, row);
       }
     }
@@ -152,7 +162,64 @@ export function ImportCenterPanel({
     if (historyOpen) {
       void loadHistory();
     }
-  }, [historyOpen]);
+  }, [historyOpen, loadHistory]);
+
+  const revertImport = async (
+    row: ImportHistoryRow,
+  ): Promise<void> => {
+    if (!api?.importHistoryRevert) {
+      setHistoryError(
+        "La reversión solo está disponible en la aplicación de escritorio.",
+      );
+      return;
+    }
+
+    if (row.tipo !== "CARTERA") {
+      setHistoryError(
+        "La reversión transaccional todavía no está habilitada para este tipo de importación.",
+      );
+      return;
+    }
+
+    const accepted = window.confirm(
+      `¿Revertir la importación de cartera "${row.archivo_nombre}"?\n\n` +
+        "Se restaurará la cartera, los movimientos inferidos y las alertas al estado anterior a esa importación.",
+    );
+
+    if (!accepted) return;
+
+    setRevertingId(row.id);
+    setHistoryError("");
+    setHistoryNotice("");
+
+    try {
+      const result = await api.importHistoryRevert({
+        id: row.id,
+        observacion: "Reversión solicitada desde Gestión de Datos",
+      });
+
+      if (!result?.ok) {
+        throw new Error(
+          result?.message || "No fue posible revertir la importación.",
+        );
+      }
+
+      setHistoryNotice(
+        result.message ||
+          "Importación revertida correctamente. Recarga los datos de la aplicación para visualizar el estado restaurado.",
+      );
+
+      await loadHistory();
+    } catch (error: unknown) {
+      setHistoryError(
+        error instanceof Error
+          ? error.message
+          : "Error revirtiendo la importación.",
+      );
+    } finally {
+      setRevertingId(null);
+    }
+  };
 
   const importItems = [
     {
@@ -259,7 +326,7 @@ export function ImportCenterPanel({
 
         <div className="import-center-section-title">
           <span>HISTORIAL</span>
-          <small>Auditoría de archivos procesados</small>
+          <small>Auditoría y reversión segura</small>
         </div>
 
         <button
@@ -338,9 +405,7 @@ export function ImportCenterPanel({
 
             <div className="modal-body import-history-body">
               <div className="import-history-toolbar">
-                <span>
-                  {history.length} importaciones registradas
-                </span>
+                <span>{history.length} importaciones registradas</span>
 
                 <button
                   type="button"
@@ -351,6 +416,12 @@ export function ImportCenterPanel({
                   {historyLoading ? "Actualizando..." : "Actualizar"}
                 </button>
               </div>
+
+              {historyNotice && (
+                <div className="import-history-message import-history-message--success">
+                  {historyNotice}
+                </div>
+              )}
 
               {historyError && (
                 <div className="import-history-message import-history-message--error">
@@ -364,8 +435,8 @@ export function ImportCenterPanel({
                   <div className="import-history-empty">
                     <strong>Aún no existen importaciones registradas.</strong>
                     <span>
-                      Los próximos importadores utilizarán este historial
-                      central para auditoría y reversión segura.
+                      Las importaciones nuevas quedarán registradas aquí para
+                      auditoría y reversión segura.
                     </span>
                   </div>
                 )}
@@ -382,6 +453,7 @@ export function ImportCenterPanel({
                         <th className="num">Importados</th>
                         <th className="num">Duplicados</th>
                         <th>Estado</th>
+                        <th>Acción</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -394,21 +466,33 @@ export function ImportCenterPanel({
                           <td title={row.archivo_nombre}>
                             {row.archivo_nombre}
                           </td>
-                          <td className="num">
-                            {row.registros_leidos}
-                          </td>
-                          <td className="num">
-                            {row.registros_importados}
-                          </td>
-                          <td className="num">
-                            {row.registros_duplicados}
-                          </td>
+                          <td className="num">{row.registros_leidos}</td>
+                          <td className="num">{row.registros_importados}</td>
+                          <td className="num">{row.registros_duplicados}</td>
                           <td>
                             <span
                               className={`import-history-status import-history-status--${row.estado.toLowerCase()}`}
                             >
                               {row.estado.replace(/_/g, " ")}
                             </span>
+                          </td>
+                          <td>
+                            {row.tipo === "CARTERA" &&
+                            row.estado !== "REVERTIDA" &&
+                            row.estado !== "ERROR" ? (
+                              <button
+                                type="button"
+                                className="btn secondary import-history-revert"
+                                disabled={revertingId === row.id}
+                                onClick={() => void revertImport(row)}
+                              >
+                                {revertingId === row.id
+                                  ? "Revirtiendo..."
+                                  : "Revertir"}
+                              </button>
+                            ) : (
+                              <span className="import-history-no-action">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -418,8 +502,9 @@ export function ImportCenterPanel({
               )}
 
               <div className="import-history-footnote">
-                La reversión se habilitará individualmente cuando cada
-                importador tenga una operación transaccional segura.
+                Por seguridad, solo puede revertirse la última importación
+                activa de cartera. Las importaciones posteriores deben
+                revertirse primero.
               </div>
             </div>
           </div>
