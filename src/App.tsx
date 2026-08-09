@@ -1890,6 +1890,7 @@ export default function App() {
           onEditCompany={() => setShowModalEmpresa(true)}
           onChangeLogo={cambiarLogo}
           onImportExcel={importarExcel}
+          onOpenCancelledImport={() => setTab("anulados")}
           onExportBackup={exportarBackup}
           onClearDatabase={() => setShowModalLimpiar(true)}
           onOpenDocumentation={() => setShowModalDocumentacion(true)}

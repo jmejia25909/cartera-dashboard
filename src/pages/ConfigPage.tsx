@@ -1,3 +1,6 @@
+import { ImportCenterPanel } from "./config/ImportCenterPanel";
+import "./config/import-center.css";
+
 export type DensityMode = 'normal' | 'compact';
 
 export interface UpdateInfo {
@@ -20,6 +23,7 @@ export interface ConfigPageProps {
   onEditCompany: () => void;
   onChangeLogo: () => void;
   onImportExcel: () => void;
+  onOpenCancelledImport: () => void;
   onExportBackup: () => void;
   onClearDatabase: () => void;
   onOpenDocumentation: () => void;
@@ -53,14 +57,13 @@ export function ConfigPage({
   onEditCompany,
   onChangeLogo,
   onImportExcel,
+  onOpenCancelledImport,
   onExportBackup,
   onClearDatabase,
   onOpenDocumentation,
   onOpenHistory,
   updateInfo,
   formatUpdateDate,
-  dbPath,
-  onCopyDbPath,
 }: ConfigPageProps) {
   const handleAutoDarkChange = (enabled: boolean): void => {
     onAutoDarkChange(enabled);
@@ -228,96 +231,13 @@ export function ConfigPage({
             </div>
           </div>
 
-          <div className="config-card">
-            <div className="config-header">
-              <div className="config-icon-box">💾</div>
-              <div className="config-title">
-                <h3>Gestión de Datos</h3>
-                <p>Importación y respaldos</p>
-              </div>
-            </div>
-            <div className="config-actions">
-              <button
-                type="button"
-                className="config-btn"
-                onClick={onImportExcel}
-                disabled={!hasWritePermissions}
-              >
-                <span>
-                  <span className="config-btn-icon">📥</span> Importar Excel
-                  Contifico
-                </span>
-                <span className="config-btn-arrow">→</span>
-              </button>
-              <button
-                type="button"
-                className="config-btn"
-                onClick={onExportBackup}
-              >
-                <span>
-                  <span className="config-btn-icon">📤</span> Exportar respaldo
-                  completo
-                </span>
-                <span className="config-btn-arrow">→</span>
-              </button>
-              <button
-                type="button"
-                className="config-btn"
-                onClick={onClearDatabase}
-                style={{
-                  color: '#ef4444',
-                  borderColor: '#fee2e2',
-                  background: '#fef2f2',
-                }}
-              >
-                <span>
-                  <span className="config-btn-icon">🗑️</span> Limpiar base de
-                  datos
-                </span>
-                <span className="config-btn-arrow">→</span>
-              </button>
-            </div>
-
-            <div
-              style={{
-                marginTop: 12,
-                padding: '10px 12px',
-                background: 'var(--bg-main)',
-                borderRadius: 8,
-                border: '1px dashed var(--border)',
-                fontSize: '0.72rem',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>Ruta de la base de datos</div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <code
-                  style={{
-                    flex: '1 1 280px',
-                    overflowWrap: 'anywhere',
-                    color: 'var(--text-main)',
-                  }}
-                >
-                  {dbPath || '(cargando...)'}
-                </code>
-                <button
-                  type="button"
-                  className="btn secondary"
-                  onClick={() => onCopyDbPath(dbPath)}
-                  disabled={!dbPath}
-                >
-                  📋 Copiar ruta
-                </button>
-              </div>
-            </div>
-          </div>
+          <ImportCenterPanel
+            hasWritePermissions={hasWritePermissions}
+            onImportPortfolio={onImportExcel}
+            onOpenCancelledImport={onOpenCancelledImport}
+            onExportBackup={onExportBackup}
+            onClearDatabase={onClearDatabase}
+          />
 
           <div className="config-card">
             <div className="config-header">

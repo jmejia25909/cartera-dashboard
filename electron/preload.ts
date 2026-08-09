@@ -34,6 +34,16 @@ const apiMethods = {
   cancelledDocumentsReversalSummary: () =>
     ipcRenderer.invoke("cancelledDocumentsReversalSummary"),
   importarContifico: () => ipcRenderer.invoke("importarContifico"),
+  importHistoryList: (args?: {
+    tipo?: "CARTERA" | "ANULADOS" | "NOTAS_CREDITO" | "COBROS_MOVIMIENTOS";
+    limit?: number;
+  }) => ipcRenderer.invoke("importHistoryList", args),
+  importHistoryGet: (id: number) =>
+    ipcRenderer.invoke("importHistoryGet", id),
+  importHistoryRevert: (args: {
+    id: number;
+    observacion?: string;
+  }) => ipcRenderer.invoke("importHistoryRevert", args),
   limpiarBaseDatos: () => ipcRenderer.invoke("limpiarBaseDatos"),
   actualizarDiasCredito: (id: number, dias: number) => ipcRenderer.invoke("actualizarDiasCredito", { id, dias }),
   generarPDF: (filename: string) => ipcRenderer.invoke("generarPDF", filename),
