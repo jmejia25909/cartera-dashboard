@@ -1456,6 +1456,163 @@ function _saveDocumentsToDb(db: any, docs: any[]) {
   return { insertedDocs, updatedDocs, insertedIds, paidDocs };
 }
 
+
+// --- Centro de Importaciones ---
+type ImportType =
+  | "CARTERA"
+  | "ANULADOS"
+  | "NOTAS_CREDITO"
+  | "COBROS_MOVIMIENTOS";
+
+function listImportHistory(args?: {
+  tipo?: ImportType;
+  limit?: number;
+}) {
+  const limit = Math.min(
+    Math.max(Number(args?.limit ?? 100), 1),
+    500,
+  );
+
+  if (args?.tipo) {
+    return db
+      .prepare(
+        [
+          "SELECT *",
+          "FROM importaciones",
+          "WHERE tipo = ?",
+          "ORDER BY datetime(importado_en) DESC, id DESC",
+          "LIMIT ?",
+        ].join(" "),
+      )
+      .all(args.tipo, limit);
+  }
+
+  return db
+    .prepare(
+      [
+        "SELECT *",
+        "FROM importaciones",
+        "ORDER BY datetime(importado_en) DESC, id DESC",
+        "LIMIT ?",
+      ].join(" "),
+    )
+    .all(limit);
+}
+
+function getImportById(id: number) {
+  return db
+    .prepare("SELECT * FROM importaciones WHERE id = ?")
+    .get(id);
+}
+
+function requestImportReversal(
+  id: number,
+  observacion = "",
+) {
+  const current = getImportById(id) as any;
+
+  if (!current) {
+    return {
+      ok: false,
+      message: "La importación no existe.",
+    };
+  }
+
+  if (current.estado === "REVERTIDA") {
+    return {
+      ok: false,
+      message: "La importación ya se encuentra revertida.",
+    };
+  }
+
+  return {
+    ok: false,
+    code: "REVERSAL_NOT_IMPLEMENTED",
+    message:
+      "La reversión se habilitará por tipo de importación. " +
+      "No se eliminó información.",
+    importacion: current,
+    observacion,
+  };
+}
+
+ipcMain.handle(
+  "importHistoryList",
+  (
+    _event,
+    args?: {
+      tipo?: ImportType;
+      limit?: number;
+    },
+  ) => {
+    try {
+      return {
+        ok: true,
+        rows: listImportHistory(args),
+      };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        rows: [],
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo consultar el historial.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "importHistoryGet",
+  (_event, id: number) => {
+    try {
+      const row = getImportById(Number(id));
+
+      return row
+        ? { ok: true, row }
+        : {
+            ok: false,
+            message: "La importación no existe.",
+          };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo consultar la importación.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "importHistoryRevert",
+  (
+    _event,
+    args: {
+      id: number;
+      observacion?: string;
+    },
+  ) => {
+    try {
+      return requestImportReversal(
+        Number(args?.id),
+        args?.observacion ?? "",
+      );
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo revertir la importación.",
+      };
+    }
+  },
+);
+
 // -----------------------------
 // Electron lifecycle
 // -----------------------------
@@ -1702,6 +1859,20 @@ ipcMain.handle("reiniciarEstructuraExcel", async () => {
   }
 });
 
+
+ipcMain.handle("importHistoryList",(_event,args?:{tipo?:ImportType;limit?:number})=>{
+  try{return {ok:true,rows:listImportHistory(args)};}
+  catch(error:unknown){return {ok:false,rows:[],message:error instanceof Error?error.message:"No se pudo consultar el historial."};}
+});
+ipcMain.handle("importHistoryGet",(_event,id:number)=>{
+  try{const row=getImportById(Number(id));return row?{ok:true,row}:{ok:false,message:"La importación no existe."};}
+  catch(error:unknown){return {ok:false,message:error instanceof Error?error.message:"No se pudo consultar la importación."};}
+});
+ipcMain.handle("importHistoryRevert",(_event,args:{id:number;observacion?:string})=>{
+  try{return requestImportReversal(Number(args?.id),args?.observacion??"");}
+  catch(error:unknown){return {ok:false,message:error instanceof Error?error.message:"No se pudo revertir la importación."};}
+});
+
 ipcMain.handle("limpiarBaseDatos", async () => {
   try {
     const tx = db.transaction(() => {
@@ -1713,6 +1884,7 @@ ipcMain.handle("limpiarBaseDatos", async () => {
       db.prepare("DELETE FROM cuentas_aplicar").run();
       db.prepare("DELETE FROM conciliaciones_cobros").run();
       db.prepare("DELETE FROM abonos").run();
+      db.prepare("DELETE FROM importaciones").run();
       db.prepare("DELETE FROM campana_clientes").run();
       db.prepare("DELETE FROM campanas").run();
       // Resetear excel_headers_json para que próxima importación defina nueva estructura

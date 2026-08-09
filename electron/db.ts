@@ -481,6 +481,32 @@ function ensureSchema(db: Database.Database) {
       AND (COALESCE(total_anterior, 0) - COALESCE(total_nuevo, 0)) <= 0;
   `);
 
+
+    // Centro de Importaciones: auditoría de archivos procesados.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS importaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL CHECK (tipo IN ('CARTERA','ANULADOS','NOTAS_CREDITO','COBROS_MOVIMIENTOS')),
+        archivo_nombre TEXT NOT NULL,
+        archivo_hash TEXT,
+        periodo_desde TEXT,
+        periodo_hasta TEXT,
+        registros_leidos INTEGER NOT NULL DEFAULT 0,
+        registros_importados INTEGER NOT NULL DEFAULT 0,
+        registros_ignorados INTEGER NOT NULL DEFAULT 0,
+        registros_duplicados INTEGER NOT NULL DEFAULT 0,
+        estado TEXT NOT NULL DEFAULT 'PROCESANDO'
+          CHECK (estado IN ('PROCESANDO','COMPLETADA','COMPLETADA_ADVERTENCIAS','ERROR','REVERTIDA')),
+        importado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+        revertido_en TEXT,
+        observacion TEXT DEFAULT '',
+        metadata_json TEXT DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS idx_importaciones_tipo_fecha ON importaciones(tipo,importado_en DESC);
+      CREATE INDEX IF NOT EXISTS idx_importaciones_estado ON importaciones(estado);
+      CREATE INDEX IF NOT EXISTS idx_importaciones_hash ON importaciones(archivo_hash);
+    `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }
