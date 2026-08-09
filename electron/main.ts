@@ -2067,19 +2067,6 @@ ipcMain.handle("reiniciarEstructuraExcel", async () => {
 });
 
 
-ipcMain.handle("importHistoryList",(_event,args?:{tipo?:ImportType;limit?:number})=>{
-  try{return {ok:true,rows:listImportHistory(args)};}
-  catch(error:unknown){return {ok:false,rows:[],message:error instanceof Error?error.message:"No se pudo consultar el historial."};}
-});
-ipcMain.handle("importHistoryGet",(_event,id:number)=>{
-  try{const row=getImportById(Number(id));return row?{ok:true,row}:{ok:false,message:"La importación no existe."};}
-  catch(error:unknown){return {ok:false,message:error instanceof Error?error.message:"No se pudo consultar la importación."};}
-});
-ipcMain.handle("importHistoryRevert",(_event,args:{id:number;observacion?:string})=>{
-  try{return requestImportReversal(Number(args?.id),args?.observacion??"");}
-  catch(error:unknown){return {ok:false,message:error instanceof Error?error.message:"No se pudo revertir la importación."};}
-});
-
 ipcMain.handle("limpiarBaseDatos", async () => {
   try {
     const tx = db.transaction(() => {
