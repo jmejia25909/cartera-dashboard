@@ -288,6 +288,18 @@ function ensureSchema(db: Database.Database) {
 
   // Migración: Agregar columnas a clientes si no existen
   const clientCols = ["telefono", "email", "direccion", "contacto"];
+
+  const importerClientCols = [
+    { name: "categoria_persona", type: "TEXT DEFAULT ''" },
+    { name: "vendedor", type: "TEXT DEFAULT ''" },
+    { name: "centro_costo", type: "TEXT DEFAULT ''" },
+  ];
+  for (const col of importerClientCols) {
+    if (!tableHasColumn(db, "clientes", col.name)) {
+      try { db.exec(`ALTER TABLE clientes ADD COLUMN ${col.name} ${col.type}`); }
+      catch (e) { console.warn(`Error al agregar columna ${col.name} a clientes:`, e); }
+    }
+  }
   for (const c of clientCols) {
     if (!tableHasColumn(db, "clientes", c)) {
       try { db.exec(`ALTER TABLE clientes ADD COLUMN ${c} TEXT DEFAULT ''`); } catch (e) { console.warn(`Error al agregar columna ${c} a clientes:`, e); }

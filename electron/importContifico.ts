@@ -213,16 +213,14 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
     INSERT INTO documentos (
       cliente, razon_social, tipo_documento, documento,
       fecha_emision, fecha_vencimiento,
-      vendedor, centro_costo, categoria_persona,
-      por_vencer, dias_30, dias_60, dias_90, dias_120, dias_mas_120,
+      vendedor,
       total, descripcion, valor_documento, retenciones, cobros,
       dias_credito_aplicados, credito_fuente, credito_pendiente,
       is_subtotal
     ) VALUES (
       @cliente, @razon_social, @tipo_documento, @documento,
       @fecha_emision, @fecha_vencimiento,
-      @vendedor, @centro_costo, @categoria_persona,
-      @por_vencer, @dias_30, @dias_60, @dias_90, @dias_120, @dias_mas_120,
+      @vendedor,
       @total, @descripcion, @valor_documento, @retenciones, @cobros,
       @dias_credito_aplicados, @credito_fuente, @credito_pendiente,
       @is_subtotal
@@ -342,6 +340,8 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
       const retenciones = toNumber(getCell(r, map, kRet));
       const cobros = toNumber(getCell(r, map, kCobros));
 
+      // AGING DEL EXCEL: solo validación. No se persiste en documentos.
+      // El aging operativo se calcula dinámicamente con fecha_vencimiento.
       // VALIDACIÓN DE DESCUADRE EN EXCEL:
       // Compara si el Total del documento equivale a la suma de los tramos de días
       const sumaTramos = por_vencer + dias_30 + dias_60 + dias_90 + dias_120 + dias_mas_120;
@@ -401,14 +401,6 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
         fecha_emision,
         fecha_vencimiento,
         vendedor,
-        centro_costo,
-        categoria_persona,
-        por_vencer,
-        dias_30,
-        dias_60,
-        dias_90,
-        dias_120,
-        dias_mas_120,
         total,
         descripcion,
         valor_documento,
@@ -435,14 +427,6 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
           fecha_emision: '',
           fecha_vencimiento: '',
           vendedor: '',
-          centro_costo: '',
-          categoria_persona: '',
-          por_vencer: 0,
-          dias_30: 0,
-          dias_60: 0,
-          dias_90: 0,
-          dias_120: 0,
-          dias_mas_120: 0,
           total: 0,
           descripcion: 'Liquidado automáticamente por importación',
           valor_documento: 0,
