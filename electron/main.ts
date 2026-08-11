@@ -1716,6 +1716,11 @@ function requestImportReversal(
   ) as PortfolioSnapshot;
 
   const tx = db.transaction(() => {
+    // PACK 038: los eventos/saldos del corte revertido pertenecen a esta
+    // importación y deben retirarse junto con la proyección restaurada.
+    db.prepare("DELETE FROM documento_eventos WHERE importacion_id = ?").run(id);
+    db.prepare("DELETE FROM documento_saldos WHERE importacion_id = ?").run(id);
+
     restorePortfolioSnapshot(snapshot);
 
     db.prepare(`
@@ -2522,6 +2527,7 @@ ipcMain.handle("importarContifico", async () => {
     const result = importContificoExcel(
       filePath,
       db,
+      importacionId,
     ) as Record<string, unknown>;
 
     if (!result?.ok) {

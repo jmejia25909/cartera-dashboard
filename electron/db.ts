@@ -533,6 +533,133 @@ function ensureSchema(db: Database.Database) {
       ON importacion_snapshots(importacion_id);
   `);
 
+  // PACK 038: conciliación documental event-driven.
+  // Se conserva `documentos` como proyección de cartera vigente y se agrega
+  // un ledger inmutable para explicar cambios entre cortes.
+  ensureCancelledColumn("documentos", "documento_normalizado", "TEXT");
+  ensureCancelledColumn("documentos", "estado_confirmacion", "TEXT DEFAULT 'CONFIRMADO'");
+  ensureCancelledColumn("documentos", "estado_fuente", "TEXT DEFAULT 'CARTERA_CONTIFICO'");
+  ensureCancelledColumn("documentos", "saldo_pendiente", "REAL DEFAULT 0");
+  ensureCancelledColumn("documentos", "saldo_original", "REAL DEFAULT 0");
+  ensureCancelledColumn("documentos", "ultima_conciliacion_en", "TEXT");
+
+  db.exec(`
+    UPDATE documentos
+    SET documento_normalizado = CASE
+      WHEN TRIM(COALESCE(documento, '')) = '' THEN ''
+      ELSE LTRIM(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(documento), '-', ''), ' ', ''), '.', ''), '/', ''), '0')
+    END
+    WHERE TRIM(COALESCE(documento_normalizado, '')) = '';
+
+    UPDATE documentos
+    SET saldo_pendiente = COALESCE(total, 0)
+    WHERE COALESCE(saldo_pendiente, 0) = 0
+      AND COALESCE(total, 0) > 0;
+
+    UPDATE documentos
+    SET saldo_original = MAX(COALESCE(valor_documento, 0), COALESCE(total, 0))
+    WHERE COALESCE(saldo_original, 0) <= 0;
+
+    CREATE INDEX IF NOT EXISTS idx_documentos_documento_normalizado
+      ON documentos(documento_normalizado);
+
+    CREATE TABLE IF NOT EXISTS documento_saldos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      documento_normalizado TEXT NOT NULL,
+      importacion_id INTEGER NOT NULL,
+      saldo_anterior REAL,
+      saldo_actual REAL NOT NULL,
+      delta REAL NOT NULL DEFAULT 0,
+      presente_cartera INTEGER NOT NULL DEFAULT 1,
+      registrado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      UNIQUE(documento_normalizado, importacion_id),
+      FOREIGN KEY (importacion_id) REFERENCES importaciones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_documento_saldos_documento
+      ON documento_saldos(documento_normalizado, importacion_id DESC);
+
+    CREATE TABLE IF NOT EXISTS documento_eventos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_key TEXT NOT NULL UNIQUE,
+      documento_normalizado TEXT NOT NULL,
+      tipo_evento TEXT NOT NULL,
+      fuente TEXT NOT NULL,
+      importe REAL NOT NULL DEFAULT 0,
+      estado_anterior TEXT,
+      estado_nuevo TEXT,
+      provisional INTEGER NOT NULL DEFAULT 0,
+      importacion_id INTEGER,
+      referencia_externa TEXT,
+      metadata_json TEXT DEFAULT '{}',
+      ocurrido_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (importacion_id) REFERENCES importaciones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_documento_eventos_documento
+      ON documento_eventos(documento_normalizado, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_documento_eventos_tipo
+      ON documento_eventos(tipo_evento, fuente);
+    CREATE INDEX IF NOT EXISTS idx_documento_eventos_importacion
+      ON documento_eventos(importacion_id);
+
+    -- Migración histórica: las antiguas filas ficticias dejan evidencia completa
+    -- en el ledger y después se retiran de la proyección de cartera vigente.
+    INSERT OR IGNORE INTO documento_eventos (
+      event_key, documento_normalizado, tipo_evento, fuente, importe,
+      estado_anterior, estado_nuevo, provisional, referencia_externa, metadata_json
+    )
+    SELECT
+      'LEGACY_DESAPARICION:' || COALESCE(d.documento_normalizado, ''),
+      d.documento_normalizado,
+      'DOCUMENTO_DESAPARECIDO',
+      'DELTA_CARTERA',
+      COALESCE((
+        SELECT MAX(MAX(COALESCE(a.total_anterior, 0) - COALESCE(a.total_nuevo, 0), 0))
+        FROM abonos a
+        WHERE a.documento_normalizado = d.documento_normalizado
+      ), 0),
+      'ACTIVO_PENDIENTE',
+      'PAGADO_TOTAL',
+      1,
+      d.documento,
+      json_object('migrado_desde', 'LIQUIDACION_AUTOMATICA')
+    FROM documentos d
+    WHERE d.is_subtotal = 0
+      AND d.credito_fuente = 'LIQUIDACION_AUTOMATICA'
+      AND TRIM(COALESCE(d.documento_normalizado, '')) <> '';
+
+    INSERT OR IGNORE INTO documento_eventos (
+      event_key, documento_normalizado, tipo_evento, fuente, importe,
+      estado_anterior, estado_nuevo, provisional, referencia_externa, metadata_json
+    )
+    SELECT
+      'LEGACY_LIQUIDACION:' || COALESCE(d.documento_normalizado, ''),
+      d.documento_normalizado,
+      'PAGO_TOTAL_INFERIDO',
+      'DELTA_CARTERA',
+      COALESCE((
+        SELECT MAX(MAX(COALESCE(a.total_anterior, 0) - COALESCE(a.total_nuevo, 0), 0))
+        FROM abonos a
+        WHERE a.documento_normalizado = d.documento_normalizado
+      ), 0),
+      'ACTIVO_PENDIENTE',
+      'PAGADO_TOTAL',
+      1,
+      d.documento,
+      json_object('migrado_desde', 'LIQUIDACION_AUTOMATICA')
+    FROM documentos d
+    WHERE d.is_subtotal = 0
+      AND d.credito_fuente = 'LIQUIDACION_AUTOMATICA'
+      AND TRIM(COALESCE(d.documento_normalizado, '')) <> '';
+
+    -- Ya existe evidencia auditable en documento_eventos; la fila sintética no
+    -- representa cartera vigente y debe salir de la proyección materializada.
+    DELETE FROM documentos
+    WHERE is_subtotal = 0
+      AND credito_fuente = 'LIQUIDACION_AUTOMATICA';
+  `);
+
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }

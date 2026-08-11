@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import * as XLSX from "xlsx";
 import type Database from "better-sqlite3";
+import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
+import { insertDocumentEvent } from "./reconciliation/eventRepository";
 
 export type CancelledDocumentPreviewRow = {
   rowNumber: number;
@@ -43,11 +45,12 @@ export type CancelledDocumentImportResult = {
 };
 
 type DocumentRecord = {
-  id: number;
+  id: number | null;
   documento: string;
   cliente: string | null;
   estado_documento: string | null;
   anulado: number | null;
+  historical: boolean;
 };
 
 type ParsedCancelledReport = {
@@ -74,18 +77,6 @@ function normalizeHeader(value: unknown): string {
     .replace(/[^a-z0-9#]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function normalizeDocumentNumber(value: unknown): string {
-  const raw = String(value ?? "").trim().toUpperCase();
-  if (!raw) return "";
-
-  const alnum = raw.replace(/[^A-Z0-9]/g, "");
-  if (!alnum) return "";
-
-  return /^\d+$/.test(alnum)
-    ? alnum.replace(/^0+/, "") || "0"
-    : alnum;
 }
 
 function toIsoDate(value: unknown): string {
@@ -230,14 +221,69 @@ function loadDocuments(
       anulado
     FROM documentos
     WHERE is_subtotal = 0
-  `).all() as DocumentRecord[];
+  `).all() as Array<Omit<DocumentRecord, "historical">>;
 
-  return new Map(
-    documents.map((document) => [
-      normalizeDocumentNumber(document.documento),
-      document,
-    ]),
-  );
+  const result = new Map<string, DocumentRecord>();
+
+  for (const document of documents) {
+    const key = normalizeDocumentNumber(document.documento);
+    if (!key) continue;
+    result.set(key, { ...document, historical: false });
+  }
+
+  // Si el documento ya no está en la cartera vigente, conserva su identidad
+  // desde el ledger. Esto permite que Anulados haga override sobre una
+  // desaparición/PAGADO_TOTAL provisional.
+  const historicalRows = db.prepare(`
+    SELECT
+      e.documento_normalizado,
+      e.referencia_externa,
+      e.estado_nuevo,
+      e.metadata_json,
+      EXISTS (
+        SELECT 1
+        FROM documento_eventos a
+        WHERE a.documento_normalizado = e.documento_normalizado
+          AND a.tipo_evento = 'ANULACION_CONFIRMADA'
+      ) AS anulado
+    FROM documento_eventos e
+    WHERE e.id IN (
+      SELECT MAX(id)
+      FROM documento_eventos
+      GROUP BY documento_normalizado
+    )
+  `).all() as Array<{
+    documento_normalizado: string;
+    referencia_externa: string | null;
+    estado_nuevo: string | null;
+    metadata_json: string | null;
+    anulado: number;
+  }>;
+
+  for (const row of historicalRows) {
+    if (!row.documento_normalizado || result.has(row.documento_normalizado)) {
+      continue;
+    }
+
+    let cliente: string | null = null;
+    try {
+      const metadata = JSON.parse(row.metadata_json || "{}") as Record<string, unknown>;
+      cliente = metadata.cliente ? String(metadata.cliente) : null;
+    } catch {
+      cliente = null;
+    }
+
+    result.set(row.documento_normalizado, {
+      id: null,
+      documento: row.referencia_externa || row.documento_normalizado,
+      cliente,
+      estado_documento: row.anulado ? "ANULADO" : row.estado_nuevo,
+      anulado: row.anulado ? 1 : 0,
+      historical: true,
+    });
+  }
+
+  return result;
 }
 
 export function previewCancelledDocumentsExcel(
@@ -399,16 +445,66 @@ export function importCancelledDocumentsExcel(
         result = "YA_ANULADO";
       } else {
         matchedDocuments += 1;
-        cancelledDocuments += updateDocument.run({
-          id: document.id,
-          fecha_anulacion: row.cancellationDate || null,
-        }).changes;
+
+        if (document.id != null) {
+          cancelledDocuments += updateDocument.run({
+            id: document.id,
+            fecha_anulacion: row.cancellationDate || null,
+          }).changes;
+        } else {
+          // Documento histórico: no se recrea una fila ficticia en `documentos`.
+          // El override fiscal queda representado por eventos inmutables.
+          cancelledDocuments += 1;
+        }
 
         reversedPayments += reversePayments.run({
           documento_normalizado: row.normalizedDocumentNumber,
         }).changes;
 
-        result = "ANULADO";
+        const previousState = document.estado_documento || "PAGADO_TOTAL";
+        const eventIdentity = [
+          row.normalizedDocumentNumber,
+          row.cancellationDate || "SIN_FECHA",
+          row.authorizationNumber || "SIN_AUTORIZACION",
+        ].join(":");
+
+        insertDocumentEvent(db, {
+          eventKey: `ANULACION_CONFIRMADA:${eventIdentity}`,
+          documentoNormalizado: row.normalizedDocumentNumber,
+          tipoEvento: "ANULACION_CONFIRMADA",
+          fuente: "ANULADOS",
+          importe: 0,
+          estadoAnterior: previousState,
+          estadoNuevo: "ANULADO",
+          provisional: false,
+          referenciaExterna: row.documentNumber,
+          metadata: {
+            cliente: document.cliente,
+            fecha_anulacion: row.cancellationDate || null,
+            numero_autorizacion: row.authorizationNumber || null,
+            tipo_documento: row.documentType || null,
+            historico: document.historical,
+          },
+        });
+
+        if (previousState === "PAGADO_TOTAL") {
+          insertDocumentEvent(db, {
+            eventKey: `ESTADO_RECLASIFICADO:${eventIdentity}`,
+            documentoNormalizado: row.normalizedDocumentNumber,
+            tipoEvento: "ESTADO_RECLASIFICADO",
+            fuente: "ANULADOS",
+            importe: 0,
+            estadoAnterior: "PAGADO_TOTAL",
+            estadoNuevo: "ANULADO",
+            provisional: false,
+            referenciaExterna: row.documentNumber,
+            metadata: {
+              motivo: "Override fiscal por archivo de documentos anulados",
+            },
+          });
+        }
+
+        result = document.historical ? "ANULADO_HISTORICO" : "ANULADO";
       }
 
       insertLog.run({

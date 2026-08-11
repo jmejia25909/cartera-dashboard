@@ -1,6 +1,13 @@
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import type Database from "better-sqlite3";
+import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
+import { reconcileDocument } from "./reconciliation/reconciliationEngine";
+import {
+  applyCurrentProjection,
+  insertDocumentEvent,
+  upsertDocumentBalance,
+} from "./reconciliation/eventRepository";
 
 export type ImportResult = {
   ok: boolean;
@@ -134,23 +141,45 @@ type CreditPolicy = { tipo_credito: string; dias_credito: number | null; credito
 // -----------------------------
 // Import Principal
 // -----------------------------
-export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Database): ImportResult {
-  const normalizeDocumento = (value: unknown): string => {
-    const raw = String(value ?? "").trim().toUpperCase();
-    if (!raw) return "";
-    const alnum = raw.replace(/[^A-Z0-9]/g, "");
-    if (!alnum) return raw;
-    if (/^[0-9]+$/.test(alnum)) return alnum.replace(/^0+/, "") || "0";
-    return alnum;
-  };
+export function importarCarteraPorCobrarExcel(
+  filePath: string,
+  db: Database.Database,
+  importacionId?: number,
+): ImportResult {
+  // 1. Snapshot de cartera REAL previa. Las antiguas filas
+  // LIQUIDACION_AUTOMATICA son evidencia histórica, no cartera vigente.
+  const docsPrevios: Record<string, {
+    documento: string;
+    cliente: string;
+    total: number;
+    cobros: number;
+    estadoDocumento: string;
+  }> = {};
 
-  // 1. Obtener documentos actuales para detectar abonos/pagos
-  const docsPrevios: Record<string, { documento: string; total: number; cobros: number }> = {};
-  for (const row of db.prepare("SELECT documento, total, cobros FROM documentos WHERE is_subtotal=0").all() as Array<{ documento: string; total: number; cobros: number }>) {
-    const key = normalizeDocumento(row.documento);
-    if (key) docsPrevios[key] = { documento: row.documento, total: Number(row.total), cobros: Number(row.cobros) };
+  for (const row of db.prepare(`
+    SELECT documento, cliente, total, cobros, estado_documento
+    FROM documentos
+    WHERE is_subtotal = 0
+      AND COALESCE(credito_fuente, '') <> 'LIQUIDACION_AUTOMATICA'
+  `).all() as Array<{
+    documento: string;
+    cliente: string;
+    total: number;
+    cobros: number;
+    estado_documento: string;
+  }>) {
+    const key = normalizeDocumentNumber(row.documento);
+    if (key) {
+      docsPrevios[key] = {
+        documento: row.documento,
+        cliente: row.cliente ?? "",
+        total: Number(row.total ?? 0),
+        cobros: Number(row.cobros ?? 0),
+        estadoDocumento: row.estado_documento || "ACTIVO_PENDIENTE",
+      };
+    }
   }
-  const isPrimeraImportacion = Object.keys(docsPrevios).length === 0;
+
   const docsImportados = new Set<string>();
 
   // 2. Leer archivo Excel
@@ -211,14 +240,14 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
 
   const stmtInsertDoc = db.prepare(`
     INSERT INTO documentos (
-      cliente, razon_social, tipo_documento, documento,
+      cliente, razon_social, tipo_documento, documento, documento_normalizado,
       fecha_emision, fecha_vencimiento,
       vendedor,
       total, descripcion, valor_documento, retenciones, cobros,
       dias_credito_aplicados, credito_fuente, credito_pendiente,
       is_subtotal
     ) VALUES (
-      @cliente, @razon_social, @tipo_documento, @documento,
+      @cliente, @razon_social, @tipo_documento, @documento, @documento_normalizado,
       @fecha_emision, @fecha_vencimiento,
       @vendedor,
       @total, @descripcion, @valor_documento, @retenciones, @cobros,
@@ -263,20 +292,6 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
         resuelto_en = datetime('now', 'localtime')
     WHERE cliente = ?
       AND estado <> 'RESUELTA'
-  `);
-
-  const stmtInsertAbono = db.prepare(`
-    INSERT INTO abonos (documento, total_anterior, total_nuevo, fecha, observacion)
-    SELECT @documento, @total_anterior, @total_nuevo, @fecha, @observacion
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM abonos
-      WHERE UPPER(REPLACE(REPLACE(REPLACE(TRIM(documento), '-', ''), ' ', ''), '.', '')) =
-            UPPER(REPLACE(REPLACE(REPLACE(TRIM(@documento), '-', ''), ' ', ''), '.', ''))
-        AND ABS(total_anterior - @total_anterior) < 0.01
-        AND ABS(total_nuevo - @total_nuevo) < 0.01
-        AND COALESCE(observacion, '') = COALESCE(@observacion, '')
-    )
   `);
 
   let insertedDocs = 0;
@@ -364,33 +379,12 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
         }
       }
 
-      // Registro de Abonos
-      if (!is_subtotal && documento) {
-        const docKey = normalizeDocumento(documento);
-        if (docKey) docsImportados.add(docKey);
-        const previo = docKey ? docsPrevios[docKey] : undefined;
+      const docKey = !is_subtotal
+        ? normalizeDocumentNumber(documento)
+        : "";
 
-        if (previo) {
-          const totalBajo = Math.abs(previo.total - total) > 0.01 && total < previo.total;
-          const cobrosSubio = Math.abs(cobros - previo.cobros) > 0.01 && cobros > previo.cobros;
-          if (totalBajo || cobrosSubio) {
-            stmtInsertAbono.run({
-              documento,
-              total_anterior: previo.total,
-              total_nuevo: total,
-              fecha: new Date().toISOString(),
-              observacion: totalBajo ? 'Abono detectado por reducción de saldo' : 'Abono detectado por aumento de cobros',
-            });
-          }
-        } else if (isPrimeraImportacion && cobros > 0) {
-          stmtInsertAbono.run({
-            documento,
-            total_anterior: Math.max(0, total + cobros),
-            total_nuevo: total,
-            fecha: new Date().toISOString(),
-            observacion: 'Abono detectado en carga inicial',
-          });
-        }
+      if (docKey) {
+        docsImportados.add(docKey);
       }
 
       stmtInsertDoc.run({
@@ -398,6 +392,7 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
         razon_social,
         tipo_documento,
         documento,
+        documento_normalizado: docKey,
         fecha_emision,
         fecha_vencimiento,
         vendedor,
@@ -412,30 +407,134 @@ export function importarCarteraPorCobrarExcel(filePath: string, db: Database.Dat
         is_subtotal,
       });
 
-      if (!is_subtotal) insertedDocs++;
+      if (!is_subtotal) {
+        insertedDocs++;
+
+        if (docKey && importacionId && importacionId > 0) {
+          const previo = docsPrevios[docKey];
+          const saldoAnterior = previo ? previo.total : null;
+          const result = reconcileDocument({
+            documento: docKey,
+            saldoAnterior,
+            saldoActual: total,
+            presenteEnCartera: true,
+            cobrosConfirmados: 0,
+            notasCredito: 0,
+            anulado: false,
+          });
+
+          upsertDocumentBalance(db, {
+            documentoNormalizado: docKey,
+            importacionId,
+            saldoAnterior,
+            saldoActual: total,
+            presenteCartera: true,
+          });
+
+          insertDocumentEvent(db, {
+            eventKey: `CARTERA_SNAPSHOT:${importacionId}:${docKey}`,
+            documentoNormalizado: docKey,
+            tipoEvento: "CARTERA_SNAPSHOT",
+            fuente: "CARTERA_CONTIFICO",
+            importe: total,
+            estadoAnterior: previo?.estadoDocumento ?? null,
+            estadoNuevo: result.estado,
+            provisional: false,
+            importacionId,
+            referenciaExterna: documento,
+            metadata: {
+              cliente,
+              saldo_anterior: saldoAnterior,
+              saldo_actual: total,
+              retenciones,
+              cobros_reportados: cobros,
+            },
+          });
+
+          if (previo && total < previo.total - 0.01) {
+            insertDocumentEvent(db, {
+              eventKey: `SALDO_REDUCIDO:${importacionId}:${docKey}`,
+              documentoNormalizado: docKey,
+              tipoEvento: "SALDO_REDUCIDO",
+              fuente: "DELTA_CARTERA",
+              importe: Math.max(0, previo.total - total),
+              estadoAnterior: previo.estadoDocumento,
+              estadoNuevo: result.estado,
+              provisional: true,
+              importacionId,
+              referenciaExterna: documento,
+              metadata: {
+                cliente,
+                saldo_anterior: previo.total,
+                saldo_actual: total,
+                delta_no_conciliado: result.deltaNoConciliado,
+              },
+            });
+          }
+
+          applyCurrentProjection(db, docKey, result);
+        }
+      }
     }
 
-    // Liquidar automáticamente documentos pagados (que ya no vienen en la nueva importación)
-    for (const docKey in docsPrevios) {
-      if (!docsImportados.has(docKey)) {
-        const doc = docsPrevios[docKey].documento;
-        stmtInsertDoc.run({
-          cliente: '',
-          razon_social: '',
-          tipo_documento: '',
-          documento: doc,
-          fecha_emision: '',
-          fecha_vencimiento: '',
-          vendedor: '',
-          total: 0,
-          descripcion: 'Liquidado automáticamente por importación',
-          valor_documento: 0,
-          retenciones: 0,
-          cobros: 0,
-          dias_credito_aplicados: null,
-          credito_fuente: 'LIQUIDACION_AUTOMATICA',
-          credito_pendiente: 0,
-          is_subtotal: 0,
+    // Documentos presentes en N-1 y ausentes en N:
+    // la desaparición es una señal provisional, nunca un cobro confirmado.
+    if (importacionId && importacionId > 0) {
+      for (const [docKey, previo] of Object.entries(docsPrevios)) {
+        if (docsImportados.has(docKey)) continue;
+
+        const result = reconcileDocument({
+          documento: docKey,
+          saldoAnterior: previo.total,
+          saldoActual: 0,
+          presenteEnCartera: false,
+          cobrosConfirmados: 0,
+          notasCredito: 0,
+          anulado: false,
+        });
+
+        upsertDocumentBalance(db, {
+          documentoNormalizado: docKey,
+          importacionId,
+          saldoAnterior: previo.total,
+          saldoActual: 0,
+          presenteCartera: false,
+        });
+
+        insertDocumentEvent(db, {
+          eventKey: `DOCUMENTO_DESAPARECIDO:${importacionId}:${docKey}`,
+          documentoNormalizado: docKey,
+          tipoEvento: "DOCUMENTO_DESAPARECIDO",
+          fuente: "DELTA_CARTERA",
+          importe: previo.total,
+          estadoAnterior: previo.estadoDocumento,
+          estadoNuevo: "PAGADO_TOTAL",
+          provisional: true,
+          importacionId,
+          referenciaExterna: previo.documento,
+          metadata: {
+            cliente: previo.cliente,
+            saldo_anterior: previo.total,
+            saldo_actual: 0,
+          },
+        });
+
+        insertDocumentEvent(db, {
+          eventKey: `PAGO_TOTAL_INFERIDO:${importacionId}:${docKey}`,
+          documentoNormalizado: docKey,
+          tipoEvento: "PAGO_TOTAL_INFERIDO",
+          fuente: "DELTA_CARTERA",
+          importe: previo.total,
+          estadoAnterior: previo.estadoDocumento,
+          estadoNuevo: result.estado,
+          provisional: true,
+          importacionId,
+          referenciaExterna: previo.documento,
+          metadata: {
+            cliente: previo.cliente,
+            confirmacion: result.confirmacion,
+            delta_no_conciliado: result.deltaNoConciliado,
+          },
         });
       }
     }
