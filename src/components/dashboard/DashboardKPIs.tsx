@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   DashboardExecutiveStats,
 } from "../../types/dashboardExecutive";
 
@@ -101,13 +101,15 @@ export function DashboardKpis({
   return (
     <section className="bi-kpi-grid">
       <KpiCard
-        title="CARTERA PENDIENTE"
-        value={money.format(cartera.pendiente)}
-        subtitle="Saldo activo por cobrar"
+        title="CARTERA TOTAL CONTÍFICO"
+        value={money.format(cartera.totalSnapshotContifico)}
+        subtitle={`Operativa ${money.format(cartera.pendiente)} · Créditos ${money.format(cartera.creditosVivos)}`}
         kind="portfolio"
         tooltip={
-          "Suma de saldos positivos activos. " +
-          "Excluye anulados y subtotales."
+          "Total financiero del último snapshot importado desde Contífico. " +
+          `Deuda viva operativa: ${money.format(cartera.pendiente)}. ` +
+          `Créditos vivos: ${money.format(cartera.creditosVivos)}. ` +
+          `Posición neta operativa: ${money.format(cartera.posicionNeta)}.`
         }
       />
 
@@ -169,3 +171,5 @@ export function DashboardKpis({
     </section>
   );
 }
+
+

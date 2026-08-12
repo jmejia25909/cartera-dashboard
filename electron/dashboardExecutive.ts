@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+﻿import Database from "better-sqlite3";
 import type {
   DashboardAgingItem,
   DashboardCriticalAlert,
@@ -37,6 +37,7 @@ const MONTH_LABELS = [
 const ACTIVE_DOCUMENT_WHERE = `
   is_subtotal = 0
   AND COALESCE(total, 0) > 0
+  AND COALESCE(posicion_cartera, 'DEUDA_VIVA') = 'DEUDA_VIVA'
   AND COALESCE(estado_documento, 'ACTIVO') <> 'ANULADO'
 `;
 
@@ -153,11 +154,36 @@ export function computeDashboardExecutiveStats(
     return Number(result?.value ?? result?.count ?? 0);
   };
 
+  // Total financiero fiel al snapshot vigente de Contífico.
+  // Incluye todas las filas reales del reporte:
+  // - deuda positiva,
+  // - créditos vivos/NCT negativos,
+  // - documentos que el replay histórico haya reclasificado posteriormente.
+  //
+  // NO se utiliza para aging, mora ni gestión operativa.
+  const totalSnapshotContifico = scalar(`
+    SELECT COALESCE(SUM(total), 0) AS value
+    FROM documentos
+    WHERE is_subtotal = 0
+  `);
+
+  // Deuda positiva actualmente gestionable para cobranza.
   const carteraPendiente = scalar(`
     SELECT COALESCE(SUM(total), 0) AS value
     FROM documentos
     WHERE ${ACTIVE_DOCUMENT_WHERE}
   `);
+
+  const creditosVivos = scalar(`
+    SELECT ABS(COALESCE(SUM(total), 0)) AS value
+    FROM documentos
+    WHERE is_subtotal = 0
+      AND COALESCE(posicion_cartera, 'DEUDA_VIVA') = 'CREDITO_VIVO'
+      AND COALESCE(total, 0) < 0
+      AND COALESCE(estado_documento, 'ACTIVO') <> 'ANULADO'
+  `);
+
+  const posicionNeta = carteraPendiente - creditosVivos;
 
   const carteraVencida = scalar(`
     SELECT COALESCE(SUM(total), 0) AS value
@@ -874,7 +900,10 @@ export function computeDashboardExecutiveStats(
     },
 
     cartera: {
+      totalSnapshotContifico: roundMoney(totalSnapshotContifico),
       pendiente: roundMoney(carteraPendiente),
+      creditosVivos: roundMoney(creditosVivos),
+      posicionNeta: roundMoney(posicionNeta),
       vencida: roundMoney(carteraVencida),
       porcentajeVencida:
         carteraPendiente > 0
@@ -993,3 +1022,4 @@ export function computeDashboardExecutiveStats(
     ],
   };
 }
+

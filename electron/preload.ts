@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+﻿import { contextBridge, ipcRenderer } from "electron";
 
 const apiMethods = {
   cambiarLogo: () => {
@@ -30,6 +30,14 @@ const apiMethods = {
     ipcRenderer.invoke("previewCancelledDocuments"),
   confirmCancelledDocumentsImport: (filePath: string) =>
     ipcRenderer.invoke("confirmCancelledDocumentsImport", filePath),
+  previewCreditNotes: () =>
+    ipcRenderer.invoke("previewCreditNotes"),
+  confirmCreditNotesImport: (filePath: string) =>
+    ipcRenderer.invoke("confirmCreditNotesImport", filePath),
+  previewCollectionMovements: () =>
+    ipcRenderer.invoke("previewCollectionMovements"),
+  confirmCollectionMovementsImport: (filePath: string) =>
+    ipcRenderer.invoke("confirmCollectionMovementsImport", filePath),
   cancelledDocumentsList: () => ipcRenderer.invoke("cancelledDocumentsList"),
   cancelledDocumentsReversalSummary: () =>
     ipcRenderer.invoke("cancelledDocumentsReversalSummary"),
@@ -44,7 +52,18 @@ const apiMethods = {
     id: number;
     observacion?: string;
   }) => ipcRenderer.invoke("importHistoryRevert", args),
+  exportarBackup: () => ipcRenderer.invoke("exportarBackup"),
   limpiarBaseDatos: () => ipcRenderer.invoke("limpiarBaseDatos"),
+  resetReconciliationProjection: () =>
+    ipcRenderer.invoke("resetReconciliationProjection"),
+  reconciliationControlGet: () =>
+    ipcRenderer.invoke("reconciliationControlGet"),
+  historicalBootstrapStart: (snapshotDate: string) =>
+    ipcRenderer.invoke("historicalBootstrapStart", { snapshotDate }),
+  historicalBootstrapFinish: () =>
+    ipcRenderer.invoke("historicalBootstrapFinish"),
+  historicalBootstrapReset: () =>
+    ipcRenderer.invoke("historicalBootstrapReset"),
   actualizarDiasCredito: (id: number, dias: number) => ipcRenderer.invoke("actualizarDiasCredito", { id, dias }),
   generarPDF: (filename: string) => ipcRenderer.invoke("generarPDF", filename),
   empresaObtener: () => ipcRenderer.invoke("empresaObtener"),

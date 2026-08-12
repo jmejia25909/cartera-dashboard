@@ -1,0 +1,173 @@
+import type {
+  DashboardExecutiveStats,
+} from "../../types/dashboardExecutive";
+
+const money = new Intl.NumberFormat("es-EC", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+});
+
+const integer = new Intl.NumberFormat("es-EC");
+
+type KpiKind =
+  | "portfolio"
+  | "overdue"
+  | "risk"
+  | "cash"
+  | "clients"
+  | "docs";
+
+function KpiIcon({
+  kind,
+}: {
+  kind: KpiKind;
+}) {
+  const icons: Record<KpiKind, string> = {
+    portfolio: "$",
+    overdue: "▦",
+    risk: "◷",
+    cash: "▣",
+    clients: "♙",
+    docs: "▤",
+  };
+
+  return (
+    <span className={`bi-kpi-icon bi-kpi-icon--${kind}`}>
+      {icons[kind]}
+    </span>
+  );
+}
+
+function KpiCard({
+  title,
+  value,
+  subtitle,
+  kind,
+  tooltip,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  kind: KpiKind;
+  tooltip: string;
+}) {
+  return (
+    <article className={`bi-kpi bi-kpi--${kind}`}>
+      <div className="bi-kpi__content">
+        <KpiIcon kind={kind} />
+        <div>
+          <span className="bi-kpi__title">{title}</span>
+          <strong className="bi-kpi__value">{value}</strong>
+          <small className="bi-kpi__subtitle">
+            {subtitle}
+          </small>
+        </div>
+      </div>
+
+      <span className="bi-kpi__accent" aria-hidden="true" />
+
+      <div className="bi-hover-card">
+        <strong>{title}</strong>
+        <p>{tooltip}</p>
+      </div>
+    </article>
+  );
+}
+
+interface DashboardKpisProps {
+  cartera: DashboardExecutiveStats["cartera"];
+  cobrosMes: DashboardExecutiveStats["cobrosMes"];
+  periodLabel: string;
+  selectedMonth: number | null;
+}
+
+export function DashboardKpis({
+  cartera,
+  cobrosMes,
+  periodLabel,
+  selectedMonth,
+}: DashboardKpisProps) {
+  const collectionValue =
+    cobrosMes.valorOficial === null
+      ? "Pendiente"
+      : money.format(cobrosMes.valorOficial);
+
+  const collectionTitle =
+    selectedMonth === null
+      ? "MOVIMIENTOS DEL AÑO"
+      : "COBROS DEL MES";
+
+  return (
+    <section className="bi-kpi-grid">
+      <KpiCard
+        title="CARTERA BRUTA POR COBRAR"
+        value={money.format(cartera.pendiente)}
+        subtitle={`Neta ${money.format(cartera.posicionNeta)} · Créditos ${money.format(cartera.creditosVivos)}`}
+        kind="portfolio"
+        tooltip={
+          "Deuda viva bruta: suma de saldos positivos activos. " +
+          `Créditos vivos: ${money.format(cartera.creditosVivos)}. ` +
+          `Posición neta: ${money.format(cartera.posicionNeta)}. ` +
+          "Excluye anulados y subtotales."
+        }
+      />
+
+      <KpiCard
+        title="CARTERA VENCIDA"
+        value={money.format(cartera.vencida)}
+        subtitle={`${cartera.porcentajeVencida.toFixed(1)}% de la cartera`}
+        kind="overdue"
+        tooltip={
+          "Saldo activo cuya fecha de vencimiento " +
+          "es anterior a la fecha de corte."
+        }
+      />
+
+      <KpiCard
+        title="MORA > 90 DÍAS"
+        value={money.format(cartera.mora90)}
+        subtitle={`${cartera.porcentajeMora90.toFixed(1)}% de la cartera`}
+        kind="risk"
+        tooltip={
+          "Saldo activo con más de 90 días de mora. " +
+          "Mide la cartera crítica."
+        }
+      />
+
+      <KpiCard
+        title={collectionTitle}
+        value={collectionValue}
+        subtitle={`${money.format(cobrosMes.totalDetectado)} detectado`}
+        kind="cash"
+        tooltip={
+          `${periodLabel}. ` +
+          "Movimientos detectados; requieren " +
+          "conciliación bancaria."
+        }
+      />
+
+      <KpiCard
+        title="CLIENTES ACTIVOS"
+        value={integer.format(cartera.clientesConSaldo)}
+        subtitle="Con saldo pendiente"
+        kind="clients"
+        tooltip={
+          "Clientes únicos con al menos un " +
+          "documento activo y saldo positivo."
+        }
+      />
+
+      <KpiCard
+        title="DOCUMENTOS"
+        value={integer.format(cartera.documentosPendientes)}
+        subtitle="Pendientes de cobro"
+        kind="docs"
+        tooltip={
+          "Documentos activos con saldo positivo. " +
+          "Excluye anulados y subtotales."
+        }
+      />
+    </section>
+  );
+}

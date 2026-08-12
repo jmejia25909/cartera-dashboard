@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import Database from "better-sqlite3";
@@ -465,6 +465,16 @@ function ensureSchema(db: Database.Database) {
     "numero_autorizacion",
     "TEXT"
   );
+  ensureCancelledColumn(
+    "documentos_anulados_log",
+    "importacion_id",
+    "INTEGER"
+  );
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_documentos_anulados_log_importacion
+      ON documentos_anulados_log(importacion_id);
+  `);
 
 
   // Conciliación histórica de cobros duplicados y movimientos no positivos.
@@ -519,6 +529,135 @@ function ensureSchema(db: Database.Database) {
       CREATE INDEX IF NOT EXISTS idx_importaciones_hash ON importaciones(archivo_hash);
     `);
 
+  // PACK 044: frontera temporal + generaciones de reconstrucción.
+  ensureCancelledColumn(
+    "importaciones",
+    "reconciliation_generation",
+    "INTEGER DEFAULT 1"
+  );
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reconciliation_control (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      cutoff_date TEXT NOT NULL DEFAULT '2024-01-01',
+      operation_start_date TEXT NOT NULL DEFAULT '2024-02-01',
+      mode TEXT NOT NULL DEFAULT 'TEST'
+        CHECK (mode IN ('TEST','HISTORICAL_LOAD','PRODUCTION')),
+      generation INTEGER NOT NULL DEFAULT 1,
+      next_snapshot_date TEXT,
+      actualizado_en TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    );
+
+    INSERT OR IGNORE INTO reconciliation_control (
+      id,
+      cutoff_date,
+      operation_start_date,
+      mode,
+      generation
+    ) VALUES (
+      1,
+      '2024-01-01',
+      '2024-02-01',
+      'TEST',
+      1
+    );
+
+    UPDATE reconciliation_control
+    SET cutoff_date = '2024-01-01',
+        operation_start_date = '2024-02-01'
+    WHERE id = 1;
+
+    CREATE TABLE IF NOT EXISTS cartera_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      importacion_id INTEGER NOT NULL UNIQUE,
+      generation INTEGER NOT NULL,
+      fecha_snapshot TEXT NOT NULL DEFAULT (date('now','localtime')),
+      snapshot_anterior_id INTEGER,
+      cantidad_documentos INTEGER NOT NULL DEFAULT 0,
+      cantidad_legacy INTEGER NOT NULL DEFAULT 0,
+      hash_contenido TEXT NOT NULL,
+      baseline INTEGER NOT NULL DEFAULT 0,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (importacion_id) REFERENCES importaciones(id),
+      FOREIGN KEY (snapshot_anterior_id) REFERENCES cartera_snapshots(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cartera_snapshots_generation
+      ON cartera_snapshots(generation, id DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_cartera_snapshots_generation_fecha
+      ON cartera_snapshots(generation, fecha_snapshot DESC, id DESC);
+
+    CREATE TABLE IF NOT EXISTS reconciliation_source_semantics (
+      fuente TEXT PRIMARY KEY,
+      semantics TEXT NOT NULL CHECK (semantics IN ('LIVE_OUTSTANDING_SNAPSHOT','HISTORICAL_EVENT_SOURCE')),
+      historical_chunking INTEGER NOT NULL DEFAULT 0 CHECK (historical_chunking IN (0,1)),
+      effective_date_replay INTEGER NOT NULL DEFAULT 0 CHECK (effective_date_replay IN (0,1)),
+      cutoff_date TEXT NOT NULL DEFAULT '2024-01-01',
+      actualizado_en TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    );
+
+    INSERT INTO reconciliation_source_semantics (fuente, semantics, historical_chunking, effective_date_replay, cutoff_date) VALUES
+      ('CARTERA', 'LIVE_OUTSTANDING_SNAPSHOT', 0, 0, '2024-01-01'),
+      ('ANULADOS', 'HISTORICAL_EVENT_SOURCE', 1, 1, '2024-01-01'),
+      ('NOTAS_CREDITO', 'HISTORICAL_EVENT_SOURCE', 1, 1, '2024-01-01'),
+      ('COBROS_MOVIMIENTOS', 'HISTORICAL_EVENT_SOURCE', 1, 1, '2024-01-01')
+    ON CONFLICT(fuente) DO UPDATE SET
+      semantics=excluded.semantics,
+      historical_chunking=excluded.historical_chunking,
+      effective_date_replay=excluded.effective_date_replay,
+      cutoff_date=excluded.cutoff_date,
+      actualizado_en=datetime('now','localtime');
+
+    CREATE TABLE IF NOT EXISTS historical_bootstrap_batches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      generation INTEGER NOT NULL,
+      fuente TEXT NOT NULL,
+      periodo_desde TEXT NOT NULL,
+      periodo_hasta TEXT NOT NULL,
+      archivo_hash TEXT,
+      estado TEXT NOT NULL DEFAULT 'PROCESANDO'
+        CHECK (estado IN ('PROCESANDO','COMPLETADO','ERROR')),
+      registros_leidos INTEGER NOT NULL DEFAULT 0,
+      registros_in_scope INTEGER NOT NULL DEFAULT 0,
+      registros_legacy INTEGER NOT NULL DEFAULT 0,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      completado_en TEXT,
+      UNIQUE(generation, fuente, periodo_desde, periodo_hasta, archivo_hash)
+    );
+
+    CREATE TABLE IF NOT EXISTS cartera_snapshot_documentos (
+      snapshot_id INTEGER NOT NULL,
+      documento_normalizado TEXT NOT NULL,
+      documento TEXT NOT NULL,
+      cliente TEXT,
+      fecha_emision TEXT,
+      saldo REAL NOT NULL DEFAULT 0,
+      saldo_centavos INTEGER NOT NULL DEFAULT 0,
+      temporal_scope TEXT NOT NULL DEFAULT 'IN_SCOPE'
+        CHECK (temporal_scope IN ('IN_SCOPE','OUT_OF_SCOPE_LEGACY')),
+      PRIMARY KEY (snapshot_id, documento_normalizado),
+      FOREIGN KEY (snapshot_id) REFERENCES cartera_snapshots(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cartera_snapshot_documentos_documento
+      ON cartera_snapshot_documentos(documento_normalizado, snapshot_id DESC);
+  `);
+
+  // PACK-045-FIX-009: ignorados != legacy. Los excluidos por semántica de fuente
+  // se contabilizan aparte de los movimientos anteriores al cutoff temporal.
+  ensureCancelledColumn(
+    "historical_bootstrap_batches",
+    "registros_ignorados",
+    "INTEGER NOT NULL DEFAULT 0"
+  );
+
+  ensureCancelledColumn(
+    "reconciliation_control",
+    "next_snapshot_date",
+    "TEXT"
+  );
+
   // Snapshot reversible de importaciones de cartera.
   db.exec(`
     CREATE TABLE IF NOT EXISTS importacion_snapshots (
@@ -540,6 +679,16 @@ function ensureSchema(db: Database.Database) {
   ensureCancelledColumn("documentos", "estado_confirmacion", "TEXT DEFAULT 'CONFIRMADO'");
   ensureCancelledColumn("documentos", "estado_fuente", "TEXT DEFAULT 'CARTERA_CONTIFICO'");
   ensureCancelledColumn("documentos", "saldo_pendiente", "REAL DEFAULT 0");
+  ensureCancelledColumn(
+    "documentos",
+    "posicion_cartera",
+    "TEXT DEFAULT 'DEUDA_VIVA'"
+  );
+  ensureCancelledColumn(
+    "cartera_snapshot_documentos",
+    "posicion_cartera",
+    "TEXT DEFAULT 'DEUDA_VIVA'"
+  );
   ensureCancelledColumn("documentos", "saldo_original", "REAL DEFAULT 0");
   ensureCancelledColumn("documentos", "ultima_conciliacion_en", "TEXT");
 
@@ -550,6 +699,22 @@ function ensureSchema(db: Database.Database) {
       ELSE LTRIM(REPLACE(REPLACE(REPLACE(REPLACE(UPPER(documento), '-', ''), ' ', ''), '.', ''), '/', ''), '0')
     END
     WHERE TRIM(COALESCE(documento_normalizado, '')) = '';
+
+    UPDATE documentos
+    SET posicion_cartera = CASE
+      WHEN UPPER(TRIM(COALESCE(tipo_documento, ''))) = 'NCT'
+       AND COALESCE(total, 0) < 0
+      THEN 'CREDITO_VIVO'
+      ELSE 'DEUDA_VIVA'
+    END
+    WHERE is_subtotal = 0;
+
+    UPDATE cartera_snapshot_documentos
+    SET posicion_cartera = CASE
+      WHEN COALESCE(saldo, 0) < 0
+      THEN 'CREDITO_VIVO'
+      ELSE 'DEUDA_VIVA'
+    END;
 
     UPDATE documentos
     SET saldo_pendiente = COALESCE(total, 0)
@@ -602,6 +767,71 @@ function ensureSchema(db: Database.Database) {
       ON documento_eventos(tipo_evento, fuente);
     CREATE INDEX IF NOT EXISTS idx_documento_eventos_importacion
       ON documento_eventos(importacion_id);
+
+
+    CREATE TABLE IF NOT EXISTS notas_credito_importadas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      numero_nc TEXT NOT NULL,
+      numero_nc_normalizado TEXT NOT NULL UNIQUE,
+      fecha_nc TEXT,
+      tipo_documento_relacionado TEXT,
+      documento_relacionado TEXT,
+      documento_relacionado_normalizado TEXT,
+      autorizacion TEXT,
+      persona TEXT,
+      identificacion TEXT,
+      vendedor TEXT,
+      subtotal REAL NOT NULL DEFAULT 0,
+      iva REAL NOT NULL DEFAULT 0,
+      total_nc REAL NOT NULL DEFAULT 0,
+      saldo_nc REAL NOT NULL DEFAULT 0,
+      estado_fuente TEXT,
+      descripcion TEXT,
+      estado_conciliacion TEXT NOT NULL DEFAULT 'PENDIENTE_CONCILIACION'
+        CHECK (estado_conciliacion IN ('CONCILIADA','PENDIENTE_CONCILIACION')),
+      importacion_id INTEGER,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (importacion_id) REFERENCES importaciones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notas_credito_documento_relacionado
+      ON notas_credito_importadas(documento_relacionado_normalizado);
+    CREATE INDEX IF NOT EXISTS idx_notas_credito_importacion
+      ON notas_credito_importadas(importacion_id);
+
+
+    CREATE TABLE IF NOT EXISTS cobros_movimientos_importados (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      movimiento_key TEXT NOT NULL UNIQUE,
+      fecha_movimiento TEXT,
+      identificacion TEXT,
+      persona TEXT,
+      tipo_fuente TEXT NOT NULL,
+      forma_cobro_pago TEXT,
+      asiento TEXT,
+      documento_cruce TEXT,
+      codigo_comprobante TEXT,
+      documento_relacionado TEXT,
+      documento_relacionado_normalizado TEXT,
+      detalle TEXT,
+      valor REAL NOT NULL DEFAULT 0,
+      clase_movimiento TEXT NOT NULL DEFAULT 'COBRO'
+        CHECK (clase_movimiento IN ('COBRO','CRUCE','ANTICIPO','RETENCION','OTRO')),
+      estado_conciliacion TEXT NOT NULL DEFAULT 'PENDIENTE_CONCILIACION'
+        CHECK (estado_conciliacion IN ('CONCILIADO','PENDIENTE_CONCILIACION')),
+      importacion_id INTEGER,
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      FOREIGN KEY (importacion_id) REFERENCES importaciones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cobros_movimientos_documento
+      ON cobros_movimientos_importados(documento_relacionado_normalizado);
+    CREATE INDEX IF NOT EXISTS idx_cobros_movimientos_fecha
+      ON cobros_movimientos_importados(fecha_movimiento);
+    CREATE INDEX IF NOT EXISTS idx_cobros_movimientos_clase
+      ON cobros_movimientos_importados(clase_movimiento, estado_conciliacion);
+    CREATE INDEX IF NOT EXISTS idx_cobros_movimientos_importacion
+      ON cobros_movimientos_importados(importacion_id);
 
     -- Migración histórica: las antiguas filas ficticias dejan evidencia completa
     -- en el ledger y después se retiran de la proyección de cartera vigente.
@@ -664,12 +894,22 @@ function ensureSchema(db: Database.Database) {
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }
 
-export function openDb() {
-  const userData = app.getPath("userData");
-  const dataDir = path.join(userData, "data");
-  ensureDir(dataDir);
+function resolveDbFilePath(): string {
+  const configuredPath = process.env.CARTERA_DB_PATH?.trim();
+  if (configuredPath) return path.resolve(configuredPath);
 
-  const dbPath = path.join(dataDir, "cartera.db");
+  // En desarrollo usamos una unica base QA fuera del repositorio.
+  // En produccion se conserva la ubicacion estandar de Electron.
+  if (!app.isPackaged) {
+    return path.resolve(process.cwd(), "..", "cartera-dashboard-test-data", "data", "cartera.db");
+  }
+
+  return path.join(app.getPath("userData"), "data", "cartera.db");
+}
+
+export function openDb() {
+  const dbPath = resolveDbFilePath();
+  ensureDir(path.dirname(dbPath));
   const db = new Database(dbPath);
 
   // Configuración de SQLite para permitir múltiples lectores
@@ -706,11 +946,10 @@ export function openDb() {
  */
 export function getDbFilePath(): string {
   try {
-    const userData = app.getPath("userData");
-    return path.join(userData, "data", "cartera.db");
+    return resolveDbFilePath();
   } catch {
-    // Fallback (por ejemplo, si se ejecuta fuera del contexto de Electron)
-    return path.join(process.cwd(), "data", "cartera.db");
+    return path.resolve(process.cwd(), "..", "cartera-dashboard-test-data", "data", "cartera.db");
   }
 }
+
 

@@ -24,6 +24,8 @@ export type CancelledDocumentPreviewResult = {
   companyName: string;
   reportTitle: string;
   totalRows: number;
+  uniqueDocuments: number;
+  duplicateRows: number;
   foundDocuments: number;
   alreadyCancelledDocuments: number;
   unmatchedDocuments: number;
@@ -36,6 +38,8 @@ export type CancelledDocumentImportResult = {
   ok: boolean;
   filePath: string;
   totalRows: number;
+  uniqueDocuments: number;
+  duplicateRows: number;
   matchedDocuments: number;
   alreadyCancelledDocuments: number;
   cancelledDocuments: number;
@@ -300,6 +304,7 @@ export function previewCancelledDocumentsExcel(
       AND documento_normalizado = ?
   `);
 
+  const seenDocuments = new Set<string>();
   let foundDocuments = 0;
   let alreadyCancelledDocuments = 0;
   let unmatchedDocuments = 0;
@@ -312,23 +317,35 @@ export function previewCancelledDocumentsExcel(
 
     if (!document) {
       matchStatus = "NO_ENCONTRADO";
-      unmatchedDocuments += 1;
     } else if (
       document.anulado === 1 ||
       document.estado_documento === "ANULADO"
     ) {
       matchStatus = "YA_ANULADO";
-      alreadyCancelledDocuments += 1;
     } else {
       matchStatus = "ENCONTRADO";
-      foundDocuments += 1;
 
       const paymentCount = countActivePayments.get(
         row.normalizedDocumentNumber,
       ) as { total: number };
 
       activePayments = Number(paymentCount.total ?? 0);
-      paymentsToReverse += activePayments;
+    }
+
+    // Los contadores financieros/auditables son por documento único.
+    // Las 168 filas del archivo siguen visibles en el detalle, pero un mismo
+    // documento repetido no puede anularse/revertirse varias veces.
+    if (!seenDocuments.has(row.normalizedDocumentNumber)) {
+      seenDocuments.add(row.normalizedDocumentNumber);
+
+      if (matchStatus === "NO_ENCONTRADO") {
+        unmatchedDocuments += 1;
+      } else if (matchStatus === "YA_ANULADO") {
+        alreadyCancelledDocuments += 1;
+      } else {
+        foundDocuments += 1;
+        paymentsToReverse += activePayments;
+      }
     }
 
     return {
@@ -339,6 +356,9 @@ export function previewCancelledDocumentsExcel(
     };
   });
 
+  const uniqueDocuments = seenDocuments.size;
+  const duplicateRows = Math.max(rows.length - uniqueDocuments, 0);
+
   return {
     ok: true,
     filePath,
@@ -346,18 +366,23 @@ export function previewCancelledDocumentsExcel(
     companyName: report.companyName,
     reportTitle: report.reportTitle,
     totalRows: rows.length,
+    uniqueDocuments,
+    duplicateRows,
     foundDocuments,
     alreadyCancelledDocuments,
     unmatchedDocuments,
     paymentsToReverse,
     rows,
-    message: "Vista previa generada correctamente.",
+    message:
+      `Vista previa: ${rows.length} filas, ${uniqueDocuments} documentos únicos` +
+      ` y ${duplicateRows} duplicados consolidados.`,
   };
 }
 
 export function importCancelledDocumentsExcel(
   filePath: string,
   db: Database.Database,
+  importacionId?: number,
 ): CancelledDocumentImportResult {
   const preview = previewCancelledDocumentsExcel(filePath, db);
 
@@ -365,6 +390,7 @@ export function importCancelledDocumentsExcel(
     UPDATE documentos
     SET estado_documento = 'ANULADO',
         anulado = 1,
+        saldo_pendiente = 0,
         fecha_anulacion = @fecha_anulacion,
         motivo_anulacion = 'Importado desde Documentos Anulados',
         fuente_anulacion = 'ARCHIVO_DOCUMENTOS_ANULADOS'
@@ -394,7 +420,8 @@ export function importCancelledDocumentsExcel(
       resultado,
       tipo_documento,
       estado_origen,
-      numero_autorizacion
+      numero_autorizacion,
+      importacion_id
     )
     VALUES (
       @documento,
@@ -408,7 +435,8 @@ export function importCancelledDocumentsExcel(
       @resultado,
       @tipo_documento,
       @estado_origen,
-      @numero_autorizacion
+      @numero_autorizacion,
+      @importacion_id
     )
     ON CONFLICT(documento_normalizado, archivo_origen) DO UPDATE SET
       cliente = excluded.cliente,
@@ -418,10 +446,20 @@ export function importCancelledDocumentsExcel(
       resultado = excluded.resultado,
       tipo_documento = excluded.tipo_documento,
       estado_origen = excluded.estado_origen,
-      numero_autorizacion = excluded.numero_autorizacion
+      numero_autorizacion = excluded.numero_autorizacion,
+      importacion_id = excluded.importacion_id
   `);
 
   const documentsByKey = loadDocuments(db);
+
+  const uniqueRows = Array.from(
+    new Map(
+      preview.rows.map((row) => [row.normalizedDocumentNumber, row] as const),
+    ).values(),
+  );
+
+  const cutoff = (db.prepare(`SELECT cutoff_date FROM reconciliation_control WHERE id=1`).get() as { cutoff_date?: string } | undefined)?.cutoff_date ?? "2024-01-01";
+  const replayRows = uniqueRows.filter((row) => !row.cancellationDate || row.cancellationDate >= cutoff).sort((a, b) => a.cancellationDate.localeCompare(b.cancellationDate));
 
   let matchedDocuments = 0;
   let alreadyCancelledDocuments = 0;
@@ -430,7 +468,7 @@ export function importCancelledDocumentsExcel(
   let unmatchedDocuments = 0;
 
   const transaction = db.transaction(() => {
-    for (const row of preview.rows) {
+    for (const row of replayRows) {
       const document = documentsByKey.get(row.normalizedDocumentNumber);
       let result = "NO_ENCONTRADO";
 
@@ -468,8 +506,11 @@ export function importCancelledDocumentsExcel(
           row.authorizationNumber || "SIN_AUTORIZACION",
         ].join(":");
 
+        const cancellationEventKey =
+          `ANULACION_CONFIRMADA:${eventIdentity}`;
+
         insertDocumentEvent(db, {
-          eventKey: `ANULACION_CONFIRMADA:${eventIdentity}`,
+          eventKey: cancellationEventKey,
           documentoNormalizado: row.normalizedDocumentNumber,
           tipoEvento: "ANULACION_CONFIRMADA",
           fuente: "ANULADOS",
@@ -477,6 +518,7 @@ export function importCancelledDocumentsExcel(
           estadoAnterior: previousState,
           estadoNuevo: "ANULADO",
           provisional: false,
+          importacionId: importacionId ?? null,
           referenciaExterna: row.documentNumber,
           metadata: {
             cliente: document.cliente,
@@ -487,9 +529,22 @@ export function importCancelledDocumentsExcel(
           },
         });
 
+        // En HISTORICAL_LOAD el tiempo del evento es la fecha efectiva
+        // del hecho fiscal, no la fecha en que el operador importó el Excel.
+        if (row.cancellationDate) {
+          db.prepare(`
+            UPDATE documento_eventos
+            SET ocurrido_en = ?
+            WHERE event_key = ?
+          `).run(row.cancellationDate, cancellationEventKey);
+        }
+
         if (previousState === "PAGADO_TOTAL") {
+          const reclassifiedEventKey =
+            `ESTADO_RECLASIFICADO:${eventIdentity}`;
+
           insertDocumentEvent(db, {
-            eventKey: `ESTADO_RECLASIFICADO:${eventIdentity}`,
+            eventKey: reclassifiedEventKey,
             documentoNormalizado: row.normalizedDocumentNumber,
             tipoEvento: "ESTADO_RECLASIFICADO",
             fuente: "ANULADOS",
@@ -500,8 +555,17 @@ export function importCancelledDocumentsExcel(
             referenciaExterna: row.documentNumber,
             metadata: {
               motivo: "Override fiscal por archivo de documentos anulados",
+              fecha_anulacion: row.cancellationDate || null,
             },
           });
+
+          if (row.cancellationDate) {
+            db.prepare(`
+              UPDATE documento_eventos
+              SET ocurrido_en = ?
+              WHERE event_key = ?
+            `).run(row.cancellationDate, reclassifiedEventKey);
+          }
         }
 
         result = document.historical ? "ANULADO_HISTORICO" : "ANULADO";
@@ -518,7 +582,41 @@ export function importCancelledDocumentsExcel(
         tipo_documento: row.documentType || null,
         estado_origen: row.sourceStatus || null,
         numero_autorizacion: row.authorizationNumber || null,
+        importacion_id: importacionId ?? null,
       });
+    }
+
+    if (importacionId != null) {
+      db.prepare(`
+        UPDATE importaciones
+        SET
+          registros_leidos = ?,
+          registros_importados = ?,
+          registros_ignorados = 0,
+          registros_duplicados = ?,
+          estado = 'COMPLETADA',
+          observacion = ?,
+          metadata_json = ?
+        WHERE id = ?
+      `).run(
+        preview.totalRows,
+        preview.uniqueDocuments,
+        preview.duplicateRows,
+        `Anulados procesados: ${preview.uniqueDocuments} documentos únicos; ` +
+          `${preview.duplicateRows} filas duplicadas consolidadas; ` +
+          `${unmatchedDocuments} no encontrados.`,
+        JSON.stringify({
+          totalRows: preview.totalRows,
+          uniqueDocuments: preview.uniqueDocuments,
+          duplicateRows: preview.duplicateRows,
+          matchedDocuments,
+          alreadyCancelledDocuments,
+          cancelledDocuments,
+          reversedPayments,
+          unmatchedDocuments,
+        }),
+        importacionId,
+      );
     }
   });
 
@@ -528,11 +626,17 @@ export function importCancelledDocumentsExcel(
     ok: true,
     filePath,
     totalRows: preview.totalRows,
+    uniqueDocuments: preview.uniqueDocuments,
+    duplicateRows: preview.duplicateRows,
     matchedDocuments,
     alreadyCancelledDocuments,
     cancelledDocuments,
     reversedPayments,
     unmatchedDocuments,
-    message: "Importación de documentos anulados completada.",
+    message:
+      `Importación completada: ${preview.totalRows} filas, ` +
+      `${preview.uniqueDocuments} documentos únicos, ` +
+      `${preview.duplicateRows} duplicados consolidados, ` +
+      `${cancelledDocuments} anulados y ${unmatchedDocuments} no encontrados.`,
   };
 }

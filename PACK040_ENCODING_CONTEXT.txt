@@ -1,0 +1,3364 @@
+﻿=== GIT STATUS ===
+On branch feature/dashboard-professional-rebuild
+Your branch is up to date with 'origin/feature/dashboard-professional-rebuild'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   electron/db.ts
+	modified:   electron/main.ts
+	modified:   src/pages/ConfigPage.tsx
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	DIAGNOSTICO_ENCODING.txt
+	PACK038_CONTEXT.txt
+	PACK038_CONTEXT.zip
+	PACK040_ENCODING_CONTEXT.txt
+	SINGLE_QA_DB_CONTEXT.txt
+	SINGLE_QA_DB_CONTEXT.zip
+	diagnostico-931.cjs
+	diagnostico-anulados.cjs
+	diagnostico-base-qa-limpia.cjs
+	diagnostico-base-real.cjs
+	diagnostico-estructura-cartera.cjs
+	diagnostico-pack038-idempotencia.cjs
+	diagnostico-pack038.cjs
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+=== GIT LOG ===
+617b22d feat(reconciliation): add event-driven document state machine
+a5aa3c6 fix(imports): align Contifico importer with current schema
+f8a7d8f fix(imports): read Contifico Excel through fs buffer
+4d81f77 fix(ipc): remove duplicate import history handlers
+8e46666 feat(imports): audit and safely revert portfolio imports
+
+=== ConfigPage.tsx ===
+import { ImportCenterPanel } from "./config/ImportCenterPanel";
+import "./config/import-center.css";
+
+export type DensityMode = 'normal' | 'compact';
+
+export interface UpdateInfo {
+  updateCount: number;
+  currentVersion?: string;
+  lastVersion?: string;
+  updatedAt?: string;
+  firstRunAt?: string;
+}
+
+export interface ConfigPageProps {
+  pendingTheme: string;
+  onPendingThemeChange: (theme: string) => void;
+  density: DensityMode;
+  onDensityChange: (density: DensityMode) => void;
+  autoDark: boolean;
+  onAutoDarkChange: (enabled: boolean) => void;
+  onApplyTheme: () => Promise<void>;
+  hasWritePermissions: boolean;
+  onEditCompany: () => void;
+  onChangeLogo: () => void;
+  onImportExcel: () => void;
+  onOpenCancelledImport: () => void;
+  onExportBackup: () => void;
+  onClearDatabase: () => void;
+  onOpenDocumentation: () => void;
+  onOpenHistory: () => void;
+  updateInfo: UpdateInfo | null;
+  formatUpdateDate: (value?: string) => string;
+  dbPath: string;
+  onCopyDbPath: (value: string) => void;
+}
+
+const THEME_OPTIONS = [
+  { id: 'claro', name: 'ClÃƒÂ¡sico', className: 'theme-preview-claro' },
+  { id: 'azul', name: 'Corporativo', className: 'theme-preview-azul' },
+  { id: 'corporativo', name: 'Azul Pro', className: 'theme-preview-corporativo' },
+  { id: 'pastel', name: 'Suave', className: 'theme-preview-pastel' },
+  { id: 'oscuro', name: 'Noche', className: 'theme-preview-oscuro' },
+  { id: 'oscuro-pro', name: 'Oscuro Pro', className: 'theme-preview-oscuro-pro' },
+  { id: 'contraste', name: 'Alto Contraste', className: 'theme-preview-contraste' },
+  { id: 'nature', name: 'Nature', className: 'theme-preview-nature' },
+] as const;
+
+export function ConfigPage({
+  pendingTheme,
+  onPendingThemeChange,
+  density,
+  onDensityChange,
+  autoDark,
+  onAutoDarkChange,
+  onApplyTheme,
+  hasWritePermissions,
+  onEditCompany,
+  onChangeLogo,
+  onImportExcel,
+  onOpenCancelledImport,
+  onExportBackup,
+  onClearDatabase,
+  onOpenDocumentation,
+  onOpenHistory,
+  updateInfo,
+  formatUpdateDate,
+  dbPath,
+  onCopyDbPath,
+}: ConfigPageProps) {
+  const handleAutoDarkChange = (enabled: boolean): void => {
+    onAutoDarkChange(enabled);
+
+    try {
+      localStorage.setItem('cartera_auto_dark', enabled ? '1' : '0');
+    } catch {
+      // localStorage puede estar restringido por el entorno.
+    }
+  };
+
+  return (
+    <div>
+      <div className="config-container">
+        <h2
+          style={{
+            marginBottom: 6,
+            fontWeight: 800,
+            color: 'var(--text-main)',
+            fontSize: '1.4rem',
+          }}
+        >
+          ConfiguraciÃƒÂ³n
+        </h2>
+        <p
+          style={{
+            color: 'var(--text-secondary)',
+            marginBottom: 14,
+            fontSize: '0.85rem',
+          }}
+        >
+          Administra las preferencias generales y el sistema
+        </p>
+
+        <div className="config-grid">
+          <div
+            className="config-card"
+            style={{
+              background:
+                'linear-gradient(to right, var(--bg-surface), var(--bg-main))',
+            }}
+          >
+            <div className="config-header">
+              <div className="config-icon-box">Ã°Å¸Å½Â¨</div>
+              <div className="config-title">
+                <h3>PersonalizaciÃƒÂ³n Visual</h3>
+                <p>Elige el tema que mejor se adapte a tu estilo</p>
+              </div>
+            </div>
+
+            <div className="theme-section">
+              <div className="theme-options">
+                {THEME_OPTIONS.map((theme) => (
+                  <div
+                    key={theme.id}
+                    className={`theme-btn ${theme.className} ${
+                      pendingTheme === theme.id ? 'active' : ''
+                    }`}
+                    data-name={theme.name}
+                    onClick={() => onPendingThemeChange(theme.id)}
+                    title={`Seleccionar tema ${theme.name}`}
+                  >
+                    {pendingTheme === theme.id && (
+                      <span className="theme-check">Ã¢Å“â€¦</span>
+                    )}
+                  </div>
+                ))}
+
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: 16,
+                    marginTop: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <label
+                    className="field field-wrapper"
+                    style={{ width: 'auto', marginBottom: 0 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={density === 'compact'}
+                      onChange={(event) =>
+                        onDensityChange(
+                          event.target.checked ? 'compact' : 'normal'
+                        )
+                      }
+                    />
+                    <span>Modo compacto</span>
+                  </label>
+                  <label
+                    className="field field-wrapper"
+                    style={{ width: 'auto', marginBottom: 0 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={autoDark}
+                      onChange={(event) =>
+                        handleAutoDarkChange(event.target.checked)
+                      }
+                    />
+                    <span>Auto Oscuro (segÃƒÂºn horario/SO)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  marginTop: '16px',
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn primary"
+                  style={{
+                    padding: '8px 24px',
+                    fontSize: '0.9rem',
+                    borderRadius: '10px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  }}
+                  onClick={() => void onApplyTheme()}
+                >
+                  Ã°Å¸â€™Â¾ Guardar y Aplicar Tema
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="config-card">
+            <div className="config-header">
+              <div className="config-icon-box">Ã°Å¸ÂÂ¢</div>
+              <div className="config-title">
+                <h3>Empresa</h3>
+                <p>InformaciÃƒÂ³n legal y marca</p>
+              </div>
+            </div>
+            <div className="config-actions">
+              <button
+                type="button"
+                className="config-btn"
+                onClick={onEditCompany}
+                disabled={!hasWritePermissions}
+              >
+                <span>
+                  <span className="config-btn-icon">Ã¢Å¡â„¢Ã¯Â¸Â</span> Editar datos
+                  generales
+                </span>
+                <span className="config-btn-arrow">Ã¢â€ â€™</span>
+              </button>
+              <button
+                type="button"
+                className="config-btn"
+                onClick={onChangeLogo}
+                disabled={!hasWritePermissions}
+              >
+                <span>
+                  <span className="config-btn-icon">Ã°Å¸â€“Â¼Ã¯Â¸Â</span> Cambiar logotipo
+                </span>
+                <span className="config-btn-arrow">Ã¢â€ â€™</span>
+              </button>
+            </div>
+          </div>
+
+          <ImportCenterPanel
+            hasWritePermissions={hasWritePermissions}
+            onImportPortfolio={onImportExcel}
+            onOpenCancelledImport={onOpenCancelledImport}
+            onExportBackup={onExportBackup}
+            onClearDatabase={onClearDatabase}
+          />
+
+          <div className="config-card">
+            <div className="config-header">
+              <div className="config-icon-box">Ã°Å¸â€Â§</div>
+              <div className="config-title">
+                <h3>Sistema</h3>
+                <p>Mantenimiento y ayuda</p>
+              </div>
+            </div>
+            <div className="config-actions">
+              <button
+                type="button"
+                className="config-btn"
+                onClick={onOpenDocumentation}
+              >
+                <span>
+                  <span className="config-btn-icon">Ã°Å¸â€œâ€“</span> DocumentaciÃƒÂ³n
+                </span>
+                <span className="config-btn-arrow">Ã¢â€ â€™</span>
+              </button>
+              <button
+                type="button"
+                className="config-btn"
+                onClick={onOpenHistory}
+              >
+                <span>
+                  <span className="config-btn-icon">Ã°Å¸â€œÂ</span> Historial de
+                  cambios
+                </span>
+                <span className="config-btn-arrow">Ã¢â€ â€™</span>
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                padding: '10px 12px',
+                background: 'var(--bg-main)',
+                borderRadius: 8,
+                border: '1px solid var(--border-color)',
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'var(--text-main)', marginBottom: 5 }}>
+                Base de datos activa
+              </div>
+              <div style={{ wordBreak: 'break-all', marginBottom: 8 }}>
+                {dbPath || 'Ruta no disponible'}
+              </div>
+              <button
+                type="button"
+                className="config-btn"
+                disabled={!dbPath}
+                onClick={() => dbPath && onCopyDbPath(dbPath)}
+              >
+                Copiar ruta de la base
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                padding: '10px 12px',
+                background: '#f0f9ff',
+                borderRadius: 8,
+                border: '1px solid #bfdbfe',
+                fontSize: '0.7rem',
+                color: '#1e40af',
+                lineHeight: '1.3',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  marginBottom: 6,
+                  fontSize: '0.75rem',
+                }}
+              >
+                Ã°Å¸â€œâ€¹ InformaciÃƒÂ³n Legal
+              </div>
+              <div style={{ marginBottom: 3 }}>
+                Ã‚Â© 2026 Jhon Franklin Mejia Castro
+              </div>
+              <div style={{ marginBottom: 3 }}>RUC: 0950998104001</div>
+              <div
+                style={{
+                  fontSize: '0.65rem',
+                  marginTop: 4,
+                  fontStyle: 'italic',
+                  color: '#3730a3',
+                }}
+              >
+                Prohibida reproducciÃƒÂ³n no autorizada.
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                padding: '8px 10px',
+                background: 'var(--bg-main)',
+                borderRadius: 8,
+                border: '1px dashed var(--border)',
+                fontSize: '0.75rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                }}
+              >
+                <span>VersiÃƒÂ³n</span>
+                <strong style={{ color: 'var(--text-main)' }}>
+                  {updateInfo?.currentVersion || 'N/A'}
+                </strong>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <span>Actualizaciones</span>
+                <strong style={{ color: 'var(--text-main)' }}>
+                  {updateInfo?.updateCount ?? 0}
+                </strong>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 6,
+                  marginTop: 4,
+                }}
+              >
+                <span>ÃƒÅ¡ltima actualizaciÃƒÂ³n</span>
+                <strong style={{ color: 'var(--text-main)' }}>
+                  {formatUpdateDate(updateInfo?.updatedAt)}
+                </strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+=== main.ts ===
+import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { fileURLToPath } from "node:url";
+import { dirname, join, extname } from "node:path";
+import { openDb, getDbFilePath } from "./db";
+import { computeDashboardExecutiveStats } from "./dashboardExecutive";
+import { importContificoExcel } from "./importContifico";
+import { reconcileCollections } from "./collectionReconciliation";
+import {
+  getCollectionPeriodReconciliation,
+  saveCollectionPeriodReconciliation,
+} from "./collectionPeriodReconciliation";
+import {
+  importCancelledDocumentsExcel,
+  previewCancelledDocumentsExcel,
+} from "./importCancelledDocuments";
+import * as XLSX from "xlsx";
+import fs from "node:fs";
+import { createHash } from "node:crypto";
+import http from "node:http";
+import os from "node:os";
+import { spawn } from "child_process";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// Exponer __dirname para dependencias CommonJS (ej. ngrok) en entorno ESM
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).__dirname = __dirname;
+
+let mainWindow: BrowserWindow | null = null;
+let db: any;
+let cloudflaredProcess: any = null;
+let ngrokUrl: string = "";
+let ngrokListener: any = null;
+
+// Token secreto para identificar que la peticiÃƒÂ³n viene de la app desktop
+const DESKTOP_TOKEN = `desktop-${Date.now()}-${Math.random().toString(36)}`;
+
+// Constantes para ngrok (acceso remoto)
+const NGROK_PORT = 3000;
+const NGROK_AUTHTOKEN = process.env.NGROK_AUTHTOKEN || "";
+
+// Verbosidad de logs (por defecto reducido para evitar ruido en terminal)
+const VERBOSE_API_LOGS = process.env.VERBOSE_API_LOGS === "1";
+const VERBOSE_IP_LOGS = process.env.VERBOSE_IP_LOGS === "1";
+
+// Constantes placeholder para compatibilidad con lÃƒÂ³gica previa de Cloudflare
+const CLOUDFLARE_TUNNEL_URL = "";
+const CLOUDFLARE_TUNNEL_NAME = "";
+
+type UpdateMeta = {
+  updateCount: number;
+  lastVersion: string;
+  currentVersion?: string;
+  updatedAt?: string;
+  firstRunAt?: string;
+};
+
+function getUpdateMetaPath(): string {
+  return join(app.getPath("userData"), "update-meta.json");
+}
+
+function readUpdateMeta(): UpdateMeta {
+  const nowIso = new Date().toISOString();
+  try {
+    const p = getUpdateMetaPath();
+    if (!fs.existsSync(p)) {
+      return { updateCount: 0, lastVersion: "", firstRunAt: nowIso };
+    }
+    const raw = fs.readFileSync(p, "utf-8");
+    const parsed = JSON.parse(raw) as UpdateMeta;
+    return {
+      updateCount: Number.isFinite(parsed.updateCount) ? parsed.updateCount : 0,
+      lastVersion: parsed.lastVersion || "",
+      currentVersion: parsed.currentVersion,
+      updatedAt: parsed.updatedAt,
+      firstRunAt: parsed.firstRunAt || nowIso,
+    };
+  } catch (e) {
+    console.warn("No se pudo leer update-meta.json:", e);
+    return { updateCount: 0, lastVersion: "", firstRunAt: nowIso };
+  }
+}
+
+function writeUpdateMeta(meta: UpdateMeta) {
+  try {
+    fs.writeFileSync(getUpdateMetaPath(), JSON.stringify(meta, null, 2));
+  } catch (e) {
+    console.warn("No se pudo guardar update-meta.json:", e);
+  }
+}
+
+function trackUpdateInstall(): UpdateMeta {
+  const currentVersion = app.getVersion();
+  const nowIso = new Date().toISOString();
+  const meta = readUpdateMeta();
+  meta.currentVersion = currentVersion;
+  if (!meta.firstRunAt) meta.firstRunAt = nowIso;
+  if (meta.lastVersion !== currentVersion) {
+    meta.updateCount = (meta.updateCount || 0) + 1;
+    meta.lastVersion = currentVersion;
+    meta.updatedAt = nowIso;
+    console.log(`Ã¢Å“â€¦ InstalaciÃƒÂ³n registrada: v${currentVersion} | InstalaciÃƒÂ³n #${meta.updateCount} | ${nowIso}`);
+  }
+  writeUpdateMeta(meta);
+  return meta;
+}
+
+function logInstallationEvent(event: string, details?: any) {
+  const logDir = join(app.getPath('userData'), 'logs');
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  const logFile = join(logDir, 'installation.log');
+  const timestamp = new Date().toISOString();
+  const entry = `[${timestamp}] ${event} | Version: ${app.getVersion()} | ${JSON.stringify(details || {})}`;
+  try {
+    fs.appendFileSync(logFile, entry + '\n', 'utf-8');
+  } catch (e) {
+    console.warn('No se pudo escribir en installation.log:', e);
+  }
+}
+
+// FunciÃƒÂ³n para verificar si la peticiÃƒÂ³n viene de la aplicaciÃƒÂ³n desktop
+function isDesktopClient(req: http.IncomingMessage): boolean {
+  return req.headers["x-desktop-token"] === DESKTOP_TOKEN;
+}
+
+// --- FUNCIONES AUXILIARES (ExtraÃƒÂ­das para usar en API Web y Desktop) ---
+
+function getEmpresa() {
+  try {
+    return db.prepare("SELECT * FROM empresa WHERE id = 1").get();
+  } catch (e: any) {
+    return { nombre: "Mi Empresa" };
+  }
+}
+
+function getAnalisisRiesgo() {
+  try {
+    const rows = db.prepare(`
+      SELECT 
+        cliente, 
+        MAX(razon_social) as razon_social,
+        COUNT(1) as docs_count,
+        COALESCE(SUM(total), 0) as total_deuda,
+        COALESCE(SUM(CASE WHEN date(fecha_vencimiento) < date('now', 'localtime') THEN total ELSE 0 END), 0) as deuda_vencida,
+        MAX(CAST(julianday(date('now', 'localtime')) - julianday(fecha_vencimiento) AS INTEGER)) as max_dias_mora
+      FROM documentos 
+      WHERE is_subtotal = 0
+      GROUP BY cliente
+      HAVING total_deuda > 0.01
+      ORDER BY total_deuda DESC
+    `).all();
+
+    const analisis = rows.map((r: any) => {
+      let score = 100;
+      const pctVencida = r.total_deuda > 0 ? (r.deuda_vencida / r.total_deuda) : 0;
+      const maxMora = r.max_dias_mora || 0;
+
+      if (pctVencida > 0.05) score -= 10;
+      if (pctVencida > 0.30) score -= 15;
+      if (pctVencida > 0.70) score -= 20;
+
+      if (maxMora > 5) score -= 5;
+      if (maxMora > 30) score -= 15;
+      if (maxMora > 60) score -= 20;
+      if (maxMora > 90) score -= 30;
+
+      return { ...r, score: Math.max(0, Math.round(score)) };
+    });
+
+    const sorted = analisis.sort((a: any, b: any) => a.score - b.score) as Array<Record<string, unknown>>;
+    return { ok: true, rows: sorted };
+  } catch (e: any) {
+    return { ok: false, message: e.message, rows: [] as unknown[] };
+  }
+}
+
+function getNetworkIp(log: boolean = false) {
+  const interfaces = os.networkInterfaces();
+  const validIps: { name: string; address: string; priority: number }[] = [];
+  
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]!) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        // Determinar prioridad: WiFi > Ethernet > VirtualBox > Otros
+        let priority = 999;
+        const nameLower = name.toLowerCase();
+        
+        if (nameLower.includes('wi-fi') || nameLower.includes('wifi') || nameLower.includes('wlan')) {
+          priority = 1; // Mayor prioridad para WiFi
+        } else if (nameLower.includes('ethernet') || nameLower.includes('eth')) {
+          priority = 2;
+        } else if (nameLower.includes('virtualbox') || nameLower.includes('vmware') || nameLower.includes('vbox')) {
+          priority = 100; // Menor prioridad para adaptadores virtuales
+        }
+        
+        validIps.push({ name, address: iface.address, priority });
+      }
+    }
+  }
+  
+  // Ordenar por prioridad y devolver la primera
+  if (validIps.length > 0) {
+    validIps.sort((a, b) => a.priority - b.priority);
+    if (log || VERBOSE_IP_LOGS) {
+      console.log(`Ã°Å¸â€œÂ¡ IP seleccionada: ${validIps[0].address} (${validIps[0].name})`);
+    }
+    return validIps[0].address;
+  }
+  
+  return "localhost";
+}
+
+// FunciÃƒÂ³n para verificar si el tÃƒÂºnel de Cloudflare estÃƒÂ¡ activo
+async function checkCloudflaredTunnel(): Promise<boolean> {
+  try {
+    const response = await fetch(`${CLOUDFLARE_TUNNEL_URL}/api/stats`, {
+      method: "GET",
+      timeout: 5000,
+    } as any);
+    const isHealthy = response.status >= 200 && response.status < 500;
+    console.log(`Ã°Å¸Å’Â Tunnel health check: ${isHealthy ? "Ã¢Å“â€œ OK" : "Ã¢Å“â€” FAILED"} (${response.status})`);
+    return isHealthy;
+  } catch (error) {
+    console.log(`Ã°Å¸Å’Â Tunnel health check failed:`, error);
+    return false;
+  }
+}
+
+// FunciÃƒÂ³n para reiniciar el tÃƒÂºnel de Cloudflare
+async function restartCloudflaredTunnel(): Promise<boolean> {
+  try {
+    console.log("Ã°Å¸Å’Â Intentando reiniciar tÃƒÂºnel de Cloudflare...");
+    
+    // Path del ejecutable cloudflared
+    const cloudflaredPath = "C:\\Users\\j-mej\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.exe";
+    
+    // Ejecutar el tÃƒÂºnel en background
+    cloudflaredProcess = spawn(cloudflaredPath, ["tunnel", "run", CLOUDFLARE_TUNNEL_NAME], {
+      detached: true,
+      stdio: "ignore",
+    });
+    
+    cloudflaredProcess.unref();
+    console.log(`Ã¢Å“â€¦ TÃƒÂºnel reiniciado (PID: ${cloudflaredProcess?.pid})`);
+    
+    // Esperar 5 segundos para que se conecte
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // Verificar que estÃƒÂ© conectado
+    const isHealthy = await checkCloudflaredTunnel();
+    if (isHealthy) {
+      mainWindow?.webContents.send("tunnel-status", { status: "connected" });
+      return true;
+    } else {
+      console.log("Ã¢Å¡ Ã¯Â¸Â TÃƒÂºnel reiniciado pero aÃƒÂºn no responde");
+      return false;
+    }
+  } catch (error) {
+    console.error("Ã¢ÂÅ’ Error reiniciando tÃƒÂºnel:", error);
+    return false;
+  }
+}
+
+// FunciÃƒÂ³n para iniciar ngrok y obtener URL remota
+async function startNgrok(): Promise<string> {
+  try {
+    const ngrok = await import("@ngrok/ngrok");
+    console.log("Ã°Å¸Å’Â Iniciando ngrok para acceso remoto...");
+    
+    // Configurar authtoken si existe
+    if (NGROK_AUTHTOKEN) {
+      console.log("Ã°Å¸â€Â Usando authtoken de ngrok");
+    }
+    
+    // Iniciar listener
+    ngrokListener = await ngrok.forward({
+      addr: NGROK_PORT,
+      authtoken_from_env: true,
+    });
+    
+    const url = ngrokListener.url();
+    ngrokUrl = url || "";
+    console.log(`Ã¢Å“â€¦ ngrok conectado: ${ngrokUrl}`);
+    mainWindow?.webContents.send("remote-url-updated", { url: ngrokUrl });
+    return ngrokUrl;
+  } catch (error) {
+    console.error("Ã¢ÂÅ’ Error iniciando ngrok:", error);
+    return "";
+  }
+}
+
+// FunciÃƒÂ³n para verificar y reiniciar ngrok si es necesario
+async function checkAndRefreshNgrok(): Promise<string> {
+  try {
+    // Probar si la URL actual funciona
+    if (ngrokUrl) {
+      const response = await fetch(`${ngrokUrl}/api/stats`, {
+        timeout: 5000,
+      } as any);
+      
+      if (response.status >= 200 && response.status < 500) {
+        console.log(`Ã¢Å“â€¦ ngrok sigue activo: ${ngrokUrl}`);
+        return ngrokUrl;
+      }
+    }
+    
+    // Si no funciona, reiniciar
+    console.log("Ã¢Å¡ Ã¯Â¸Â ngrok desconectado, reiniciando...");
+    if (ngrokListener) {
+      await ngrokListener.close();
+      ngrokListener = null;
+    }
+    return await startNgrok();
+  } catch (error) {
+    console.error("Ã¢ÂÅ’ Error verificando ngrok:", error);
+    try {
+      return await startNgrok();
+    } catch (e) {
+      return "";
+    }
+  }
+}
+
+function getClienteInfo(codigo: string) {
+  try {
+    let info = db.prepare("SELECT * FROM clientes WHERE cliente = ?").get(codigo);
+    if (!info) {
+      const doc = db.prepare("SELECT razon_social, vendedor FROM documentos WHERE cliente = ? LIMIT 1").get(codigo);
+      info = { cliente: codigo, razon_social: doc?.razon_social || "", vendedor: doc?.vendedor || "", telefono: "", email: "", direccion: "", contacto: "" };
+    }
+    return info;
+  } catch (e) { return null; }
+}
+
+function listGestiones(cliente: string) {
+  try {
+    if (!cliente) {
+      // Si no se especifica cliente, devolver TODAS las gestiones (no solo promesas)
+      // Ordenadas por fecha mÃƒÂ¡s reciente primero
+      return db.prepare(`
+        SELECT 
+          g.id, g.cliente, g.fecha, g.tipo, g.resultado, g.observacion, g.fecha_promesa, g.monto_promesa,
+          COALESCE((SELECT d.razon_social FROM documentos d WHERE d.cliente = g.cliente LIMIT 1), g.cliente) as razon_social 
+        FROM gestiones g
+        ORDER BY 
+          g.fecha DESC
+        LIMIT 5000
+      `).all();
+    }
+    // Para cliente especÃƒÂ­fico: devolver sus gestiones ordenadas por fecha reciente
+    return db.prepare("SELECT * FROM gestiones WHERE cliente = ? ORDER BY fecha DESC LIMIT 1000").all(cliente);
+  } catch (e: any) { 
+    console.error("Error obteniendo gestiones:", e.message);
+    return []; 
+  }
+}
+
+function getLocalGestionsPath(): string {
+  return join(app.getPath("userData"), "gestiones-locales.json");
+}
+
+function loadLocalGestiones(): any[] {
+  try {
+    const path = getLocalGestionsPath();
+    if (fs.existsSync(path)) {
+      const data = fs.readFileSync(path, "utf-8");
+      return JSON.parse(data) || [];
+    }
+  } catch (e) {
+    console.error("Error cargando gestiones locales:", e);
+  }
+  return [];
+}
+
+function saveLocalGestiones(gestiones: any[]): void {
+  try {
+    const path = getLocalGestionsPath();
+    fs.writeFileSync(path, JSON.stringify(gestiones, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error guardando gestiones locales:", e);
+  }
+}
+
+function listGestionesCombinadas(cliente: string): any[] {
+  try {
+    // Obtener gestiones de BD
+    let dbGestiones: any[] = [];
+    if (!cliente) {
+      dbGestiones = db.prepare(`
+        SELECT g.id, g.cliente, g.fecha, g.tipo, g.resultado, g.observacion, g.fecha_promesa, g.monto_promesa,
+          COALESCE((SELECT d.razon_social FROM documentos d WHERE d.cliente = g.cliente LIMIT 1), g.cliente) as razon_social 
+        FROM gestiones g
+        ORDER BY g.fecha DESC
+        LIMIT 5000
+      `).all();
+    } else {
+      dbGestiones = db.prepare("SELECT * FROM gestiones WHERE cliente = ? ORDER BY fecha DESC LIMIT 1000").all(cliente);
+    }
+    
+    // Obtener gestiones locales
+    let localGestiones = loadLocalGestiones();
+    
+    // Filtrar por cliente si es necesario
+    if (cliente) {
+      localGestiones = localGestiones.filter((g: any) => g.cliente === cliente);
+    }
+    
+    // Combinar y deduplicar
+    const deduped = [...dbGestiones];
+    for (const local of localGestiones) {
+      const isDuplicate = dbGestiones.some((bg: any) => {
+        const sameClient = bg.cliente === local.cliente;
+        const sameType = bg.tipo === local.tipo;
+        const sameObs = bg.observacion === local.observacion;
+        try {
+          if (local.fecha && bg.fecha) {
+            const localTime = new Date(local.fecha).getTime();
+            const bgTime = new Date(bg.fecha).getTime();
+            if (!isNaN(localTime) && !isNaN(bgTime)) {
+              return sameClient && sameType && sameObs && Math.abs(localTime - bgTime) < 10000;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+        return false;
+      });
+      
+      if (!isDuplicate) {
+        deduped.push(local);
+      }
+    }
+    
+    // Ordenar por fecha descendente
+    return deduped.sort((a: any, b: any) => {
+      const dateA = new Date(a.fecha || 0).getTime();
+      const dateB = new Date(b.fecha || 0).getTime();
+      return dateB - dateA;
+    });
+  } catch (e: any) {
+    console.error("Error en listGestionesCombinadas:", e.message);
+    return [];
+  }
+}
+
+function markGestionFulfilled(id: number) {
+  try {
+    // Cambiamos el resultado para que ya no salga en la lista de pendientes
+    db.prepare("UPDATE gestiones SET resultado = 'Promesa Cumplida' WHERE id = ?").run(id);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+}
+
+function updateGestion(id: number, data: any) {
+  try {
+    const { tipo, resultado, observacion, fecha_promesa, monto_promesa } = data;
+    db.prepare(`
+      UPDATE gestiones 
+      SET tipo = @tipo, resultado = @resultado, observacion = @observacion, 
+          fecha_promesa = @fecha_promesa, monto_promesa = @monto_promesa 
+      WHERE id = @id
+    `).run({ id, tipo, resultado, observacion, fecha_promesa, monto_promesa });
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+}
+
+function deleteGestion(id: number) {
+  try {
+    db.prepare("DELETE FROM gestiones WHERE id = ?").run(id);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+}
+
+function getGestionesReporte(args?: { desde?: string, hasta?: string }) {
+  try {
+    const where: string[] = [];
+    const params: any = {};
+
+    if (args?.desde) {
+      where.push("date(g.fecha) >= date(@desde)");
+      params.desde = args.desde;
+    }
+    if (args?.hasta) {
+      where.push("date(g.fecha) <= date(@hasta)");
+      params.hasta = args.hasta;
+    }
+
+    const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+
+    return db.prepare(`
+      SELECT 
+        g.*,
+        COALESCE(c.razon_social, g.cliente) as razon_social
+      FROM gestiones g
+      LEFT JOIN clientes c ON g.cliente = c.cliente
+      ${whereClause}
+      ORDER BY g.fecha DESC
+      LIMIT 2000
+    `).all(params);
+  } catch (e: any) {
+    return [];
+  }
+}
+
+// --- SERVIDOR WEB LOCAL ---
+function startWebServer() {
+  const server = http.createServer((req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-desktop-token");
+    
+    // Manejar preflight requests
+    if (req.method === "OPTIONS") {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    const url = new URL(req.url || "/", `http://${req.headers.host}`);
+    const isDesktop = isDesktopClient(req);
+    
+    // 1. API Endpoints
+    if (url.pathname.startsWith("/api/")) {
+      res.setHeader("Content-Type", "application/json");
+      
+      // Operaciones que requieren permisos de escritura (solo desktop)
+      const writeOperations = [
+        "/api/importar",
+        "/api/limpiar",
+        "/api/empresa/guardar",
+        "/api/cliente/guardar",
+        "/api/gestion/guardar",
+        "/api/gestion/eliminar",
+        "/api/gestion/cumplir",
+        "/api/campana/guardar",
+        "/api/campana/eliminar",
+        "/api/disputa/crear",
+        "/api/cuenta-aplicar/crear",
+        "/api/cuenta-aplicar/actualizar",
+        "/api/gestiones-locales/guardar"
+      ];
+      
+      // Verificar permisos para operaciones de escritura
+      if (writeOperations.some(op => url.pathname.startsWith(op)) && !isDesktop) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ 
+          ok: false, 
+          message: "Ã¢Å¡ Ã¯Â¸Â OperaciÃƒÂ³n no permitida. Solo la aplicaciÃƒÂ³n de escritorio puede hacer cambios."
+        }));
+        return;
+      }
+      
+      // Manejar POST para gestiones locales
+      if (req.method === "POST" && url.pathname === "/api/gestiones-locales/guardar") {
+        let body = "";
+        req.on("data", (chunk) => { body += chunk; });
+        req.on("end", () => {
+          try {
+            const gestiones = JSON.parse(body);
+            saveLocalGestiones(gestiones);
+            res.writeHead(200);
+            res.end(JSON.stringify({ ok: true, message: "Gestiones guardadas correctamente" }));
+          } catch (e: any) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ ok: false, message: e.message }));
+          }
+        });
+        return;
+      }
+      
+      try {
+        let data: any = { ok: false, message: "Ruta no encontrada" };
+
+        if (VERBOSE_API_LOGS) {
+          console.log(`Ã°Å¸â€œÂ¥ [${url.pathname}] Request desde ${isDesktop ? 'Desktop' : 'Web'}`);
+        }
+
+        if (url.pathname === "/api/config") {
+          // Endpoint para obtener configuraciÃƒÂ³n (IP local, etc)
+          const localIp = getNetworkIp();
+          data = { 
+            ok: true, 
+            remoteUrl: `http://${localIp}:${NGROK_PORT}`,
+            localIp,
+            port: NGROK_PORT
+          };
+        }
+        else if (url.pathname === "/api/stats") data = computeStats();
+        else if (url.pathname === "/api/dashboard-executive") {
+          const yearValue = url.searchParams.get("year");
+          const monthValue = url.searchParams.get("month");
+
+          data = computeDashboardExecutiveStats(
+            db,
+            new Date(),
+            {
+              year: yearValue
+                ? Number(yearValue)
+                : undefined,
+              month:
+                monthValue === "all"
+                  ? null
+                  : monthValue
+                    ? Number(monthValue)
+                    : undefined,
+            },
+          );
+        }
+        else if (url.pathname === "/api/filtros") data = listFiltros();
+        else if (url.pathname === "/api/empresa") data = getEmpresa();
+        else if (url.pathname === "/api/top-clientes") data = topClientes(Number(url.searchParams.get("limit")) || 10);
+        else if (url.pathname === "/api/analisis") data = getAnalisisRiesgo();
+        else if (url.pathname === "/api/cliente-info") data = getClienteInfo(url.searchParams.get("id") || "");
+        else if (url.pathname === "/api/gestiones") data = listGestionesCombinadas(url.searchParams.get("cliente") || "");
+        else if (url.pathname === "/api/gestiones-reporte") data = getGestionesReporte({ desde: url.searchParams.get("desde") || undefined, hasta: url.searchParams.get("hasta") || undefined });
+        else if (url.pathname === "/api/documentos") {
+          data = { ok: true, rows: listarDocumentos({
+            cliente: url.searchParams.get("cliente") || undefined,
+            vendedor: url.searchParams.get("vendedor") || undefined,
+            tipoDocumento: url.searchParams.get("tipoDocumento") || undefined,
+            tipoFecha: (url.searchParams.get("tipoFecha") as any) || "emision",
+            desde: url.searchParams.get("desde") || undefined,
+            hasta: url.searchParams.get("hasta") || undefined,
+            buscar: url.searchParams.get("buscar") || undefined,
+            soloVencidos: url.searchParams.get("soloVencidos") === "true",
+          })};
+        }
+        res.writeHead(200);
+        res.end(JSON.stringify(data));
+      } catch (e: any) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ ok: false, message: e.message }));
+      }
+      return;
+    }
+
+    // 2. Archivos EstÃƒÂ¡ticos (Frontend)
+    let safePath = url.pathname === "/" ? "/index.html" : url.pathname;
+    // Evitar salir del directorio
+    if (safePath.includes("..")) safePath = "/index.html";
+    
+    const distPath = join(__dirname, "../dist");
+    if (!fs.existsSync(distPath)) {
+      console.log("Ã¢Å¡ Ã¯Â¸Â  ADVERTENCIA: No se encontrÃƒÂ³ la carpeta 'dist'. Recuerda ejecutar 'npm run build' para que funcione en el celular.");
+    }
+    const filePath = join(distPath, safePath.startsWith("/") ? safePath.slice(1) : safePath);
+
+    // Tipos MIME correctos (CRUCIAL para que no salga pantalla blanca)
+    const mimeTypes: Record<string, string> = {
+      ".html": "text/html",
+      ".js": "text/javascript",
+      ".css": "text/css",
+      ".json": "application/json",
+      ".png": "image/png",
+      ".jpg": "image/jpg",
+      ".svg": "image/svg+xml",
+      ".ico": "image/x-icon"
+    };
+
+    const serveFile = (pathToFile: string) => {
+      fs.readFile(pathToFile, (err, content) => {
+        if (err) {
+          // Si no encuentra el archivo (ej. una ruta de React Router), servir index.html
+          if (pathToFile !== join(distPath, "index.html")) {
+            serveFile(join(distPath, "index.html"));
+          } else {
+            res.writeHead(404);
+            res.end("Not found");
+          }
+        } else {
+          const ext = extname(pathToFile).toLowerCase();
+          const contentType = mimeTypes[ext] || "application/octet-stream";
+          res.writeHead(200, { "Content-Type": contentType });
+          res.end(content);
+        }
+      });
+    };
+
+    serveFile(filePath);
+  });
+
+  server.listen(3000, "0.0.0.0", () => {
+    const interfaces = os.networkInterfaces();
+    const urls: string[] = [];
+    Object.keys(interfaces).forEach((ifaceName) => {
+      interfaces[ifaceName]?.forEach((iface) => {
+        if (iface.family === "IPv4" && !iface.internal) {
+          urls.push(`http://${iface.address}:3000`);
+        }
+      });
+    });
+
+    console.log(`--- SERVIDOR WEB LOCAL INICIADO --- ${urls.join(" | ")}`);
+    if (VERBOSE_IP_LOGS) {
+      urls.forEach(u => console.log(`Acceso disponible en: ${u}`));
+    }
+    
+    // Enviar IP local como URL remota inicial
+    const localIp = getNetworkIp();
+    if (localIp !== "localhost") {
+      mainWindow?.webContents.send("remote-url-updated", { url: `http://${localIp}:3000` });
+    }
+  });
+}
+
+
+function shouldOpenDevTools() {
+  return process.env.OPEN_DEVTOOLS === "1" || process.env.OPEN_DEVTOOLS === "true";
+}
+
+async function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 1000,
+    minHeight: 600,
+    frame: true,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    // Intentar cargar icono personalizado
+    icon: fs.existsSync(join(app.getPath('userData'), 'custom-logo.png')) 
+      ? join(app.getPath('userData'), 'custom-logo.png') 
+      : undefined
+  });
+
+  mainWindow.maximize();
+  mainWindow.show();
+
+  const devUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devUrl) {
+    await mainWindow.loadURL(devUrl);
+    if (shouldOpenDevTools()) mainWindow.webContents.openDevTools({ mode: "detach" });
+  } else {
+    await mainWindow.loadFile(join(__dirname, "../dist/index.html"));
+  }
+
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+}
+
+function closeDb() {
+  try {
+    db?.close();
+  } catch {
+    // ignore
+  }
+}
+
+function toDateOnlyIso(d: Date) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function computeStats() {
+  const todayIso = toDateOnlyIso(new Date());
+
+  const totalSaldo = Number(
+    db.prepare(`SELECT COALESCE(SUM(total), 0) AS v FROM documentos WHERE is_subtotal = 0`).get().v
+  );
+  const totalCobrado = Number(
+    db.prepare(`SELECT COALESCE(SUM(cobros), 0) AS v FROM documentos WHERE is_subtotal = 0`).get().v
+  );
+  const vencidaSaldo = Number(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(total), 0) AS v
+         FROM documentos
+         WHERE is_subtotal = 0
+           AND total > 0
+           AND date(fecha_vencimiento) < date('now', 'localtime')`
+      )
+      .get().v
+  );
+
+  const mora90Saldo = Number(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(total), 0) AS v
+         FROM documentos
+         WHERE is_subtotal = 0
+           AND total > 0
+           AND date(fecha_vencimiento) < date('now', 'localtime', '-90 day')`
+      )
+      .get().v
+  );
+
+  const mora120Saldo = Number(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(total), 0) AS v
+         FROM documentos
+         WHERE is_subtotal = 0
+           AND total > 0
+           AND date(fecha_vencimiento) < date(?, '-120 day')`
+      )
+      .get(todayIso).v
+  );
+
+  const docsPendientes = Number(
+    db
+      .prepare(
+        `SELECT COUNT(1) AS c
+         FROM documentos
+         WHERE is_subtotal = 0 AND total > 0`
+      )
+      .get().c
+  );
+
+  const clientesConSaldo = Number(
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT cliente) AS c
+         FROM documentos
+         WHERE is_subtotal = 0 AND total > 0 AND cliente IS NOT NULL AND cliente <> ''`
+      )
+      .get().c
+  );
+
+  // Calculamos el Aging dinÃƒÂ¡micamente comparando fechas (mÃƒÂ¡s preciso que guardar valores fijos)
+  const aging = db
+    .prepare(
+      `SELECT
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) <= 0 THEN total ELSE 0 END), 0) AS por_vencer,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 0 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 30 THEN total ELSE 0 END), 0) AS d30,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 30 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 60 THEN total ELSE 0 END), 0) AS d60,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 60 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 90 THEN total ELSE 0 END), 0) AS d90,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 90 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 120 THEN total ELSE 0 END), 0) AS d120,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 120 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 150 THEN total ELSE 0 END), 0) AS d150,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 150 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 180 THEN total ELSE 0 END), 0) AS d180,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 180 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 210 THEN total ELSE 0 END), 0) AS d210,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 210 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 240 THEN total ELSE 0 END), 0) AS d240,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 240 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 270 THEN total ELSE 0 END), 0) AS d270,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 270 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 300 THEN total ELSE 0 END), 0) AS d300,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 300 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 330 THEN total ELSE 0 END), 0) AS d330,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 330 AND (julianday(@today) - julianday(fecha_vencimiento)) <= 360 THEN total ELSE 0 END), 0) AS d360,
+        COALESCE(SUM(CASE WHEN (julianday(@today) - julianday(fecha_vencimiento)) > 360 THEN total ELSE 0 END), 0) AS d360p
+       FROM documentos
+       WHERE is_subtotal = 0`
+    )
+    .get({ today: todayIso });
+
+  const top10Sum = Number(
+    db
+      .prepare(
+        `SELECT COALESCE(SUM(saldo), 0) AS v
+         FROM (
+           SELECT cliente, SUM(total) AS saldo
+           FROM documentos
+           WHERE is_subtotal = 0
+           GROUP BY cliente
+           ORDER BY saldo DESC
+           LIMIT 10
+         )`
+      )
+      .get().v
+  );
+
+  const percentVencida = totalSaldo > 0 ? (vencidaSaldo / totalSaldo) * 100 : 0;
+  const percentMora90 = totalSaldo > 0 ? (mora90Saldo / totalSaldo) * 100 : 0;
+  const percentTop10 = totalSaldo > 0 ? (top10Sum / totalSaldo) * 100 : 0;
+
+  // --- KPIs CRÃƒÂTICOS ADICIONALES ---
+  // 1. NPL (Non-Performing Loans): % de cartera vencida
+  const npl = percentVencida; // Ya lo calculamos arriba
+
+  // 2. DSO (Days Sales Outstanding): dÃƒÂ­as promedio para cobrar
+  const totalVentas = Number(
+    db.prepare(`SELECT COALESCE(SUM(valor_documento), 0) AS v FROM documentos WHERE is_subtotal = 0`).get().v
+  );
+  const diasPromedio = totalVentas > 0 ? Math.round((totalSaldo / totalVentas) * 365) : 0;
+  const dso = Math.max(0, diasPromedio);
+
+  // 3. RecuperaciÃƒÂ³n del mes actual (cobros registrados)
+  const inicioMes = `${todayIso.substring(0, 7)}-01`;
+  const recuperacionMesActual = Number(
+    db.prepare(
+      `SELECT COALESCE(SUM(cobros), 0) AS v FROM documentos WHERE is_subtotal = 0 AND date(importado_en) >= date(?)`
+    ).get(inicioMes).v
+  );
+
+  // 4. Meta mensual (de la tabla empresa)
+  const empresa = db.prepare("SELECT * FROM empresa WHERE id = 1").get();
+  const metaMensual = empresa?.meta_mensual || 100000; // Default $100k
+
+  // 5. % de cumplimiento de meta
+  const percentMetaCumplida = metaMensual > 0 ? Math.min((recuperacionMesActual / metaMensual) * 100, 100) : 0;
+
+  // 6. Tasa de cumplimiento de promesas
+  const totalPromesas = Number(
+    db.prepare(`SELECT COUNT(1) AS c FROM gestiones WHERE resultado LIKE '%Promesa%'`).get().c
+  );
+  const promesasCumplidas = Number(
+    db.prepare(`SELECT COUNT(1) AS c FROM gestiones WHERE resultado = 'Promesa Cumplida'`).get().c
+  );
+  const tasaCumplimientoPromesas = totalPromesas > 0 ? Math.round((promesasCumplidas / totalPromesas) * 100) : 0;
+
+  return {
+    fechaCorte: todayIso,
+    totalSaldo,
+    totalCobrado,
+    vencidaSaldo,
+    percentVencida,
+    mora90Saldo,
+    percentMora90,
+    mora120Saldo,
+    docsPendientes,
+    clientesConSaldo,
+    aging: {
+      porVencer: Number(aging.por_vencer || 0),
+      d30: Number(aging.d30 || 0),
+      d60: Number(aging.d60 || 0),
+      d90: Number(aging.d90 || 0),
+      d120: Number(aging.d120 || 0),
+      d150: Number(aging.d150 || 0),
+      d180: Number(aging.d180 || 0),
+      d210: Number(aging.d210 || 0),
+      d240: Number(aging.d240 || 0),
+      d270: Number(aging.d270 || 0),
+      d300: Number(aging.d300 || 0),
+      d330: Number(aging.d330 || 0),
+      d360: Number(aging.d360 || 0),
+      d360p: Number(aging.d360p || 0),
+    },
+    percentTop10,
+    // KPIs CrÃƒÂ­ticos FASE 1
+    npl: Math.round(npl * 100) / 100,
+    dso,
+    recuperacionMesActual,
+    metaMensual,
+    percentMetaCumplida: Math.round(percentMetaCumplida * 100) / 100,
+    tasaCumplimientoPromesas,
+  };
+}
+
+function listFiltros() {
+  const clientes = db
+    .prepare(
+      `SELECT DISTINCT cliente, razon_social
+       FROM documentos
+       WHERE is_subtotal = 0 AND cliente IS NOT NULL AND cliente <> ''
+       ORDER BY razon_social, cliente`
+    )
+    .all();
+  const vendedores = db
+    .prepare(
+      `SELECT DISTINCT vendedor AS v
+       FROM documentos
+       WHERE is_subtotal = 0 AND vendedor IS NOT NULL AND vendedor <> ''
+       ORDER BY v`
+    )
+    .all()
+    .map((r: any) => r.v);
+  const tipos = db
+    .prepare(
+      `SELECT DISTINCT tipo_documento AS v
+       FROM documentos
+       WHERE is_subtotal = 0 AND tipo_documento IS NOT NULL AND tipo_documento <> ''
+       ORDER BY v`
+    )
+    .all()
+    .map((r: any) => r.v);
+
+  return { clientes, vendedores, tipos };
+}
+
+type ListarArgs = {
+  cliente?: string;
+  vendedor?: string;
+  tipoDocumento?: string;
+  tipoFecha?: "emision" | "vencimiento"; // Nuevo parÃƒÂ¡metro
+  desde?: string; // YYYY-MM-DD
+  hasta?: string; // YYYY-MM-DD
+  buscar?: string;
+  soloVencidos?: boolean;
+  limit?: number;
+  ids?: number[]; // Nuevo filtro por IDs
+};
+
+function listarDocumentos(args: ListarArgs) {
+  const where: string[] = ["is_subtotal = 0"];
+  const params: any[] = [];
+
+  if (args.cliente && args.cliente !== "(Todos)") {
+    // Filtramos por RazÃƒÂ³n Social para evitar problemas con IDs duplicados o S/N
+    where.push("razon_social = ?");
+    params.push(args.cliente);
+  }
+  if (args.vendedor && args.vendedor !== "(Todos)") {
+    where.push("vendedor = ?");
+    params.push(args.vendedor);
+  }
+  if (args.tipoDocumento && args.tipoDocumento !== "(Todos)") {
+    where.push("tipo_documento = ?");
+    params.push(args.tipoDocumento);
+  }
+  
+  // Determinamos quÃƒÂ© columna de fecha usar (por defecto EmisiÃƒÂ³n)
+  const dateCol = args.tipoFecha === "vencimiento" ? "fecha_vencimiento" : "fecha_emision";
+
+  if (args.desde) {
+    where.push(`date(${dateCol}) >= date(?)`);
+    params.push(args.desde);
+  }
+  if (args.hasta) {
+    where.push(`date(${dateCol}) <= date(?)`);
+    params.push(args.hasta);
+  }
+  if (args.soloVencidos) {
+    where.push("date(fecha_vencimiento) < date('now') AND total > 0");
+  }
+  if (args.buscar && args.buscar.trim()) {
+    const s = `%${args.buscar.trim()}%`;
+    where.push("(razon_social LIKE ? OR cliente LIKE ? OR documento LIKE ? OR descripcion LIKE ?)");
+    params.push(s, s, s, s);
+  }
+  if (args.ids && args.ids.length > 0) {
+    const placeholders = args.ids.map(() => "?").join(",");
+    where.push(`id IN (${placeholders})`);
+    params.push(...args.ids);
+  }
+
+  const limit = Math.min(Math.max(args.limit ?? 2000, 1), 5000);
+
+  const sql = `
+    SELECT
+      id,
+      cliente,
+      razon_social,
+      tipo_documento,
+      documento,
+      fecha_emision,
+      fecha_vencimiento,
+      vendedor,
+      descripcion,
+      valor_documento,
+      retenciones,
+      iva,
+      cobros,
+      total,
+      -- Calculamos dÃƒÂ­as vencidos al vuelo: (Hoy - Vencimiento)
+      CAST(julianday(date('now', 'localtime')) - julianday(fecha_vencimiento) AS INTEGER) as dias_vencidos
+    FROM documentos
+    WHERE ${where.join(" AND ")}
+    ORDER BY date(fecha_vencimiento) ASC, razon_social ASC, documento ASC
+    LIMIT ${limit}
+  `;
+
+  return db.prepare(sql).all(...params);
+}
+
+function topClientes(limit = 10) {
+  const n = Math.min(Math.max(limit, 1), 200);
+  return db
+    .prepare(
+      `SELECT
+         cliente,
+         MAX(razon_social) AS razon_social,
+         SUM(total) AS total,
+         SUM(CASE WHEN date(fecha_vencimiento) < date('now', 'localtime') AND total > 0 THEN total ELSE 0 END) AS vencida,
+         SUM(CASE WHEN date(fecha_vencimiento) < date('now', 'localtime', '-90 day') AND total > 0 THEN total ELSE 0 END) AS mora90,
+         COUNT(1) AS documentos
+       FROM documentos
+       WHERE is_subtotal = 0
+       GROUP BY cliente
+       ORDER BY total DESC
+       LIMIT ${n}`
+    )
+    .all();
+}
+
+function clientesListar() {
+  try {
+    // Obtener todos los clientes de la tabla clientes con su informaciÃƒÂ³n
+    const clientes = db.prepare(`
+      SELECT 
+        c.id,
+        c.cliente,
+        c.razon_social,
+        c.vendedor,
+        c.telefono,
+        c.email,
+        c.direccion,
+        c.contacto,
+        COALESCE(SUM(d.total), 0) as total_deuda,
+        COALESCE(SUM(CASE WHEN date(d.fecha_vencimiento) < date('now', 'localtime') AND d.total > 0 THEN d.total ELSE 0 END), 0) as deuda_vencida,
+        COUNT(d.id) as total_documentos,
+        MAX(CASE WHEN date(d.fecha_vencimiento) < date('now', 'localtime') THEN CAST(julianday(date('now', 'localtime')) - julianday(d.fecha_vencimiento) AS INTEGER) ELSE 0 END) as max_dias_vencidos
+      FROM clientes c
+      LEFT JOIN documentos d ON c.cliente = d.cliente AND d.is_subtotal = 0
+      GROUP BY c.id, c.cliente, c.razon_social, c.vendedor, c.telefono, c.email, c.direccion, c.contacto
+      ORDER BY c.razon_social ASC
+    `).all();
+    
+    return { ok: true, rows: clientes };
+  } catch (e: any) {
+    console.error("Error en clientesListar:", e);
+    return { ok: false, message: e.message, rows: [] as unknown[] };
+  }
+}
+
+// -----------------------------
+// Helpers de ImportaciÃƒÂ³n
+// -----------------------------
+
+// Normalizar texto (quitar tildes y ÃƒÂ±)
+const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+// Formatear fecha de Excel a YYYY-MM-DD
+const formatDate = (val: any) => {
+  if (val instanceof Date) return val.toISOString().split('T')[0];
+  const s = String(val || "").trim();
+  if (!s) return "";
+  // Detectar formato DD/MM/YYYY
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  }
+  return s;
+};
+
+// Helper para parsear nÃƒÂºmeros (maneja "1.234,56" y "217,33")
+const parseNumber = (val: any): number => {
+  if (val == null || val === "") return 0;
+  if (typeof val === 'number') return val;
+  
+  let s = String(val).trim();
+  // Limpiar posibles sÃƒÂ­mbolos de moneda
+  s = s.replace(/[$\s]/g, '');
+
+  if (s.includes(',') && s.includes('.')) {
+    // Caso mixto: detectar cuÃƒÂ¡l es el separador decimal por la posiciÃƒÂ³n
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      // 1.234,56 -> 1234.56 (Europeo/Latino con miles)
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // 1,234.56 -> 1234.56 (Americano)
+      s = s.replace(/,/g, '');
+    }
+  } else if (s.includes(',')) {
+    // Solo coma: asumir decimal (217,33 -> 217.33)
+    s = s.replace(',', '.');
+  }
+  
+  const n = Number(s);
+  return isNaN(n) ? 0 : n;
+};
+
+function _parseExcel(filePath: string, ivaPercent: number) {
+  console.log("Ã°Å¸â€œâ€ž Leyendo archivo...");
+  const fileBuffer = fs.readFileSync(filePath);
+  console.log("Ã°Å¸â€œÅ¡ Parseando workbook...");
+  const workbook = XLSX.read(fileBuffer, { type: "buffer", cellDates: true });
+  const sheetName = workbook.SheetNames[0];
+  console.log("Ã°Å¸â€œâ€¹ Hoja seleccionada:", sheetName);
+  const sheet = workbook.Sheets[sheetName];
+  
+  console.log("Ã°Å¸â€â€ž Convirtiendo a JSON...");
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }) as any[][];
+  console.log("Ã°Å¸â€œÅ  Total filas leÃƒÂ­das:", rawRows.length);
+  if (!rawRows || rawRows.length === 0) return [];
+
+  // AJUSTE: El encabezado comienza en la Fila 5 (ÃƒÂ­ndice 4)
+  const headerIdx = 4;
+
+  if (!rawRows[headerIdx]) return [];
+
+  const headers = rawRows[headerIdx].map(h => String(h).trim().toLowerCase());
+  const dataRows = rawRows.slice(headerIdx + 1);
+  const normalizedHeaders = headers.map(normalize);
+  console.log("Ã¢Å“â€¦ Encabezados detectados:", normalizedHeaders.slice(0, 10), "...");
+
+  // ValidaciÃƒÂ³n de estructura mÃƒÂ­nima: abortar si faltan columnas clave.
+  const hasHeader = (aliases: string[]) => aliases.some(alias => normalizedHeaders.some(h => h.includes(normalize(alias))));
+  const missingHeaders: string[] = [];
+  if (!hasHeader(["razon social", "nombre"])) missingHeaders.push("RazÃƒÂ³n Social / Nombre");
+  if (!hasHeader(["documento", "# documento", "numero"])) missingHeaders.push("# Documento");
+  if (!hasHeader(["total", "saldo"])) missingHeaders.push("Total / Saldo");
+  if (!hasHeader(["vencimiento", "f. vencimiento", "vence"])) missingHeaders.push("Fecha de Vencimiento");
+
+  if (missingHeaders.length > 0) {
+    const msg = `Estructura de archivo no reconocida. Faltan columnas obligatorias: ${missingHeaders.join(", ")}. Verifica que el encabezado estÃƒÂ© en la fila 5 y que los nombres de columna no se hayan removido o renombrado.`;
+    throw new Error(msg);
+  }
+  console.log("Ã¢Å“â€¦ ValidaciÃƒÂ³n de estructura OK");
+
+  // Validar que el orden de columnas coincida con la importaciÃƒÂ³n anterior (si existe)
+  const storedHeadersJson = db.prepare("SELECT excel_headers_json FROM empresa WHERE id = 1").get() as any;
+  const storedHeaders = storedHeadersJson?.excel_headers_json ? JSON.parse(storedHeadersJson.excel_headers_json) : null;
+
+  if (storedHeaders && Array.isArray(storedHeaders)) {
+    // Comparar orden exacto
+    if (JSON.stringify(normalizedHeaders) !== JSON.stringify(storedHeaders)) {
+      const msg = `Orden de columnas no reconocido. Se esperaba: [${storedHeaders.join(", ")}]. Recibido: [${normalizedHeaders.join(", ")}]. Si cambiÃƒÂ³ la estructura intencionalmente, usa 'Reiniciar estructura Excel' en Config.`;
+      throw new Error(msg);
+    }
+  } else if (normalizedHeaders.length > 0) {
+    // Primera importaciÃƒÂ³n: guardar la estructura
+    try {
+      db.prepare("UPDATE empresa SET excel_headers_json = @headers WHERE id = 1").run({ headers: JSON.stringify(normalizedHeaders) });
+    } catch (err) {
+      console.warn("No se pudo guardar la estructura de encabezados en DB:", err);
+    }
+  }
+
+  const getVal = (row: any[], keys: string[], exclude: string[] = []) => {
+    const idx = normalizedHeaders.findIndex(h => 
+      keys.some(k => h.includes(normalize(k))) &&
+      !exclude.some(e => h.includes(normalize(e)))
+    );
+    return (idx >= 0 && row[idx] != null) ? row[idx] : "";
+  };
+
+  const documents: any[] = [];
+
+  for (const row of dataRows) {
+    // 1. Validaciones bÃƒÂ¡sicas de fila
+    if (!row || row.length < 2) continue;
+
+    // Columna B: "razon social" (Nombre del cliente)
+    const razon_social = String(getVal(row, ['razon social', 'razÃƒÂ³n social', 'nombre'])).trim();
+    
+    // Si no hay razÃƒÂ³n social o es una fila de "SUBTOTAL", saltamos
+    if (!razon_social || razon_social.toUpperCase().includes("SUBTOTAL") || razon_social.toUpperCase().includes("TOTAL CLIENTE")) continue;
+
+    // Usamos SIEMPRE la razÃƒÂ³n social como identificador, ignorando la columna A ("Cliente")
+    const cliente = razon_social;
+
+    // Columna D: "# documentos"
+    // CORRECCIÃƒâ€œN: Excluir 'tipo' para que no lea la columna C ("Tipo Documento") por error
+    const documento = String(getVal(row, ['# documentos', '# documento', 'documento', 'nÃƒÂºmero'], ['tipo'])).trim();
+    
+    // Si no hay nÃƒÂºmero de documento, es una fila invÃƒÂ¡lida para la base de datos
+    if (!documento || documento.toLowerCase() === "null" || documento === "0") continue;
+
+    // 2. ExtracciÃƒÂ³n de valores financieros con limpieza extra
+    const rawValor = getVal(row, ['valor documento', 'valor']);
+    const rawTotal = getVal(row, ['total', 'saldo']);
+    const rawRetenciones = getVal(row, ['retenciones', 'retencion']);
+    const rawCobros = getVal(row, ['cobros', 'cobro']);
+    
+    // Si el total es 0 y el valor del documento tambiÃƒÂ©n, probablemente es una fila informativa
+    const total = Number(parseNumber(rawTotal).toFixed(2));
+    const valor_documento = Number(parseNumber(rawValor).toFixed(2));
+    const retenciones = Number(parseNumber(rawRetenciones).toFixed(2));
+    const cobros = Number(parseNumber(rawCobros).toFixed(2));
+    
+    // VALIDACIÃƒâ€œN EXTRA: Verificar consistencia (Total = Valor - Retenciones - Cobros)
+    // Usamos un margen de error de 0.05 para evitar fallos por redondeo de centavos
+    const calculoEsperado = Number((valor_documento - retenciones - cobros).toFixed(2));
+    if (Math.abs(total - calculoEsperado) > 0.05) {
+      console.warn(`Ã¢Å¡ Ã¯Â¸Â Descuadre detectado en doc ${documento}: Excel dice ${total}, CÃƒÂ¡lculo dice ${calculoEsperado}. Se usarÃƒÂ¡ el Total del Excel.`);
+    }
+
+    if (total === 0 && valor_documento === 0) continue;
+
+    // CÃƒÂ¡lculo de IVA: Desglosamos del valor_documento (Columna R)
+    let iva = 0;
+    if (iva === 0 && valor_documento > 0) {
+      const base = valor_documento / (1 + (ivaPercent / 100));
+      iva = Number((valor_documento - base).toFixed(2));
+    }
+
+    documents.push({
+      cliente,
+      razon_social,
+      // Columna C: "tipo documento"
+      tipo_documento: String(getVal(row, ['tipo documento', 'tipo doc', 'tipo'])).trim().toUpperCase() || 'FACTURA',
+      documento,
+      // Columna E: "f. emision"
+      fecha_emision: formatDate(getVal(row, ['f. emision', 'f. emisiÃƒÂ³n', 'emisiÃƒÂ³n', 'emision'])),
+      // Columna F: "f. vencimiento"
+      fecha_vencimiento: formatDate(getVal(row, ['f. vencimiento', 'vencimiento', 'vence'])),
+      // Columna G: "vendedor"
+      vendedor: String(getVal(row, ['vendedor'])).trim(),
+      total,
+      valor_documento,
+      iva,
+      retenciones,
+      cobros,
+      // Columna Q: "descripcion"
+      descripcion: String(getVal(row, ['descripcion', 'descripciÃƒÂ³n', 'detalle'])).trim()
+    });
+  }
+  return documents;
+}
+
+function _saveDocumentsToDb(db: any, docs: any[]) {
+  // Marca de tiempo para esta importaciÃƒÂ³n
+  const now = new Date();
+  const importTimestamp = now.toISOString().replace('T', ' ').slice(0, 19);
+
+  const checkStmt = db.prepare("SELECT id, total, cobros FROM documentos WHERE documento = @documento AND cliente = @cliente AND tipo_documento = @tipo_documento LIMIT 1");
+  const insertAbono = db.prepare(`
+    INSERT INTO abonos (documento, total_anterior, total_nuevo, fecha, observacion)
+    VALUES (@documento, @total_anterior, @total_nuevo, @fecha, @observacion)
+  `);
+  const hasPrevDocs = Boolean(db.prepare("SELECT 1 FROM documentos WHERE is_subtotal = 0 LIMIT 1").get());
+  
+  const insertDoc = db.prepare(`
+    INSERT INTO documentos (
+      cliente, razon_social, tipo_documento, documento, 
+      fecha_emision, fecha_vencimiento, vendedor,
+      total, valor_documento, iva, retenciones, cobros, descripcion, is_subtotal,
+      importado_en
+    ) VALUES (
+      @cliente, @razon_social, @tipo_documento, @documento,
+      @fecha_emision, @fecha_vencimiento, @vendedor,
+      @total, @valor_documento, @iva, @retenciones, @cobros, @descripcion, 0,
+      @importado_en
+    )
+  `);
+
+  // ActualizaciÃƒÂ³n si hay cambios en valores
+  const updateDocValues = db.prepare(`
+    UPDATE documentos SET
+      razon_social = @razon_social,
+      fecha_emision = @fecha_emision,
+      fecha_vencimiento = @fecha_vencimiento,
+      vendedor = @vendedor,
+      total = @total,
+      valor_documento = @valor_documento,
+      iva = @iva,
+      retenciones = @retenciones,
+      cobros = @cobros,
+      descripcion = @descripcion,
+      importado_en = @importado_en
+    WHERE id = @id AND (
+      COALESCE(razon_social, '') != @razon_social OR
+      COALESCE(fecha_emision, '') != @fecha_emision OR
+      COALESCE(fecha_vencimiento, '') != @fecha_vencimiento OR
+      COALESCE(vendedor, '') != @vendedor OR
+      ABS(COALESCE(total, 0) - @total) > 0.005 OR
+      ABS(COALESCE(valor_documento, 0) - @valor_documento) > 0.005 OR
+      ABS(COALESCE(iva, 0) - @iva) > 0.005 OR
+      ABS(COALESCE(retenciones, 0) - @retenciones) > 0.005 OR
+      ABS(COALESCE(cobros, 0) - @cobros) > 0.005 OR
+      COALESCE(descripcion, '') != @descripcion
+    )
+  `);
+
+  // ActualizaciÃƒÂ³n simple de "Visto" (para confirmar que sigue en cartera aunque no cambie el saldo)
+  const updateDocSeen = db.prepare(`UPDATE documentos SET importado_en = @importado_en WHERE id = @id`);
+
+  let insertedDocs = 0;
+  let updatedDocs = 0;
+  let paidDocs = 0;
+  const insertedIds: number[] = [];
+
+  const transaction = db.transaction((documents: any[]) => {
+    for (const doc of documents) {
+      const existing = checkStmt.get({ documento: doc.documento, cliente: doc.cliente, tipo_documento: doc.tipo_documento });
+      const docWithTime = { ...doc, importado_en: importTimestamp };
+
+      if (existing) {
+        // Intentamos actualizar valores
+        const info = updateDocValues.run({ ...docWithTime, id: existing.id });
+        if (info.changes > 0) {
+          const prevTotal = Number(existing.total ?? 0);
+          const prevCobros = Number(existing.cobros ?? 0);
+          
+          // Calculamos cuÃƒÂ¡nto del cambio de total se debe realmente a un pago
+          // y no a un ajuste de retenciones
+          const cobrosSubio = doc.cobros > (prevCobros + 0.01);
+          const totalBajoReal = doc.total < (prevTotal - 0.01);
+          
+          if (cobrosSubio || totalBajoReal) {
+            // Solo registrar abono si hubo entrada de dinero (cobros subiÃƒÂ³)
+            // o si el total bajÃƒÂ³ y no fue solo por un aumento de retenciones
+            const montoAbono = Math.max(0, (prevTotal - doc.total) + (prevCobros - doc.cobros));
+            
+            if (montoAbono > 0.01) {
+              insertAbono.run({
+                documento: doc.documento,
+                total_anterior: prevTotal,
+                total_nuevo: doc.total,
+                fecha: now.toISOString(),
+                observacion: cobrosSubio 
+                  ? 'Cobro registrado en Contifico' 
+                  : 'Abono detectado por disminuciÃƒÂ³n de saldo'
+              });
+            }
+          }
+          updatedDocs++;
+        } else {
+          // Si no cambiaron valores, solo actualizamos la fecha de "visto"
+          updateDocSeen.run({ importado_en: importTimestamp, id: existing.id });
+        }
+      } else {
+        const info = insertDoc.run(docWithTime);
+        insertedIds.push(Number(info.lastInsertRowid));
+        insertedDocs++;
+        if (!hasPrevDocs && Number(doc.cobros) > 0) {
+          insertAbono.run({
+            documento: doc.documento,
+            total_anterior: Math.max(0, Number(doc.total) + Number(doc.cobros)),
+            total_nuevo: Number(doc.total),
+            fecha: now.toISOString(),
+            observacion: 'Abono detectado por cobros en primera importacion'
+          });
+        }
+      }
+    }
+
+    // LÃƒâ€œGICA CLAVE: Si una factura tenÃƒÂ­a saldo > 0 pero NO vino en este Excel (su importado_en es viejo),
+    // significa que ya fue pagada totalmente en Contifico. 
+    // NO LA BORRAMOS, solo actualizamos su saldo a 0 y ajustamos los cobros para que cuadre el historial.
+    const closeInfo = db.prepare(`
+      UPDATE documentos 
+      SET 
+        total = 0,
+        cobros = MAX(0, valor_documento - retenciones)
+      WHERE importado_en != @importTimestamp AND total > 0
+    `).run({ importTimestamp });
+    
+    paidDocs = closeInfo.changes;
+
+    if (paidDocs > 0) {
+      const paidRows = db.prepare(`
+        SELECT documento, total, valor_documento, retenciones
+        FROM documentos
+        WHERE importado_en != @importTimestamp AND total = 0
+      `).all({ importTimestamp }) as Array<{ documento: string; total: number; valor_documento: number; retenciones: number }>;
+
+      for (const row of paidRows) {
+        const pago = Math.max(0, Number(row.valor_documento) - Number(row.retenciones));
+        if (pago > 0) {
+          insertAbono.run({
+            documento: row.documento,
+            total_anterior: pago,
+            total_nuevo: 0,
+            fecha: now.toISOString(),
+            observacion: 'Cobro Total: Documento ya no aparece en cartera (Cancelado)'
+          });
+        }
+      }
+    }
+  });
+
+  transaction(docs);
+
+  return { insertedDocs, updatedDocs, insertedIds, paidDocs };
+}
+
+
+
+type PortfolioSnapshot = {
+  documentos: unknown[];
+  abonos: unknown[];
+  alertasCredito: unknown[];
+};
+
+function createPortfolioSnapshot(): PortfolioSnapshot {
+  return {
+    documentos: db.prepare("SELECT * FROM documentos").all(),
+    abonos: db.prepare("SELECT * FROM abonos").all(),
+    alertasCredito: db.prepare("SELECT * FROM alertas_credito").all(),
+  };
+}
+
+function restoreSnapshotTable(
+  tableName: "documentos" | "abonos" | "alertas_credito",
+  rows: Array<Record<string, unknown>>,
+): void {
+  db.prepare(`DELETE FROM ${tableName}`).run();
+
+  if (rows.length === 0) return;
+
+  const columns = Object.keys(rows[0]);
+  const quoted = columns.map((column) => `"${column.replace(/"/g, '""')}"`);
+  const placeholders = columns.map(() => "?").join(", ");
+
+  const insert = db.prepare(
+    `INSERT INTO ${tableName} (${quoted.join(", ")}) VALUES (${placeholders})`,
+  );
+
+  for (const row of rows) {
+    insert.run(...columns.map((column) => row[column] ?? null));
+  }
+}
+
+function restorePortfolioSnapshot(snapshot: PortfolioSnapshot): void {
+  restoreSnapshotTable(
+    "documentos",
+    snapshot.documentos as Array<Record<string, unknown>>,
+  );
+  restoreSnapshotTable(
+    "abonos",
+    snapshot.abonos as Array<Record<string, unknown>>,
+  );
+  restoreSnapshotTable(
+    "alertas_credito",
+    snapshot.alertasCredito as Array<Record<string, unknown>>,
+  );
+}
+
+function hashImportFile(filePath: string): string {
+  const content = fs.readFileSync(filePath);
+  return createHash("sha256").update(content).digest("hex");
+}
+
+function startPortfolioImport(
+  filePath: string,
+  fileHash: string,
+): number {
+  const fileName = filePath.split(/[\\/]/).pop() || "cartera.xlsx";
+
+  const result = db.prepare(`
+    INSERT INTO importaciones (
+      tipo,
+      archivo_nombre,
+      archivo_hash,
+      estado,
+      observacion,
+      metadata_json
+    )
+    VALUES (
+      'CARTERA',
+      ?,
+      ?,
+      'PROCESANDO',
+      'ImportaciÃƒÂ³n de cartera ContÃƒÂ­fico',
+      '{}'
+    )
+  `).run(fileName, fileHash);
+
+  const importacionId = Number(result.lastInsertRowid);
+
+  const snapshot = createPortfolioSnapshot();
+
+  db.prepare(`
+    INSERT INTO importacion_snapshots (
+      importacion_id,
+      payload_json
+    )
+    VALUES (?, ?)
+  `).run(
+    importacionId,
+    JSON.stringify(snapshot),
+  );
+
+  return importacionId;
+}
+
+function finishPortfolioImport(
+  importacionId: number,
+  result: Record<string, unknown>,
+): void {
+  const insertedDocs = Number(result.insertedDocs ?? 0);
+  const omittedRows = Number(result.omittedRows ?? 0);
+  const descuadres = Number(result.descuadresDetectados ?? 0);
+
+  db.prepare(`
+    UPDATE importaciones
+    SET
+      registros_leidos = ?,
+      registros_importados = ?,
+      registros_ignorados = ?,
+      registros_duplicados = 0,
+      estado = ?,
+      observacion = ?,
+      metadata_json = ?
+    WHERE id = ?
+  `).run(
+    insertedDocs + omittedRows,
+    insertedDocs,
+    omittedRows,
+    descuadres > 0 ? "COMPLETADA_ADVERTENCIAS" : "COMPLETADA",
+    descuadres > 0
+      ? `Cartera importada con ${descuadres} descuadres detectados.`
+      : "Cartera importada correctamente.",
+    JSON.stringify(result),
+    importacionId,
+  );
+}
+
+function failPortfolioImport(
+  importacionId: number,
+  message: string,
+): void {
+  db.prepare(`
+    UPDATE importaciones
+    SET
+      estado = 'ERROR',
+      observacion = ?
+    WHERE id = ?
+  `).run(message, importacionId);
+}
+
+// --- Centro de Importaciones ---
+type ImportType =
+  | "CARTERA"
+  | "ANULADOS"
+  | "NOTAS_CREDITO"
+  | "COBROS_MOVIMIENTOS";
+
+function listImportHistory(args?: {
+  tipo?: ImportType;
+  limit?: number;
+}) {
+  const limit = Math.min(
+    Math.max(Number(args?.limit ?? 100), 1),
+    500,
+  );
+
+  if (args?.tipo) {
+    return db
+      .prepare(
+        [
+          "SELECT *",
+          "FROM importaciones",
+          "WHERE tipo = ?",
+          "ORDER BY datetime(importado_en) DESC, id DESC",
+          "LIMIT ?",
+        ].join(" "),
+      )
+      .all(args.tipo, limit);
+  }
+
+  return db
+    .prepare(
+      [
+        "SELECT *",
+        "FROM importaciones",
+        "ORDER BY datetime(importado_en) DESC, id DESC",
+        "LIMIT ?",
+      ].join(" "),
+    )
+    .all(limit);
+}
+
+function getImportById(id: number) {
+  return db
+    .prepare("SELECT * FROM importaciones WHERE id = ?")
+    .get(id);
+}
+
+function requestImportReversal(
+  id: number,
+  observacion = "",
+) {
+  const current = getImportById(id) as any;
+
+  if (!current) {
+    return {
+      ok: false,
+      message: "La importaciÃƒÂ³n no existe.",
+    };
+  }
+
+  if (current.estado === "REVERTIDA") {
+    return {
+      ok: false,
+      message: "La importaciÃƒÂ³n ya se encuentra revertida.",
+    };
+  }
+
+  if (current.tipo !== "CARTERA") {
+    return {
+      ok: false,
+      code: "REVERSAL_NOT_IMPLEMENTED",
+      message:
+        "La reversiÃƒÂ³n transaccional todavÃƒÂ­a no estÃƒÂ¡ habilitada para este tipo de importaciÃƒÂ³n.",
+    };
+  }
+
+  const later = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM importaciones
+    WHERE tipo = 'CARTERA'
+      AND estado NOT IN ('REVERTIDA', 'ERROR')
+      AND id > ?
+  `).get(id) as { total: number };
+
+  if (Number(later.total) > 0) {
+    return {
+      ok: false,
+      code: "LATER_IMPORTS_EXIST",
+      message:
+        "No se puede revertir esta importaciÃƒÂ³n porque existen importaciones de cartera posteriores activas. Revierte primero la mÃƒÂ¡s reciente.",
+    };
+  }
+
+  const snapshotRow = db.prepare(`
+    SELECT payload_json
+    FROM importacion_snapshots
+    WHERE importacion_id = ?
+  `).get(id) as { payload_json?: string } | undefined;
+
+  if (!snapshotRow?.payload_json) {
+    return {
+      ok: false,
+      code: "SNAPSHOT_NOT_FOUND",
+      message:
+        "La importaciÃƒÂ³n no tiene un snapshot reversible asociado.",
+    };
+  }
+
+  const snapshot = JSON.parse(
+    snapshotRow.payload_json,
+  ) as PortfolioSnapshot;
+
+  const tx = db.transaction(() => {
+    // PACK 038: los eventos/saldos del corte revertido pertenecen a esta
+    // importaciÃƒÂ³n y deben retirarse junto con la proyecciÃƒÂ³n restaurada.
+    db.prepare("DELETE FROM documento_eventos WHERE importacion_id = ?").run(id);
+    db.prepare("DELETE FROM documento_saldos WHERE importacion_id = ?").run(id);
+
+    restorePortfolioSnapshot(snapshot);
+
+    db.prepare(`
+      UPDATE importaciones
+      SET
+        estado = 'REVERTIDA',
+        revertido_en = datetime('now', 'localtime'),
+        observacion = CASE
+          WHEN TRIM(COALESCE(observacion, '')) = '' THEN ?
+          ELSE observacion || ' | ' || ?
+        END
+      WHERE id = ?
+    `).run(
+      observacion || "ImportaciÃƒÂ³n revertida",
+      observacion || "ImportaciÃƒÂ³n revertida",
+      id,
+    );
+  });
+
+  tx();
+
+  return {
+    ok: true,
+    message:
+      "ImportaciÃƒÂ³n de cartera revertida correctamente. Se restauraron documentos, movimientos inferidos y alertas al estado previo.",
+  };
+}
+ipcMain.handle(
+  "importHistoryList",
+  (
+    _event,
+    args?: {
+      tipo?: ImportType;
+      limit?: number;
+    },
+  ) => {
+    try {
+      return {
+        ok: true,
+        rows: listImportHistory(args),
+      };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        rows: [],
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo consultar el historial.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "importHistoryGet",
+  (_event, id: number) => {
+    try {
+      const row = getImportById(Number(id));
+
+      return row
+        ? { ok: true, row }
+        : {
+            ok: false,
+            message: "La importaciÃƒÂ³n no existe.",
+          };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo consultar la importaciÃƒÂ³n.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "importHistoryRevert",
+  (
+    _event,
+    args: {
+      id: number;
+      observacion?: string;
+    },
+  ) => {
+    try {
+      return requestImportReversal(
+        Number(args?.id),
+        args?.observacion ?? "",
+      );
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "No se pudo revertir la importaciÃƒÂ³n.",
+      };
+    }
+  },
+);
+
+// -----------------------------
+// Electron lifecycle
+// -----------------------------
+app.whenReady().then(async () => {
+  // Inicializar DB cuando la app estÃƒÂ© lista
+  const dbInstance = openDb();
+  db = dbInstance.db;
+
+  // Registrar conteo de actualizaciones por version
+  const updateMeta = trackUpdateInstall();
+  logInstallationEvent('APP_START', { updateCount: updateMeta.updateCount, version: app.getVersion() });
+
+  // MIGRACIÃƒâ€œN AUTOMÃƒÂTICA: Asegurar que existe la columna 'tema'
+  try {
+    const cols = db.prepare("PRAGMA table_info(empresa)").all();
+    if (!cols.find((c: any) => c.name === 'tema')) {
+      db.prepare("ALTER TABLE empresa ADD COLUMN tema TEXT DEFAULT 'claro'").run();
+    }
+  } catch (e) { console.error("Error verificando columna tema:", e); }
+
+  // INICIAR SERVIDOR WEB
+  startWebServer();
+
+  await createWindow();
+
+  // ngrok deshabilitado (requiere cuenta verificada con authtoken)
+  // Para acceso remoto, usa la IP local mostrada en la consola
+  console.log("Ã¢â€žÂ¹Ã¯Â¸Â  ngrok deshabilitado. Usa la IP local para acceso remoto en tu red WiFi.");
+
+  app.on("activate", async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      await createWindow();
+    }
+  });
+});
+
+app.on("window-all-closed", () => {
+  closeDb();
+  if (process.platform !== "darwin") {
+    // Limpiar procesos antes de cerrar
+    cleanupProcesses();
+    app.quit();
+  }
+});
+
+// Manejador para antes de cerrar la aplicaciÃƒÂ³n (en Windows)
+app.on("before-quit", () => {
+  cleanupProcesses();
+});
+
+// FunciÃƒÂ³n para limpiar todos los procesos secundarios
+function cleanupProcesses() {
+  try {
+    console.log("Ã°Å¸Â§Â¹ Iniciando limpieza de procesos...");
+    
+    // Cerrar ngrok listener de forma segura
+    if (ngrokListener && typeof ngrokListener.close === 'function') {
+      try {
+        ngrokListener.close();
+        console.log("Ã¢Å“â€¦ Listener de ngrok cerrado");
+      } catch (e) {
+        console.warn("Ã¢Å¡ Ã¯Â¸Â Error al cerrar listener de ngrok:", e);
+      }
+      ngrokListener = null;
+    }
+    
+    // Cerrar proceso de cloudflare si existe
+    if (cloudflaredProcess) {
+      try {
+        if (os.platform() === 'win32') {
+          spawn("taskkill", ["/pid", cloudflaredProcess.pid, "/f", "/t"]);
+        } else {
+          cloudflaredProcess.kill('SIGTERM');
+        }
+        console.log("Ã¢Å“â€¦ Proceso de Cloudflare finalizado");
+      } catch (e) {
+        console.warn("Ã¢Å¡ Ã¯Â¸Â No se pudo matar el proceso de Cloudflare:", e);
+      }
+      cloudflaredProcess = null;
+    }
+    
+    console.log("Ã¢Å“Â¨ Limpieza completada con ÃƒÂ©xito");
+  } catch (e) {
+    console.error("Ã¢ÂÅ’ Error crÃƒÂ­tico en limpieza de procesos:", e);
+  }
+}
+
+// -----------------------------
+// IPC
+// -----------------------------
+ipcMain.handle("ping", async () => ({ ok: true }));
+ipcMain.handle("getDbPath", async () => getDbFilePath());
+
+// Obtener el token de la aplicaciÃƒÂ³n desktop
+ipcMain.handle("getDesktopToken", async () => DESKTOP_TOKEN);
+
+// Verificar si tiene permisos de escritura (siempre true en desktop)
+ipcMain.handle("hasWritePermissions", async () => true);
+
+ipcMain.handle("statsObtener", async () => {
+  return computeStats();
+});
+
+ipcMain.handle(
+  "dashboardExecutiveStats",
+  async (_evt, filters) => {
+    return computeDashboardExecutiveStats(
+      db,
+      new Date(),
+      filters || {},
+    );
+  },
+);
+
+ipcMain.handle("filtrosListar", async () => {
+  return listFiltros();
+});
+
+ipcMain.handle("topClientes", async (_evt, limit?: number) => {
+  return topClientes(limit ?? 10);
+});
+
+ipcMain.handle("documentosListar", async (_evt, args: ListarArgs) => {
+  try {
+    const rows = listarDocumentos(args || {});
+    return { ok: true, rows };
+  } catch (e: any) {
+    return { ok: false, message: e?.message || String(e), rows: [] };
+  }
+});
+
+ipcMain.handle("generarPDF", async (_evt, filename) => {
+  if (!mainWindow) return { ok: false, message: "Ventana no encontrada" };
+  try {
+    // Genera el PDF usando los estilos CSS de @media print
+    const pdfData = await mainWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: "A4",
+      margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 } // MÃƒÂ¡rgenes en pulgadas aprox
+    });
+    
+    const downloadPath = app.getPath("downloads");
+    const safeName = (filename || "documento").replace(/[^a-z0-9]/gi, '_');
+    const fullPath = join(downloadPath, `${safeName}.pdf`);
+    
+    fs.writeFileSync(fullPath, pdfData);
+    
+    // Abre la carpeta y selecciona el archivo para facilitar el adjuntado
+    shell.showItemInFolder(fullPath);
+    
+    return { ok: true, path: fullPath };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("actualizarDiasCredito", async (_evt, { id, dias }) => {
+  try {
+    // SQLite permite sumar dÃƒÂ­as directamente a una fecha: date(fecha, '+X days')
+    const stmt = db.prepare("UPDATE documentos SET fecha_vencimiento = date(fecha_emision, '+' || @dias || ' days') WHERE id = @id");
+    stmt.run({ id, dias });
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("empresaObtener", async () => {
+  return getEmpresa();
+});
+
+ipcMain.handle("empresaGuardar", async (_evt, data) => {
+  // Obtenemos datos actuales para asegurar que no falten campos al hacer merge
+  const current = db.prepare("SELECT * FROM empresa WHERE id = 1").get();
+  const finalData = { ...current, ...data };
+
+  const stmt = db.prepare(`
+    UPDATE empresa 
+    SET nombre = @nombre, direccion = @direccion, telefono = @telefono, 
+        email = @email, ruc = @ruc, administrador = @administrador, 
+        iva_percent = @iva_percent,
+        meta_mensual = @meta_mensual,
+        tema = @tema
+    WHERE id = 1
+  `);
+  stmt.run(finalData);
+  return { ok: true };
+});
+
+ipcMain.handle("exportarBackup", async () => {
+  try {
+    const dbPath = getDbFilePath();
+    const { filePath } = await dialog.showSaveDialog({
+      title: "Guardar Respaldo de Base de Datos",
+      defaultPath: `cartera-backup-${new Date().toISOString().split('T')[0]}.db`,
+      filters: [{ name: "SQLite Database", extensions: ["db"] }]
+    });
+
+    if (filePath) {
+      fs.copyFileSync(dbPath, filePath);
+      return { ok: true, path: filePath };
+    }
+    return { ok: false, message: "Cancelado por el usuario" };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("cambiarLogo", async () => {
+  if (!mainWindow) return { ok: false, message: "Ventana no encontrada" };
+  
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Seleccionar Logotipo",
+      properties: ["openFile"],
+      filters: [
+        { name: "ImÃƒÂ¡genes", extensions: ["png", "jpg", "jpeg", "svg", "webp"] },
+      ],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { ok: false, message: "Cancelado" };
+    }
+
+    const filePath = result.filePaths[0];
+    const imageBuffer = fs.readFileSync(filePath);
+    const ext = extname(filePath).toLowerCase();
+    const mimeType = ext === '.svg' ? 'svg+xml' : (ext === '.jpg' || ext === '.jpeg') ? 'jpeg' : ext.slice(1);
+    const base64Image = `data:image/${mimeType};base64,${imageBuffer.toString("base64")}`;
+
+    db.prepare("UPDATE empresa SET logo = @logo WHERE id = 1").run({ logo: base64Image });
+    return { ok: true, logo: base64Image };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("reiniciarEstructuraExcel", async () => {
+  try {
+    db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
+    return { ok: true, message: "Estructura de Excel reiniciada. La prÃƒÂ³xima importaciÃƒÂ³n definirÃƒÂ¡ una nueva estructura." };
+  } catch (e: any) {
+    return { ok: false, message: e.message };
+  }
+});
+
+
+ipcMain.handle("limpiarBaseDatos", async () => {
+  try {
+    const tx = db.transaction(() => {
+      // Ordenado de tablas dependientes a tablas padre. Si una tabla aun no
+      // existe en una instalacion antigua, simplemente se omite.
+      const tables = [
+        "documento_eventos",
+        "documento_saldos",
+        "importacion_snapshots",
+        "documentos_anulados_log",
+        "gestiones",
+        "disputas",
+        "cuentas_aplicar",
+        "conciliaciones_cobros",
+        "abonos",
+        "campana_clientes",
+        "campanas",
+        "documentos",
+        "clientes",
+        "importaciones",
+      ];
+
+      const exists = db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1"
+      );
+
+      for (const table of tables) {
+        if (exists.get(table)) db.exec(`DELETE FROM ${table}`);
+      }
+
+      db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
+    });
+    tx();
+
+    db.pragma("optimize");
+    db.exec("VACUUM");
+
+    return {
+      ok: true,
+      message: `Base de pruebas completamente limpia: ${getDbFilePath()}`,
+    };
+  } catch (e: any) {
+    console.error("Error limpiando BD:", e);
+    return { ok: false, message: e.message };
+  }
+});
+
+ipcMain.handle("clientesAnalisis", async () => {
+  return getAnalisisRiesgo();
+});
+
+ipcMain.handle("clienteObtenerInfo", (_evt, codigoCliente) => {
+  return getClienteInfo(codigoCliente);
+});
+
+ipcMain.handle("clienteGuardarInfo", (_evt, data) => {
+  const exists = db.prepare("SELECT 1 FROM clientes WHERE cliente = ?").get(data.cliente);
+  if (exists) {
+    db.prepare("UPDATE clientes SET telefono=@telefono, email=@email, direccion=@direccion, contacto=@contacto WHERE cliente=@cliente").run(data);
+  } else {
+    db.prepare("INSERT INTO clientes (cliente, razon_social, vendedor, telefono, email, direccion, contacto) VALUES (@cliente, @razon_social, @vendedor, @telefono, @email, @direccion, @contacto)").run(data);
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("gestionGuardar", (_evt, data) => {
+  db.prepare(`
+    INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario, motivo, fecha, creado_en) 
+    VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario, @motivo, datetime('now', 'localtime'), datetime('now', 'localtime'))
+  `).run({
+    ...data,
+    usuario: data.usuario || 'sistema',
+    motivo: data.motivo || null
+  });
+  return { ok: true };
+});
+
+ipcMain.handle("gestionesListar", (_evt, cliente) => {
+  return listGestiones(cliente);
+});
+
+ipcMain.handle("gestionEditar", (_evt, { id, ...data }) => {
+  // AÃƒÂ±adir actualizado_en y usuario si viene
+  return updateGestion(id, { ...data, actualizado_en: new Date().toISOString(), usuario: data.usuario || 'sistema' });
+});
+
+ipcMain.handle("gestionEliminar", (_evt, id) => {
+  return deleteGestion(id);
+});
+
+ipcMain.handle("gestionCumplir", (_evt, id) => {
+  return markGestionFulfilled(id);
+});
+
+ipcMain.handle("gestionesReporte", (_evt, args) => {
+  return getGestionesReporte(args);
+});
+
+ipcMain.handle("getNetworkInfo", async () => {
+  return { ip: getNetworkIp(), port: 3000 };
+});
+
+ipcMain.handle("campanasListar", async () => {
+  const data = db.prepare(`
+    SELECT id, nombre, descripcion, fecha_inicio, fecha_fin, responsable, creado_en
+    FROM campanas
+    ORDER BY creado_en DESC
+  `).all();
+  return { ok: true, rows: data };
+});
+
+ipcMain.handle("campanasGuardar", (_evt, data) => {
+  if (data.id) {
+    db.prepare(`
+      UPDATE campanas
+      SET nombre = @nombre, descripcion = @descripcion, fecha_inicio = @fecha_inicio, fecha_fin = @fecha_fin, responsable = @responsable
+      WHERE id = @id
+    `).run(data);
+  } else {
+    db.prepare(`
+      INSERT INTO campanas (nombre, descripcion, fecha_inicio, fecha_fin, responsable)
+      VALUES (@nombre, @descripcion, @fecha_inicio, @fecha_fin, @responsable)
+    `).run(data);
+  }
+  return { ok: true };
+});
+
+ipcMain.handle("motivosImpago", async () => {
+  const data = db.prepare(`
+    SELECT g.motivo, COUNT(*) as count, SUM(COALESCE(d.total - d.cobros, 0)) as total
+    FROM gestiones g
+    LEFT JOIN documentos d ON g.cliente = d.cliente
+    WHERE g.motivo IS NOT NULL AND g.motivo != ''
+    GROUP BY g.motivo
+    ORDER BY count DESC
+  `).all();
+  
+  return data.map((row: any) => ({
+    label: row.motivo,
+    count: row.count,
+    total: row.total || 0
+  }));
+});
+
+ipcMain.handle("productividadGestor", async () => {
+  const data = db.prepare(`
+    SELECT 
+      g.usuario,
+      COUNT(*) as total_gestiones,
+      SUM(CASE WHEN g.resultado LIKE '%Promesa%' THEN 1 ELSE 0 END) as promesas,
+      SUM(CASE WHEN g.resultado LIKE '%Pagado%' OR g.resultado LIKE '%Abonado%' THEN 1 ELSE 0 END) as pagos,
+      ROUND(100.0 * SUM(CASE WHEN g.resultado LIKE '%Promesa%' THEN 1 ELSE 0 END) / COUNT(*), 1) as tasa_promesa,
+      ROUND(SUM(COALESCE(d.total - d.cobros, 0)), 2) as saldo_recuperable
+    FROM gestiones g
+    LEFT JOIN documentos d ON g.cliente = d.cliente
+    WHERE g.usuario IS NOT NULL AND g.usuario != ''
+    GROUP BY g.usuario
+    ORDER BY total_gestiones DESC
+  `).all();
+  
+  return data;
+});
+
+ipcMain.handle("alertasIncumplimiento", async () => {
+  const data = db.prepare(`
+    SELECT 
+      d.cliente,
+      d.documento,
+      d.total as monto,
+      d.fecha_vencimiento,
+      CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) as dias_vencidos,
+      CASE 
+        WHEN CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) > 120 THEN 'CrÃƒÂ­tico'
+        WHEN CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) > 90 THEN 'Alto'
+        WHEN CAST((julianday('now') - julianday(d.fecha_vencimiento)) AS INTEGER) > 30 THEN 'Medio'
+        ELSE 'Bajo'
+      END as severidad
+    FROM documentos d
+    WHERE d.fecha_vencimiento < date('now') AND (d.total - d.cobros) > 0
+    ORDER BY dias_vencidos DESC
+    LIMIT 50
+  `).all();
+
+  return data.map((row: any) => ({
+    cliente: row.cliente,
+    documento: row.documento,
+    monto: row.monto || 0,
+    diasVencidos: row.dias_vencidos || 0,
+    severidad: row.severidad
+  }));
+});
+
+ipcMain.handle("pronosticoFlujoCaja", async () => {
+  const periodos = [];
+  for (let i = 1; i <= 3; i++) {
+    const dias = i * 15;
+    const fecha_hasta = new Date();
+    fecha_hasta.setDate(fecha_hasta.getDate() + dias);
+    
+    const promesas = db.prepare(`
+      SELECT SUM(COALESCE(monto_promesa, 0)) as total
+      FROM gestiones
+      WHERE resultado LIKE '%Promesa%' 
+        AND fecha_promesa >= date('now')
+        AND fecha_promesa <= date(?)
+        AND monto_promesa > 0
+    `).get(fecha_hasta.toISOString().split('T')[0]);
+
+    periodos.push({
+      periodo: `${dias} dÃƒÂ­as`,
+      fechaHasta: fecha_hasta.toISOString().split('T')[0],
+      flujoEsperado: promesas?.total || 0,
+      confianza: i === 1 ? 95 : i === 2 ? 75 : 50
+    });
+  }
+  return periodos;
+});
+
+ipcMain.handle("tendenciasHistoricas", async () => {
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const fecha = new Date();
+    fecha.setMonth(fecha.getMonth() - i);
+    const yearMes = fecha.getFullYear().toString() + '-' + String(fecha.getMonth() + 1).padStart(2, '0');
+    
+    const stats = db.prepare(`
+      SELECT 
+        COUNT(*) as documentos,
+        SUM(COALESCE(total, 0)) as emision,
+        SUM(CASE WHEN fecha_vencimiento < date('now') AND (total - cobros) > 0 THEN 1 ELSE 0 END) as vencidos,
+        SUM(COALESCE(cobros, 0)) as cobrado
+      FROM documentos
+      WHERE fecha_emision LIKE ?
+    `).get(yearMes + '%');
+
+    meses.push({
+      mes: yearMes,
+      documentos: stats?.documentos || 0,
+      emision: stats?.emision || 0,
+      cobrado: stats?.cobrado || 0,
+      vencidos: stats?.vencidos || 0
+    });
+  }
+  return meses;
+});
+
+ipcMain.handle("disputasListar", async () => {
+  const data = db.prepare(`
+    SELECT id, documento, cliente, monto, motivo, estado, 
+           fecha_creacion, fecha_resolucion, observacion
+    FROM disputas
+    ORDER BY fecha_creacion DESC
+  `).all();
+  return data;
+});
+
+ipcMain.handle("disputaCrear", (_evt, data) => {
+  db.prepare(`
+    INSERT INTO disputas (documento, cliente, monto, motivo, observacion, usuario_creador)
+    VALUES (@documento, @cliente, @monto, @motivo, @observacion, @usuario)
+  `).run({
+    ...data,
+    usuario: data.usuario || 'sistema'
+  });
+  return { ok: true };
+});
+
+ipcMain.handle("disputaActualizar", (_evt, data) => {
+  db.prepare(`
+    UPDATE disputas 
+    SET estado = @estado, fecha_resolucion = @fecha_resolucion, observacion = @observacion
+    WHERE id = @id
+  `).run(data);
+  return { ok: true };
+});
+
+ipcMain.handle("cuentasAplicarListar", async () => {
+  const data = db.prepare(`
+    SELECT id, documento, cliente, monto, tipo, estado, 
+           fecha_recepcion, fecha_aplicacion, documento_aplicado, observacion
+    FROM cuentas_aplicar
+    ORDER BY fecha_recepcion DESC
+  `).all();
+  return data;
+});
+
+ipcMain.handle("cuentaAplicarCrear", (_evt, data) => {
+  db.prepare(`
+    INSERT INTO cuentas_aplicar (documento, cliente, monto, tipo, observacion, usuario_creador)
+    VALUES (@documento, @cliente, @monto, @tipo, @observacion, @usuario)
+  `).run({
+    ...data,
+    usuario: data.usuario || 'sistema'
+  });
+  return { ok: true };
+});
+
+ipcMain.handle("abonosListar", async () => {
+  const data = db.prepare(`
+    SELECT 
+      a.id, 
+      a.documento, 
+      COALESCE(d.cliente, 'N/A') as cliente,
+      COALESCE(d.razon_social, 'N/A') as razon_social,
+      a.total_anterior, 
+      a.total_nuevo, 
+      a.fecha, 
+      a.observacion
+    FROM abonos a
+    LEFT JOIN documentos d ON a.documento = d.documento
+    ORDER BY a.fecha DESC
+  `).all();
+  return data;
+});
+
+ipcMain.handle("clientesListar", async () => {
+  return clientesListar();
+});
+
+ipcMain.handle(
+  "collectionReconciliationGet",
+  (_evt, payload: { year: number; month: number }) => {
+    try {
+      const row = getCollectionPeriodReconciliation(
+        db,
+        Number(payload?.year),
+        Number(payload?.month),
+      );
+
+      return { ok: true, row };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        row: null,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Error consultando la conciliaciÃƒÂ³n.",
+      };
+    }
+  },
+);
+
+ipcMain.handle(
+  "collectionReconciliationSave",
+  (
+    _evt,
+    payload: {
+      year: number;
+      month: number;
+      officialValue: number;
+      observation?: string;
+      user?: string;
+    },
+  ) => {
+    try {
+      const year = Number(payload?.year);
+      const month = Number(payload?.month);
+
+      const stats = computeDashboardExecutiveStats(
+        db,
+        new Date(),
+        { year, month },
+      );
+
+      const row = saveCollectionPeriodReconciliation(
+        db,
+        {
+          year,
+          month,
+          officialValue: Number(payload?.officialValue),
+          observation: payload?.observation,
+          user: payload?.user,
+        },
+        {
+          detectedValue: stats.cobrosMes.totalDetectado,
+          detectedMovements: stats.cobrosMes.movimientosDetectados,
+        },
+      );
+
+      return { ok: true, row };
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        row: null,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Error guardando la conciliaciÃƒÂ³n.",
+      };
+    }
+  },
+);
+
+ipcMain.handle("cuentaAplicarActualizar", (_evt, data) => {
+  db.prepare(`
+    UPDATE cuentas_aplicar 
+    SET estado = @estado, fecha_aplicacion = @fecha_aplicacion, documento_aplicado = @documento_aplicado, observacion = @observacion
+    WHERE id = @id
+  `).run(data);
+  return { ok: true };
+});
+
+ipcMain.handle("importarContifico", async () => {
+  const selection = await dialog.showOpenDialog({
+    title: "Seleccionar cartera de Contifico",
+    properties: ["openFile"],
+    filters: [
+      {
+        name: "Archivos de Excel",
+        extensions: ["xlsx", "xls"],
+      },
+    ],
+  });
+
+  if (
+    selection.canceled ||
+    selection.filePaths.length === 0
+  ) {
+    return {
+      ok: false,
+      message: "Importacion cancelada",
+    };
+  }
+
+  const filePath = selection.filePaths[0];
+  const fileHash = hashImportFile(filePath);
+
+  const duplicate = db.prepare(`
+    SELECT
+      id,
+      archivo_nombre,
+      importado_en
+    FROM importaciones
+    WHERE tipo = 'CARTERA'
+      AND archivo_hash = ?
+      AND estado IN (
+        'COMPLETADA',
+        'COMPLETADA_ADVERTENCIAS'
+      )
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(fileHash) as
+    | {
+        id: number;
+        archivo_nombre: string;
+        importado_en: string;
+      }
+    | undefined;
+
+  if (duplicate) {
+    return {
+      ok: false,
+      duplicateImport: true,
+      message:
+        "Este archivo de cartera ya fue importado anteriormente. " +
+        "No se ejecutÃƒÂ³ nuevamente para evitar duplicar movimientos inferidos.",
+      importacionId: duplicate.id,
+    };
+  }
+
+  let importacionId = 0;
+
+  try {
+    importacionId = startPortfolioImport(
+      filePath,
+      fileHash,
+    );
+
+    const result = importContificoExcel(
+      filePath,
+      db,
+      importacionId,
+    ) as Record<string, unknown>;
+
+    if (!result?.ok) {
+      const message = String(
+        result?.message ||
+          "La importaciÃƒÂ³n de cartera no pudo completarse.",
+      );
+
+      failPortfolioImport(
+        importacionId,
+        message,
+      );
+
+      return {
+        ...result,
+        importacionId,
+      };
+    }
+
+    reconcileCollections(db);
+
+    finishPortfolioImport(
+      importacionId,
+      result,
+    );
+
+    return {
+      ...result,
+      importacionId,
+    };
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Error desconocido durante la importacion";
+
+    if (importacionId > 0) {
+      failPortfolioImport(
+        importacionId,
+        message,
+      );
+    }
+
+    console.error(
+      "Error importando cartera de Contifico:",
+      error,
+    );
+
+    return {
+      ok: false,
+      importacionId:
+        importacionId > 0
+          ? importacionId
+          : undefined,
+      message,
+    };
+  }
+});
+
+ipcMain.handle("getGitRemoteUrl", async () => {
+  // Retornar URL del servidor web local para compartir
+  const networkIp = getNetworkIp();
+  const port = 3000; // Puerto del servidor web
+  return { ok: true, url: `http://${networkIp}:${port}` };
+});
+
+ipcMain.handle("getUpdateInfo", async () => {
+  return trackUpdateInstall();
+});
+
+// Handler para obtener la URL remota de Cloudflare
+ipcMain.handle("getCloudflareUrl", async () => {
+  return { ok: true, url: CLOUDFLARE_TUNNEL_URL };
+});
+
+// Handler para verificar el estado del tÃƒÂºnel de Cloudflare
+ipcMain.handle("checkCloudflaredStatus", async () => {
+  try {
+    const isHealthy = await checkCloudflaredTunnel();
+    return { ok: true, status: isHealthy ? "connected" : "disconnected" };
+  } catch (error) {
+    return { ok: false, status: "error" };
+  }
+});
+
+// Handler para reiniciar manualmente el tÃƒÂºnel (si falla)
+ipcMain.handle("restartCloudflared", async () => {
+  try {
+    const success = await restartCloudflaredTunnel();
+    return { ok: success, message: success ? "TÃƒÂºnel reiniciado" : "Error reiniciando tÃƒÂºnel" };
+  } catch (error: any) {
+    return { ok: false, message: error.message };
+  }
+});
+
+// Handler para obtener la URL remota de ngrok (dinÃƒÂ¡mica)
+ipcMain.handle("getRemoteUrl", async () => {
+  if (!ngrokUrl) {
+    ngrokUrl = await startNgrok();
+  }
+  return { ok: !!ngrokUrl, url: ngrokUrl };
+});
+
+// Handler para verificar y actualizar ngrok si es necesario
+ipcMain.handle("checkRemoteUrl", async () => {
+  const url = await checkAndRefreshNgrok();
+  return { ok: !!url, url };
+});
+
+
+
+
+ipcMain.handle("previewCancelledDocuments", async () => {
+  const selection = await dialog.showOpenDialog({
+    title: "Seleccionar archivo Documentos Anulados",
+    properties: ["openFile"],
+    filters: [{ name: "Archivos de Excel", extensions: ["xlsx", "xls"] }],
+  });
+
+  if (selection.canceled || selection.filePaths.length === 0) {
+    return { ok: false, message: "SelecciÃƒÂ³n cancelada" };
+  }
+
+  try {
+    return previewCancelledDocumentsExcel(selection.filePaths[0], db);
+  } catch (error: unknown) {
+    console.error("Error analizando documentos anulados:", error);
+
+    return {
+      ok: false,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Error desconocido durante el anÃƒÂ¡lisis",
+    };
+  }
+});
+
+ipcMain.handle(
+  "confirmCancelledDocumentsImport",
+  (_event, filePath: string) => {
+    try {
+      return importCancelledDocumentsExcel(filePath, db);
+    } catch (error: unknown) {
+      console.error("Error importando documentos anulados:", error);
+
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Error desconocido durante la importaciÃƒÂ³n",
+      };
+    }
+  },
+);
+
+ipcMain.handle("cancelledDocumentsReversalSummary", () => {
+  const row = db.prepare(`
+    SELECT
+      COUNT(*) AS reversedPayments,
+      ROUND(COALESCE(SUM(total_anterior - total_nuevo), 0), 2) AS reversedAmount
+    FROM abonos
+    WHERE COALESCE(reversado, 0) = 1
+      AND motivo_reversion = 'ANULACION_DOCUMENTO'
+  `).get() as {
+    reversedPayments: number;
+    reversedAmount: number;
+  };
+
+  return {
+    reversedPayments: Number(row?.reversedPayments || 0),
+    reversedAmount: Number(row?.reversedAmount || 0),
+  };
+});
+
+ipcMain.handle("cancelledDocumentsList", () => {
+  const rows = db.prepare(`
+    SELECT
+      id,
+      documento,
+      cliente,
+      fecha_anulacion,
+      motivo,
+      archivo_origen,
+      detectado_en,
+      resultado,
+      tipo_documento,
+      estado_origen,
+      numero_autorizacion
+    FROM documentos_anulados_log
+    ORDER BY datetime(detectado_en) DESC, id DESC
+  `).all();
+
+  return { ok: true, rows };
+});
+
+ipcMain.handle("creditPoliciesList", () => {
+  const rows = db.prepare(`
+    WITH credit_clients AS (
+      SELECT DISTINCT TRIM(cliente) AS cliente
+      FROM documentos
+      WHERE is_subtotal = 0
+        AND TRIM(COALESCE(cliente, '')) <> ''
+
+      UNION
+
+      SELECT DISTINCT TRIM(cliente) AS cliente
+      FROM alertas_credito
+      WHERE TRIM(COALESCE(cliente, '')) <> ''
+
+      UNION
+
+      SELECT DISTINCT TRIM(cliente) AS cliente
+      FROM clientes
+      WHERE TRIM(COALESCE(cliente, '')) <> ''
+    )
+    SELECT
+      cc.cliente,
+      COALESCE(c.tipo_credito, 'CREDITO') AS tipo_credito,
+      c.dias_credito,
+      COALESCE(c.credito_configurado, 0) AS credito_configurado,
+      SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) AS documentos_pendientes,
+      MAX(a.estado) AS alerta_estado
+    FROM credit_clients cc
+    LEFT JOIN clientes c
+      ON TRIM(c.cliente) = cc.cliente
+    LEFT JOIN documentos d
+      ON TRIM(d.cliente) = cc.cliente
+      AND d.is_subtotal = 0
+    LEFT JOIN alertas_credito a
+      ON TRIM(a.cliente) = cc.cliente
+    GROUP BY
+      cc.cliente,
+      c.tipo_credito,
+      c.dias_credito,
+      c.credito_configurado
+    HAVING
+      COALESCE(c.credito_configurado, 0) = 1
+      OR SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0
+    ORDER BY
+      CASE
+        WHEN SUM(CASE WHEN d.credito_pendiente = 1 THEN 1 ELSE 0 END) > 0
+          THEN 0
+        ELSE 1
+      END,
+      cc.cliente COLLATE NOCASE
+  `).all();
+
+  return { ok: true, rows };
+});
+
+ipcMain.handle("creditPolicyPreview", (_event, cliente: string) => {
+  const normalized = String(cliente ?? "").trim();
+  if (!normalized) return { ok: false, documentosPendientes: 0 };
+
+  const row = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM documentos
+    WHERE cliente = ?
+      AND is_subtotal = 0
+      AND credito_pendiente = 1
+  `).get(normalized) as { total: number };
+
+  return { ok: true, documentosPendientes: Number(row?.total ?? 0) };
+});
+
+ipcMain.handle("creditPolicySave", (_event, payload: {
+  cliente: string;
+  tipoCredito: "CONTADO" | "CREDITO";
+  diasCredito: number;
+  recalcularPendientes: boolean;
+}) => {
+  const cliente = String(payload?.cliente ?? "").trim();
+  const diasCredito = Number(payload?.diasCredito);
+  const recalcular = payload?.recalcularPendientes === true;
+
+  if (!cliente) {
+    return { ok: false, message: "El cliente es obligatorio.", documentosActualizados: 0 };
+  }
+  if (!Number.isInteger(diasCredito) || diasCredito < 0 || diasCredito > 365) {
+    return { ok: false, message: "Los dÃƒÂ­as deben estar entre 0 y 365.", documentosActualizados: 0 };
+  }
+
+  const tipoCredito = diasCredito === 0 ? "CONTADO" : "CREDITO";
+
+  const save = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO clientes (
+        cliente,
+        razon_social,
+        tipo_credito,
+        dias_credito,
+        credito_configurado,
+        credito_actualizado_en
+      )
+      VALUES (
+        ?,
+        ?,
+        ?,
+        ?,
+        1,
+        datetime('now', 'localtime')
+      )
+      ON CONFLICT(cliente) DO UPDATE SET
+        tipo_credito = excluded.tipo_credito,
+        dias_credito = excluded.dias_credito,
+        credito_configurado = 1,
+        credito_actualizado_en = excluded.credito_actualizado_en
+    `).run(
+      cliente,
+      cliente,
+      tipoCredito,
+      diasCredito,
+    );
+
+    let documentosActualizados = 0;
+
+    if (recalcular) {
+      const updateDocs = db.prepare(`
+        UPDATE documentos
+        SET fecha_vencimiento = date(fecha_emision, '+' || ? || ' day'),
+            dias_credito_aplicados = ?,
+            credito_fuente = 'POLITICA_CLIENTE',
+            credito_pendiente = 0
+        WHERE cliente = ?
+          AND is_subtotal = 0
+          AND credito_pendiente = 1
+          AND TRIM(COALESCE(fecha_emision, '')) <> ''
+      `).run(diasCredito, diasCredito, cliente);
+
+      documentosActualizados = updateDocs.changes;
+    }
+
+    const pending = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM documentos
+      WHERE cliente = ?
+        AND is_subtotal = 0
+        AND credito_pendiente = 1
+    `).get(cliente) as { total: number };
+
+    if (Number(pending?.total ?? 0) === 0) {
+      db.prepare(`
+        UPDATE alertas_credito
+        SET estado = 'RESUELTA',
+            resuelto_en = datetime('now', 'localtime')
+        WHERE cliente = ?
+      `).run(cliente);
+    } else {
+      db.prepare(`
+        UPDATE alertas_credito
+        SET estado = 'PENDIENTE',
+            resuelto_en = NULL
+        WHERE cliente = ?
+      `).run(cliente);
+    }
+
+    return documentosActualizados;
+  });
+
+  try {
+    const documentosActualizados = save();
+    return {
+      ok: true,
+      message: "PolÃƒÂ­tica guardada correctamente.",
+      documentosActualizados,
+    };
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No se pudo guardar la polÃƒÂ­tica.",
+      documentosActualizados: 0,
+    };
+  }
+});
+
+// Legacy import helpers retained temporarily.
+void _parseExcel;
+void _saveDocumentsToDb;
+
+

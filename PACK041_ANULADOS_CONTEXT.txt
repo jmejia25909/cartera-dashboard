@@ -1,0 +1,954 @@
+﻿=== GIT STATUS ===
+On branch feature/dashboard-professional-rebuild
+Your branch is up to date with 'origin/feature/dashboard-professional-rebuild'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   electron/db.ts
+	modified:   electron/main.ts
+	modified:   src/pages/ConfigPage.tsx
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	DIAGNOSTICO_ENCODING.txt
+	PACK038_CONTEXT.txt
+	PACK038_CONTEXT.zip
+	PACK040_ENCODING_CONTEXT.txt
+	PACK040_ENCODING_CONTEXT.zip
+	PACK041_ANULADOS_CONTEXT.txt
+	SINGLE_QA_DB_CONTEXT.txt
+	SINGLE_QA_DB_CONTEXT.zip
+	diagnostico-931.cjs
+	diagnostico-anulados-consistencia.cjs
+	diagnostico-anulados.cjs
+	diagnostico-base-qa-limpia.cjs
+	diagnostico-base-real.cjs
+	diagnostico-e2e-anulados.cjs
+	diagnostico-estructura-cartera.cjs
+	diagnostico-pack038-idempotencia.cjs
+	diagnostico-pack038.cjs
+
+no changes added to commit (use "git add" and/or "git commit -a")
+
+=== GIT LOG ===
+617b22d feat(reconciliation): add event-driven document state machine
+a5aa3c6 fix(imports): align Contifico importer with current schema
+f8a7d8f fix(imports): read Contifico Excel through fs buffer
+4d81f77 fix(ipc): remove duplicate import history handlers
+8e46666 feat(imports): audit and safely revert portfolio imports
+
+=== importCancelledDocuments.ts ===
+import fs from "node:fs";
+import * as XLSX from "xlsx";
+import type Database from "better-sqlite3";
+import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
+import { insertDocumentEvent } from "./reconciliation/eventRepository";
+
+export type CancelledDocumentPreviewRow = {
+  rowNumber: number;
+  cancellationDate: string;
+  documentType: string;
+  documentNumber: string;
+  normalizedDocumentNumber: string;
+  sourceStatus: string;
+  authorizationNumber: string;
+  matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "YA_ANULADO";
+  customer: string | null;
+  activePayments: number;
+};
+
+export type CancelledDocumentPreviewResult = {
+  ok: boolean;
+  filePath: string;
+  sheetName: string;
+  companyName: string;
+  reportTitle: string;
+  totalRows: number;
+  foundDocuments: number;
+  alreadyCancelledDocuments: number;
+  unmatchedDocuments: number;
+  paymentsToReverse: number;
+  rows: CancelledDocumentPreviewRow[];
+  message?: string;
+};
+
+export type CancelledDocumentImportResult = {
+  ok: boolean;
+  filePath: string;
+  totalRows: number;
+  matchedDocuments: number;
+  alreadyCancelledDocuments: number;
+  cancelledDocuments: number;
+  reversedPayments: number;
+  unmatchedDocuments: number;
+  message?: string;
+};
+
+type DocumentRecord = {
+  id: number | null;
+  documento: string;
+  cliente: string | null;
+  estado_documento: string | null;
+  anulado: number | null;
+  historical: boolean;
+};
+
+type ParsedCancelledReport = {
+  sheetName: string;
+  companyName: string;
+  reportTitle: string;
+  rows: Array<{
+    rowNumber: number;
+    cancellationDate: string;
+    documentType: string;
+    documentNumber: string;
+    normalizedDocumentNumber: string;
+    sourceStatus: string;
+    authorizationNumber: string;
+  }>;
+};
+
+function normalizeHeader(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9#]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toIsoDate(value: unknown): string {
+  if (!value) return "";
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === "number") {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed?.y && parsed?.m && parsed?.d) {
+      return `${String(parsed.y).padStart(4, "0")}-${String(parsed.m).padStart(2, "0")}-${String(parsed.d).padStart(2, "0")}`;
+    }
+  }
+
+  const raw = String(value).trim();
+  const dmy = raw.match(/^([0-3]?\d)[/-]([0-1]?\d)[/-](\d{2}|\d{4})$/);
+
+  if (dmy) {
+    const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+
+    return `${year}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  }
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : "";
+}
+
+function parseCancelledReport(filePath: string): ParsedCancelledReport {
+  const workbook = XLSX.read(fs.readFileSync(filePath), {
+    type: "buffer",
+    cellDates: true,
+    cellNF: false,
+    cellText: false,
+  });
+
+  const sheetName =
+    workbook.SheetNames.find((name) =>
+      normalizeHeader(name).includes("documentosanulados"),
+    ) ?? workbook.SheetNames[0];
+
+  const sheet = workbook.Sheets[sheetName];
+
+  if (!sheet) {
+    throw new Error("No se encontrÃ³ la hoja DocumentosAnulados.");
+  }
+
+  const rawRows = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: "",
+    raw: true,
+  }) as unknown[][];
+
+  const companyName = String(rawRows[0]?.[0] ?? "").trim();
+  const reportTitle = String(rawRows[1]?.[0] ?? "").trim();
+
+  let headerIndex = -1;
+  let cancellationDateIndex = -1;
+  let documentTypeIndex = -1;
+  let documentNumberIndex = -1;
+  let sourceStatusIndex = -1;
+  let authorizationNumberIndex = -1;
+
+  for (let index = 0; index < Math.min(rawRows.length, 30); index += 1) {
+    const headers = (rawRows[index] ?? []).map(normalizeHeader);
+
+    const currentDocumentIndex = headers.findIndex((header) =>
+      ["# documento", "documento", "numero documento"].includes(header),
+    );
+
+    if (currentDocumentIndex < 0) continue;
+
+    headerIndex = index;
+    documentNumberIndex = currentDocumentIndex;
+    cancellationDateIndex = headers.findIndex((header) =>
+      ["fecha de anulacion", "fecha anulacion"].includes(header),
+    );
+    documentTypeIndex = headers.findIndex((header) =>
+      ["tipo de documento", "tipo documento"].includes(header),
+    );
+    sourceStatusIndex = headers.findIndex((header) => header === "estado");
+    authorizationNumberIndex = headers.findIndex((header) =>
+      ["# autorizacion", "autorizacion", "numero autorizacion"].includes(header),
+    );
+    break;
+  }
+
+  if (headerIndex < 0 || documentNumberIndex < 0) {
+    throw new Error(
+      "No se encontrÃ³ la cabecera esperada de Documentos Anulados.",
+    );
+  }
+
+  const parsedRows = rawRows
+    .slice(headerIndex + 1)
+    .map((row, relativeIndex) => {
+      const documentNumber = String(
+        row[documentNumberIndex] ?? "",
+      ).trim();
+
+      return {
+        rowNumber: headerIndex + relativeIndex + 2,
+        cancellationDate:
+          cancellationDateIndex >= 0
+            ? toIsoDate(row[cancellationDateIndex])
+            : "",
+        documentType:
+          documentTypeIndex >= 0
+            ? String(row[documentTypeIndex] ?? "").trim()
+            : "",
+        documentNumber,
+        normalizedDocumentNumber: normalizeDocumentNumber(documentNumber),
+        sourceStatus:
+          sourceStatusIndex >= 0
+            ? String(row[sourceStatusIndex] ?? "").trim()
+            : "",
+        authorizationNumber:
+          authorizationNumberIndex >= 0
+            ? String(row[authorizationNumberIndex] ?? "").trim()
+            : "",
+      };
+    })
+    .filter((row) => row.normalizedDocumentNumber);
+
+  return {
+    sheetName,
+    companyName,
+    reportTitle,
+    rows: parsedRows,
+  };
+}
+
+function loadDocuments(
+  db: Database.Database,
+): Map<string, DocumentRecord> {
+  const documents = db.prepare(`
+    SELECT
+      id,
+      documento,
+      cliente,
+      estado_documento,
+      anulado
+    FROM documentos
+    WHERE is_subtotal = 0
+  `).all() as Array<Omit<DocumentRecord, "historical">>;
+
+  const result = new Map<string, DocumentRecord>();
+
+  for (const document of documents) {
+    const key = normalizeDocumentNumber(document.documento);
+    if (!key) continue;
+    result.set(key, { ...document, historical: false });
+  }
+
+  // Si el documento ya no estÃ¡ en la cartera vigente, conserva su identidad
+  // desde el ledger. Esto permite que Anulados haga override sobre una
+  // desapariciÃ³n/PAGADO_TOTAL provisional.
+  const historicalRows = db.prepare(`
+    SELECT
+      e.documento_normalizado,
+      e.referencia_externa,
+      e.estado_nuevo,
+      e.metadata_json,
+      EXISTS (
+        SELECT 1
+        FROM documento_eventos a
+        WHERE a.documento_normalizado = e.documento_normalizado
+          AND a.tipo_evento = 'ANULACION_CONFIRMADA'
+      ) AS anulado
+    FROM documento_eventos e
+    WHERE e.id IN (
+      SELECT MAX(id)
+      FROM documento_eventos
+      GROUP BY documento_normalizado
+    )
+  `).all() as Array<{
+    documento_normalizado: string;
+    referencia_externa: string | null;
+    estado_nuevo: string | null;
+    metadata_json: string | null;
+    anulado: number;
+  }>;
+
+  for (const row of historicalRows) {
+    if (!row.documento_normalizado || result.has(row.documento_normalizado)) {
+      continue;
+    }
+
+    let cliente: string | null = null;
+    try {
+      const metadata = JSON.parse(row.metadata_json || "{}") as Record<string, unknown>;
+      cliente = metadata.cliente ? String(metadata.cliente) : null;
+    } catch {
+      cliente = null;
+    }
+
+    result.set(row.documento_normalizado, {
+      id: null,
+      documento: row.referencia_externa || row.documento_normalizado,
+      cliente,
+      estado_documento: row.anulado ? "ANULADO" : row.estado_nuevo,
+      anulado: row.anulado ? 1 : 0,
+      historical: true,
+    });
+  }
+
+  return result;
+}
+
+export function previewCancelledDocumentsExcel(
+  filePath: string,
+  db: Database.Database,
+): CancelledDocumentPreviewResult {
+  const report = parseCancelledReport(filePath);
+  const documentsByKey = loadDocuments(db);
+
+  const countActivePayments = db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM abonos
+    WHERE COALESCE(reversado, 0) = 0
+      AND documento_normalizado = ?
+  `);
+
+  let foundDocuments = 0;
+  let alreadyCancelledDocuments = 0;
+  let unmatchedDocuments = 0;
+  let paymentsToReverse = 0;
+
+  const rows: CancelledDocumentPreviewRow[] = report.rows.map((row) => {
+    const document = documentsByKey.get(row.normalizedDocumentNumber);
+    let matchStatus: CancelledDocumentPreviewRow["matchStatus"];
+    let activePayments = 0;
+
+    if (!document) {
+      matchStatus = "NO_ENCONTRADO";
+      unmatchedDocuments += 1;
+    } else if (
+      document.anulado === 1 ||
+      document.estado_documento === "ANULADO"
+    ) {
+      matchStatus = "YA_ANULADO";
+      alreadyCancelledDocuments += 1;
+    } else {
+      matchStatus = "ENCONTRADO";
+      foundDocuments += 1;
+
+      const paymentCount = countActivePayments.get(
+        row.normalizedDocumentNumber,
+      ) as { total: number };
+
+      activePayments = Number(paymentCount.total ?? 0);
+      paymentsToReverse += activePayments;
+    }
+
+    return {
+      ...row,
+      matchStatus,
+      customer: document?.cliente ?? null,
+      activePayments,
+    };
+  });
+
+  return {
+    ok: true,
+    filePath,
+    sheetName: report.sheetName,
+    companyName: report.companyName,
+    reportTitle: report.reportTitle,
+    totalRows: rows.length,
+    foundDocuments,
+    alreadyCancelledDocuments,
+    unmatchedDocuments,
+    paymentsToReverse,
+    rows,
+    message: "Vista previa generada correctamente.",
+  };
+}
+
+export function importCancelledDocumentsExcel(
+  filePath: string,
+  db: Database.Database,
+): CancelledDocumentImportResult {
+  const preview = previewCancelledDocumentsExcel(filePath, db);
+
+  const updateDocument = db.prepare(`
+    UPDATE documentos
+    SET estado_documento = 'ANULADO',
+        anulado = 1,
+        fecha_anulacion = @fecha_anulacion,
+        motivo_anulacion = 'Importado desde Documentos Anulados',
+        fuente_anulacion = 'ARCHIVO_DOCUMENTOS_ANULADOS'
+    WHERE id = @id
+  `);
+
+  const reversePayments = db.prepare(`
+    UPDATE abonos
+    SET estado = 'REVERSADO',
+        reversado = 1,
+        motivo_reversion = 'ANULACION_DOCUMENTO',
+        reversado_en = datetime('now', 'localtime')
+    WHERE COALESCE(reversado, 0) = 0
+      AND documento_normalizado = @documento_normalizado
+  `);
+
+  const insertLog = db.prepare(`
+    INSERT INTO documentos_anulados_log (
+      documento,
+      documento_normalizado,
+      cliente,
+      fecha_anulacion,
+      motivo,
+      archivo_origen,
+      detectado_en,
+      documento_id,
+      resultado,
+      tipo_documento,
+      estado_origen,
+      numero_autorizacion
+    )
+    VALUES (
+      @documento,
+      @documento_normalizado,
+      @cliente,
+      @fecha_anulacion,
+      'Importado desde Documentos Anulados',
+      @archivo_origen,
+      datetime('now', 'localtime'),
+      @documento_id,
+      @resultado,
+      @tipo_documento,
+      @estado_origen,
+      @numero_autorizacion
+    )
+    ON CONFLICT(documento_normalizado, archivo_origen) DO UPDATE SET
+      cliente = excluded.cliente,
+      fecha_anulacion = excluded.fecha_anulacion,
+      detectado_en = excluded.detectado_en,
+      documento_id = excluded.documento_id,
+      resultado = excluded.resultado,
+      tipo_documento = excluded.tipo_documento,
+      estado_origen = excluded.estado_origen,
+      numero_autorizacion = excluded.numero_autorizacion
+  `);
+
+  const documentsByKey = loadDocuments(db);
+
+  let matchedDocuments = 0;
+  let alreadyCancelledDocuments = 0;
+  let cancelledDocuments = 0;
+  let reversedPayments = 0;
+  let unmatchedDocuments = 0;
+
+  const transaction = db.transaction(() => {
+    for (const row of preview.rows) {
+      const document = documentsByKey.get(row.normalizedDocumentNumber);
+      let result = "NO_ENCONTRADO";
+
+      if (!document) {
+        unmatchedDocuments += 1;
+      } else if (
+        document.anulado === 1 ||
+        document.estado_documento === "ANULADO"
+      ) {
+        matchedDocuments += 1;
+        alreadyCancelledDocuments += 1;
+        result = "YA_ANULADO";
+      } else {
+        matchedDocuments += 1;
+
+        if (document.id != null) {
+          cancelledDocuments += updateDocument.run({
+            id: document.id,
+            fecha_anulacion: row.cancellationDate || null,
+          }).changes;
+        } else {
+          // Documento histÃ³rico: no se recrea una fila ficticia en `documentos`.
+          // El override fiscal queda representado por eventos inmutables.
+          cancelledDocuments += 1;
+        }
+
+        reversedPayments += reversePayments.run({
+          documento_normalizado: row.normalizedDocumentNumber,
+        }).changes;
+
+        const previousState = document.estado_documento || "PAGADO_TOTAL";
+        const eventIdentity = [
+          row.normalizedDocumentNumber,
+          row.cancellationDate || "SIN_FECHA",
+          row.authorizationNumber || "SIN_AUTORIZACION",
+        ].join(":");
+
+        insertDocumentEvent(db, {
+          eventKey: `ANULACION_CONFIRMADA:${eventIdentity}`,
+          documentoNormalizado: row.normalizedDocumentNumber,
+          tipoEvento: "ANULACION_CONFIRMADA",
+          fuente: "ANULADOS",
+          importe: 0,
+          estadoAnterior: previousState,
+          estadoNuevo: "ANULADO",
+          provisional: false,
+          referenciaExterna: row.documentNumber,
+          metadata: {
+            cliente: document.cliente,
+            fecha_anulacion: row.cancellationDate || null,
+            numero_autorizacion: row.authorizationNumber || null,
+            tipo_documento: row.documentType || null,
+            historico: document.historical,
+          },
+        });
+
+        if (previousState === "PAGADO_TOTAL") {
+          insertDocumentEvent(db, {
+            eventKey: `ESTADO_RECLASIFICADO:${eventIdentity}`,
+            documentoNormalizado: row.normalizedDocumentNumber,
+            tipoEvento: "ESTADO_RECLASIFICADO",
+            fuente: "ANULADOS",
+            importe: 0,
+            estadoAnterior: "PAGADO_TOTAL",
+            estadoNuevo: "ANULADO",
+            provisional: false,
+            referenciaExterna: row.documentNumber,
+            metadata: {
+              motivo: "Override fiscal por archivo de documentos anulados",
+            },
+          });
+        }
+
+        result = document.historical ? "ANULADO_HISTORICO" : "ANULADO";
+      }
+
+      insertLog.run({
+        documento: row.documentNumber,
+        documento_normalizado: row.normalizedDocumentNumber,
+        cliente: document?.cliente ?? null,
+        fecha_anulacion: row.cancellationDate || null,
+        archivo_origen: filePath,
+        documento_id: document?.id ?? null,
+        resultado: result,
+        tipo_documento: row.documentType || null,
+        estado_origen: row.sourceStatus || null,
+        numero_autorizacion: row.authorizationNumber || null,
+      });
+    }
+  });
+
+  transaction();
+
+  return {
+    ok: true,
+    filePath,
+    totalRows: preview.totalRows,
+    matchedDocuments,
+    alreadyCancelledDocuments,
+    cancelledDocuments,
+    reversedPayments,
+    unmatchedDocuments,
+    message: "ImportaciÃ³n de documentos anulados completada.",
+  };
+}
+
+
+=== MAIN - ANULADOS REFERENCES ===
+
+  electron\main.ts:5:import { computeDashboardExecutiveStats } from "./dashboardExecutive";
+  electron\main.ts:6:import { importContificoExcel } from "./importContifico";
+  electron\main.ts:7:import { reconcileCollections } from "./collectionReconciliation";
+  electron\main.ts:8:import {
+  electron\main.ts:9:  getCollectionPeriodReconciliation,
+  electron\main.ts:10:  saveCollectionPeriodReconciliation,
+  electron\main.ts:11:} from "./collectionPeriodReconciliation";
+  electron\main.ts:12:import {
+> electron\main.ts:13:  importCancelledDocumentsExcel,
+> electron\main.ts:14:  previewCancelledDocumentsExcel,
+> electron\main.ts:15:} from "./importCancelledDocuments";
+  electron\main.ts:16:import * as XLSX from "xlsx";
+  electron\main.ts:17:import fs from "node:fs";
+  electron\main.ts:18:import { createHash } from "node:crypto";
+  electron\main.ts:19:import http from "node:http";
+  electron\main.ts:20:import os from "node:os";
+  electron\main.ts:21:import { spawn } from "child_process";
+  electron\main.ts:22:/* eslint-disable @typescript-eslint/no-explicit-any */
+  electron\main.ts:23:
+  electron\main.ts:24:const __filename = fileURLToPath(import.meta.url);
+  electron\main.ts:25:const __dirname = dirname(__filename);
+  electron\main.ts:26:// Exponer __dirname para dependencias CommonJS (ej. ngrok) en entorno ESM
+  electron\main.ts:27:// eslint-disable-next-line @typescript-eslint/no-explicit-any
+  electron\main.ts:28:(globalThis as any).__dirname = __dirname;
+  electron\main.ts:29:
+  electron\main.ts:30:let mainWindow: BrowserWindow | null = null;
+  electron\main.ts:1516:
+  electron\main.ts:1517:function startPortfolioImport(
+  electron\main.ts:1518:  filePath: string,
+  electron\main.ts:1519:  fileHash: string,
+  electron\main.ts:1520:): number {
+  electron\main.ts:1521:  const fileName = filePath.split(/[\\/]/).pop() || "cartera.xlsx";
+  electron\main.ts:1522:
+  electron\main.ts:1523:  const result = db.prepare(`
+> electron\main.ts:1524:    INSERT INTO importaciones (
+  electron\main.ts:1525:      tipo,
+  electron\main.ts:1526:      archivo_nombre,
+  electron\main.ts:1527:      archivo_hash,
+  electron\main.ts:1528:      estado,
+  electron\main.ts:1529:      observacion,
+  electron\main.ts:1530:      metadata_json
+  electron\main.ts:1531:    )
+  electron\main.ts:1532:    VALUES (
+  electron\main.ts:1533:      'CARTERA',
+  electron\main.ts:1534:      ?,
+  electron\main.ts:1535:      ?,
+  electron\main.ts:1536:      'PROCESANDO',
+  electron\main.ts:1537:      'Importación de cartera Contífico',
+  electron\main.ts:1538:      '{}'
+  electron\main.ts:1539:    )
+  electron\main.ts:1561:  importacionId: number,
+  electron\main.ts:1562:  result: Record<string, unknown>,
+  electron\main.ts:1563:): void {
+  electron\main.ts:1564:  const insertedDocs = Number(result.insertedDocs ?? 0);
+  electron\main.ts:1565:  const omittedRows = Number(result.omittedRows ?? 0);
+  electron\main.ts:1566:  const descuadres = Number(result.descuadresDetectados ?? 0);
+  electron\main.ts:1567:
+  electron\main.ts:1568:  db.prepare(`
+> electron\main.ts:1569:    UPDATE importaciones
+  electron\main.ts:1570:    SET
+  electron\main.ts:1571:      registros_leidos = ?,
+  electron\main.ts:1572:      registros_importados = ?,
+  electron\main.ts:1573:      registros_ignorados = ?,
+  electron\main.ts:1574:      registros_duplicados = 0,
+  electron\main.ts:1575:      estado = ?,
+  electron\main.ts:1576:      observacion = ?,
+  electron\main.ts:1577:      metadata_json = ?
+  electron\main.ts:1578:    WHERE id = ?
+  electron\main.ts:1579:  `).run(
+  electron\main.ts:1580:    insertedDocs + omittedRows,
+  electron\main.ts:1581:    insertedDocs,
+  electron\main.ts:1582:    omittedRows,
+  electron\main.ts:1583:    descuadres > 0 ? "COMPLETADA_ADVERTENCIAS" : "COMPLETADA",
+  electron\main.ts:1584:    descuadres > 0
+  electron\main.ts:1589:  );
+  electron\main.ts:1590:}
+  electron\main.ts:1591:
+  electron\main.ts:1592:function failPortfolioImport(
+  electron\main.ts:1593:  importacionId: number,
+  electron\main.ts:1594:  message: string,
+  electron\main.ts:1595:): void {
+  electron\main.ts:1596:  db.prepare(`
+> electron\main.ts:1597:    UPDATE importaciones
+  electron\main.ts:1598:    SET
+  electron\main.ts:1599:      estado = 'ERROR',
+  electron\main.ts:1600:      observacion = ?
+  electron\main.ts:1601:    WHERE id = ?
+  electron\main.ts:1602:  `).run(message, importacionId);
+  electron\main.ts:1603:}
+  electron\main.ts:1604:
+> electron\main.ts:1605:// --- Centro de Importaciones ---
+  electron\main.ts:1606:type ImportType =
+  electron\main.ts:1607:  | "CARTERA"
+> electron\main.ts:1608:  | "ANULADOS"
+  electron\main.ts:1609:  | "NOTAS_CREDITO"
+  electron\main.ts:1610:  | "COBROS_MOVIMIENTOS";
+  electron\main.ts:1611:
+  electron\main.ts:1612:function listImportHistory(args?: {
+  electron\main.ts:1613:  tipo?: ImportType;
+  electron\main.ts:1614:  limit?: number;
+  electron\main.ts:1615:}) {
+  electron\main.ts:1616:  const limit = Math.min(
+  electron\main.ts:1617:    Math.max(Number(args?.limit ?? 100), 1),
+  electron\main.ts:1618:    500,
+  electron\main.ts:1619:  );
+  electron\main.ts:1620:
+  electron\main.ts:1621:  if (args?.tipo) {
+  electron\main.ts:1622:    return db
+  electron\main.ts:1623:      .prepare(
+  electron\main.ts:1624:        [
+  electron\main.ts:1625:          "SELECT *",
+> electron\main.ts:1626:          "FROM importaciones",
+  electron\main.ts:1627:          "WHERE tipo = ?",
+  electron\main.ts:1628:          "ORDER BY datetime(importado_en) DESC, id DESC",
+  electron\main.ts:1629:          "LIMIT ?",
+  electron\main.ts:1630:        ].join(" "),
+  electron\main.ts:1631:      )
+  electron\main.ts:1632:      .all(args.tipo, limit);
+  electron\main.ts:1633:  }
+  electron\main.ts:1634:
+  electron\main.ts:1635:  return db
+  electron\main.ts:1636:    .prepare(
+  electron\main.ts:1637:      [
+  electron\main.ts:1638:        "SELECT *",
+> electron\main.ts:1639:        "FROM importaciones",
+  electron\main.ts:1640:        "ORDER BY datetime(importado_en) DESC, id DESC",
+  electron\main.ts:1641:        "LIMIT ?",
+  electron\main.ts:1642:      ].join(" "),
+  electron\main.ts:1643:    )
+  electron\main.ts:1644:    .all(limit);
+  electron\main.ts:1645:}
+  electron\main.ts:1646:
+  electron\main.ts:1647:function getImportById(id: number) {
+  electron\main.ts:1648:  return db
+> electron\main.ts:1649:    .prepare("SELECT * FROM importaciones WHERE id = ?")
+  electron\main.ts:1650:    .get(id);
+  electron\main.ts:1651:}
+  electron\main.ts:1652:
+  electron\main.ts:1653:function requestImportReversal(
+  electron\main.ts:1654:  id: number,
+  electron\main.ts:1655:  observacion = "",
+  electron\main.ts:1656:) {
+  electron\main.ts:1657:  const current = getImportById(id) as any;
+  electron\main.ts:1658:
+  electron\main.ts:1659:  if (!current) {
+  electron\main.ts:1660:    return {
+  electron\main.ts:1661:      ok: false,
+  electron\main.ts:1662:      message: "La importación no existe.",
+  electron\main.ts:1663:    };
+  electron\main.ts:1664:  }
+  electron\main.ts:1676:      code: "REVERSAL_NOT_IMPLEMENTED",
+  electron\main.ts:1677:      message:
+  electron\main.ts:1678:        "La reversión transaccional todavía no está habilitada para este tipo de importación.",
+  electron\main.ts:1679:    };
+  electron\main.ts:1680:  }
+  electron\main.ts:1681:
+  electron\main.ts:1682:  const later = db.prepare(`
+  electron\main.ts:1683:    SELECT COUNT(*) AS total
+> electron\main.ts:1684:    FROM importaciones
+  electron\main.ts:1685:    WHERE tipo = 'CARTERA'
+  electron\main.ts:1686:      AND estado NOT IN ('REVERTIDA', 'ERROR')
+  electron\main.ts:1687:      AND id > ?
+  electron\main.ts:1688:  `).get(id) as { total: number };
+  electron\main.ts:1689:
+  electron\main.ts:1690:  if (Number(later.total) > 0) {
+  electron\main.ts:1691:    return {
+  electron\main.ts:1692:      ok: false,
+  electron\main.ts:1693:      code: "LATER_IMPORTS_EXIST",
+  electron\main.ts:1694:      message:
+> electron\main.ts:1695:        "No se puede revertir esta importación porque existen importaciones de cartera posteriores activas. Revierte primero la más reciente.",
+  electron\main.ts:1696:    };
+  electron\main.ts:1697:  }
+  electron\main.ts:1698:
+  electron\main.ts:1699:  const snapshotRow = db.prepare(`
+  electron\main.ts:1700:    SELECT payload_json
+  electron\main.ts:1701:    FROM importacion_snapshots
+  electron\main.ts:1702:    WHERE importacion_id = ?
+  electron\main.ts:1703:  `).get(id) as { payload_json?: string } | undefined;
+  electron\main.ts:1704:
+  electron\main.ts:1705:  if (!snapshotRow?.payload_json) {
+  electron\main.ts:1706:    return {
+  electron\main.ts:1707:      ok: false,
+  electron\main.ts:1708:      code: "SNAPSHOT_NOT_FOUND",
+  electron\main.ts:1709:      message:
+  electron\main.ts:1710:        "La importación no tiene un snapshot reversible asociado.",
+  electron\main.ts:1719:    // PACK 038: los eventos/saldos del corte revertido pertenecen a esta
+  electron\main.ts:1720:    // importación y deben retirarse junto con la proyección restaurada.
+  electron\main.ts:1721:    db.prepare("DELETE FROM documento_eventos WHERE importacion_id = ?").run(id);
+  electron\main.ts:1722:    db.prepare("DELETE FROM documento_saldos WHERE importacion_id = ?").run(id);
+  electron\main.ts:1723:
+  electron\main.ts:1724:    restorePortfolioSnapshot(snapshot);
+  electron\main.ts:1725:
+  electron\main.ts:1726:    db.prepare(`
+> electron\main.ts:1727:      UPDATE importaciones
+  electron\main.ts:1728:      SET
+  electron\main.ts:1729:        estado = 'REVERTIDA',
+  electron\main.ts:1730:        revertido_en = datetime('now', 'localtime'),
+  electron\main.ts:1731:        observacion = CASE
+  electron\main.ts:1732:          WHEN TRIM(COALESCE(observacion, '')) = '' THEN ?
+  electron\main.ts:1733:          ELSE observacion || ' | ' || ?
+  electron\main.ts:1734:        END
+  electron\main.ts:1735:      WHERE id = ?
+  electron\main.ts:1736:    `).run(
+  electron\main.ts:1737:      observacion || "Importación revertida",
+  electron\main.ts:1738:      observacion || "Importación revertida",
+  electron\main.ts:1739:      id,
+  electron\main.ts:1740:    );
+  electron\main.ts:1741:  });
+  electron\main.ts:1742:
+  electron\main.ts:2076:  try {
+  electron\main.ts:2077:    const tx = db.transaction(() => {
+  electron\main.ts:2078:      // Ordenado de tablas dependientes a tablas padre. Si una tabla aun no
+  electron\main.ts:2079:      // existe en una instalacion antigua, simplemente se omite.
+  electron\main.ts:2080:      const tables = [
+  electron\main.ts:2081:        "documento_eventos",
+  electron\main.ts:2082:        "documento_saldos",
+  electron\main.ts:2083:        "importacion_snapshots",
+> electron\main.ts:2084:        "documentos_anulados_log",
+  electron\main.ts:2085:        "gestiones",
+  electron\main.ts:2086:        "disputas",
+  electron\main.ts:2087:        "cuentas_aplicar",
+  electron\main.ts:2088:        "conciliaciones_cobros",
+  electron\main.ts:2089:        "abonos",
+  electron\main.ts:2090:        "campana_clientes",
+  electron\main.ts:2091:        "campanas",
+  electron\main.ts:2092:        "documentos",
+  electron\main.ts:2093:        "clientes",
+> electron\main.ts:2094:        "importaciones",
+  electron\main.ts:2095:      ];
+  electron\main.ts:2096:
+  electron\main.ts:2097:      const exists = db.prepare(
+  electron\main.ts:2098:        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1"
+  electron\main.ts:2099:      );
+  electron\main.ts:2100:
+  electron\main.ts:2101:      for (const table of tables) {
+  electron\main.ts:2102:        if (exists.get(table)) db.exec(`DELETE FROM ${table}`);
+  electron\main.ts:2103:      }
+  electron\main.ts:2104:
+  electron\main.ts:2105:      db.prepare("UPDATE empresa SET excel_headers_json = '' WHERE id = 1").run();
+  electron\main.ts:2106:    });
+  electron\main.ts:2107:    tx();
+  electron\main.ts:2108:
+  electron\main.ts:2109:    db.pragma("optimize");
+  electron\main.ts:2500:  const filePath = selection.filePaths[0];
+  electron\main.ts:2501:  const fileHash = hashImportFile(filePath);
+  electron\main.ts:2502:
+  electron\main.ts:2503:  const duplicate = db.prepare(`
+  electron\main.ts:2504:    SELECT
+  electron\main.ts:2505:      id,
+  electron\main.ts:2506:      archivo_nombre,
+  electron\main.ts:2507:      importado_en
+> electron\main.ts:2508:    FROM importaciones
+  electron\main.ts:2509:    WHERE tipo = 'CARTERA'
+  electron\main.ts:2510:      AND archivo_hash = ?
+  electron\main.ts:2511:      AND estado IN (
+  electron\main.ts:2512:        'COMPLETADA',
+  electron\main.ts:2513:        'COMPLETADA_ADVERTENCIAS'
+  electron\main.ts:2514:      )
+  electron\main.ts:2515:    ORDER BY id DESC
+  electron\main.ts:2516:    LIMIT 1
+  electron\main.ts:2517:  `).get(fileHash) as
+  electron\main.ts:2518:    | {
+  electron\main.ts:2519:        id: number;
+  electron\main.ts:2520:        archivo_nombre: string;
+  electron\main.ts:2521:        importado_en: string;
+  electron\main.ts:2522:      }
+  electron\main.ts:2523:    | undefined;
+  electron\main.ts:2652:ipcMain.handle("checkRemoteUrl", async () => {
+  electron\main.ts:2653:  const url = await checkAndRefreshNgrok();
+  electron\main.ts:2654:  return { ok: !!url, url };
+  electron\main.ts:2655:});
+  electron\main.ts:2656:
+  electron\main.ts:2657:
+  electron\main.ts:2658:
+  electron\main.ts:2659:
+> electron\main.ts:2660:ipcMain.handle("previewCancelledDocuments", async () => {
+  electron\main.ts:2661:  const selection = await dialog.showOpenDialog({
+> electron\main.ts:2662:    title: "Seleccionar archivo Documentos Anulados",
+  electron\main.ts:2663:    properties: ["openFile"],
+  electron\main.ts:2664:    filters: [{ name: "Archivos de Excel", extensions: ["xlsx", "xls"] }],
+  electron\main.ts:2665:  });
+  electron\main.ts:2666:
+  electron\main.ts:2667:  if (selection.canceled || selection.filePaths.length === 0) {
+  electron\main.ts:2668:    return { ok: false, message: "Selección cancelada" };
+  electron\main.ts:2669:  }
+  electron\main.ts:2670:
+  electron\main.ts:2671:  try {
+> electron\main.ts:2672:    return previewCancelledDocumentsExcel(selection.filePaths[0], db);
+  electron\main.ts:2673:  } catch (error: unknown) {
+> electron\main.ts:2674:    console.error("Error analizando documentos anulados:", error);
+  electron\main.ts:2675:
+  electron\main.ts:2676:    return {
+  electron\main.ts:2677:      ok: false,
+  electron\main.ts:2678:      message:
+  electron\main.ts:2679:        error instanceof Error
+  electron\main.ts:2680:          ? error.message
+  electron\main.ts:2681:          : "Error desconocido durante el análisis",
+  electron\main.ts:2682:    };
+  electron\main.ts:2683:  }
+  electron\main.ts:2684:});
+  electron\main.ts:2685:
+  electron\main.ts:2686:ipcMain.handle(
+> electron\main.ts:2687:  "confirmCancelledDocumentsImport",
+  electron\main.ts:2688:  (_event, filePath: string) => {
+  electron\main.ts:2689:    try {
+> electron\main.ts:2690:      return importCancelledDocumentsExcel(filePath, db);
+  electron\main.ts:2691:    } catch (error: unknown) {
+> electron\main.ts:2692:      console.error("Error importando documentos anulados:", error);
+  electron\main.ts:2693:
+  electron\main.ts:2694:      return {
+  electron\main.ts:2695:        ok: false,
+  electron\main.ts:2696:        message:
+  electron\main.ts:2697:          error instanceof Error
+  electron\main.ts:2698:            ? error.message
+  electron\main.ts:2699:            : "Error desconocido durante la importación",
+  electron\main.ts:2700:      };
+  electron\main.ts:2701:    }
+  electron\main.ts:2702:  },
+  electron\main.ts:2703:);
+  electron\main.ts:2704:
+> electron\main.ts:2705:ipcMain.handle("cancelledDocumentsReversalSummary", () => {
+  electron\main.ts:2706:  const row = db.prepare(`
+  electron\main.ts:2707:    SELECT
+  electron\main.ts:2708:      COUNT(*) AS reversedPayments,
+  electron\main.ts:2709:      ROUND(COALESCE(SUM(total_anterior - total_nuevo), 0), 2) AS reversedAmount
+  electron\main.ts:2710:    FROM abonos
+  electron\main.ts:2711:    WHERE COALESCE(reversado, 0) = 1
+  electron\main.ts:2712:      AND motivo_reversion = 'ANULACION_DOCUMENTO'
+  electron\main.ts:2713:  `).get() as {
+  electron\main.ts:2714:    reversedPayments: number;
+  electron\main.ts:2715:    reversedAmount: number;
+  electron\main.ts:2716:  };
+  electron\main.ts:2717:
+  electron\main.ts:2718:  return {
+  electron\main.ts:2719:    reversedPayments: Number(row?.reversedPayments || 0),
+  electron\main.ts:2720:    reversedAmount: Number(row?.reversedAmount || 0),
+  electron\main.ts:2721:  };
+  electron\main.ts:2722:});
+  electron\main.ts:2723:
+> electron\main.ts:2724:ipcMain.handle("cancelledDocumentsList", () => {
+  electron\main.ts:2725:  const rows = db.prepare(`
+  electron\main.ts:2726:    SELECT
+  electron\main.ts:2727:      id,
+  electron\main.ts:2728:      documento,
+  electron\main.ts:2729:      cliente,
+  electron\main.ts:2730:      fecha_anulacion,
+  electron\main.ts:2731:      motivo,
+  electron\main.ts:2732:      archivo_origen,
+  electron\main.ts:2733:      detectado_en,
+  electron\main.ts:2734:      resultado,
+  electron\main.ts:2735:      tipo_documento,
+  electron\main.ts:2736:      estado_origen,
+  electron\main.ts:2737:      numero_autorizacion
+> electron\main.ts:2738:    FROM documentos_anulados_log
+  electron\main.ts:2739:    ORDER BY datetime(detectado_en) DESC, id DESC
+  electron\main.ts:2740:  `).all();
+  electron\main.ts:2741:
+  electron\main.ts:2742:  return { ok: true, rows };
+  electron\main.ts:2743:});
+  electron\main.ts:2744:
+  electron\main.ts:2745:ipcMain.handle("creditPoliciesList", () => {
+  electron\main.ts:2746:  const rows = db.prepare(`
+  electron\main.ts:2747:    WITH credit_clients AS (
+  electron\main.ts:2748:      SELECT DISTINCT TRIM(cliente) AS cliente
+  electron\main.ts:2749:      FROM documentos
+  electron\main.ts:2750:      WHERE is_subtotal = 0
+  electron\main.ts:2751:        AND TRIM(COALESCE(cliente, '')) <> ''
+  electron\main.ts:2752:
+  electron\main.ts:2753:      UNION
+
+

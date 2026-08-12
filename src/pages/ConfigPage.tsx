@@ -64,6 +64,8 @@ export function ConfigPage({
   onOpenHistory,
   updateInfo,
   formatUpdateDate,
+  dbPath,
+  onCopyDbPath,
 }: ConfigPageProps) {
   const handleAutoDarkChange = (enabled: boolean): void => {
     onAutoDarkChange(enabled);
@@ -275,6 +277,33 @@ export function ConfigPage({
               style={{
                 marginTop: 12,
                 padding: '10px 12px',
+                background: 'var(--bg-main)',
+                borderRadius: 8,
+                border: '1px solid var(--border-color)',
+                fontSize: '0.72rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div style={{ fontWeight: 700, color: 'var(--text-main)', marginBottom: 5 }}>
+                Base de datos activa
+              </div>
+              <div style={{ wordBreak: 'break-all', marginBottom: 8 }}>
+                {dbPath || 'Ruta no disponible'}
+              </div>
+              <button
+                type="button"
+                className="config-btn"
+                disabled={!dbPath}
+                onClick={() => dbPath && onCopyDbPath(dbPath)}
+              >
+                Copiar ruta de la base
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                padding: '10px 12px',
                 background: '#f0f9ff',
                 borderRadius: 8,
                 border: '1px solid #bfdbfe',
@@ -364,3 +393,4 @@ export function ConfigPage({
     </div>
   );
 }
+

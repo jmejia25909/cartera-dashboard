@@ -1,4 +1,4 @@
-export type DashboardCollectionStatus =
+﻿export type DashboardCollectionStatus =
   | 'REQUIERE_CONCILIACION'
   | 'CONCILIADO';
 
@@ -96,7 +96,10 @@ export interface DashboardExecutiveStats {
   periodo: DashboardPeriod;
 
   cartera: {
+    totalSnapshotContifico: number;
     pendiente: number;
+    creditosVivos: number;
+    posicionNeta: number;
     vencida: number;
     porcentajeVencida: number;
     mora90: number;
@@ -166,3 +169,4 @@ export interface DashboardExecutiveStats {
     motivo: string;
   }>;
 }
+
