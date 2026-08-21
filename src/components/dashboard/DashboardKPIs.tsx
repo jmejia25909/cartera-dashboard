@@ -88,10 +88,10 @@ export function DashboardKpis({
   periodLabel,
   selectedMonth,
 }: DashboardKpisProps) {
-  const collectionValue =
-    cobrosMes.valorOficial === null
-      ? "Pendiente"
-      : money.format(cobrosMes.valorOficial);
+  // El Dashboard ejecutivo muestra el flujo efectivo detectado
+  // para el período seleccionado. La conciliación financiera
+  // permanece disponible en la pantalla especializada de cobros.
+  const collectionValue = money.format(cobrosMes.totalDetectado);
 
   const collectionTitle =
     selectedMonth === null
@@ -138,7 +138,7 @@ export function DashboardKpis({
       <KpiCard
         title={collectionTitle}
         value={collectionValue}
-        subtitle={`${money.format(cobrosMes.totalDetectado)} detectado`}
+        subtitle={`${integer.format(cobrosMes.movimientosDetectados)} movimientos`}
         kind="cash"
         tooltip={
           `${periodLabel}. ` +
@@ -171,5 +171,7 @@ export function DashboardKpis({
     </section>
   );
 }
+
+
 
 

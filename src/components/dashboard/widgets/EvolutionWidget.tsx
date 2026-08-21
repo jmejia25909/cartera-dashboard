@@ -1,4 +1,4 @@
-import {
+﻿import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -105,8 +105,10 @@ export function EvolutionWidget({
                 formatter={(value, name) => [
                   money.format(Number(value)),
                   name === "partialPayments"
-                    ? "Abonos parciales detectados"
-                    : "Cierres por desaparición",
+                    ? "Cobros"
+                    : name === "otherMovements"
+                      ? "Cruces"
+                      : String(name),
                 ]}
               />
 
@@ -130,13 +132,13 @@ export function EvolutionWidget({
               </Bar>
 
               <Bar
-                dataKey="disappearances"
+                dataKey="otherMovements"
                 radius={[5, 5, 0, 0]}
-                name="disappearances"
+                name="otherMovements"
               >
                 {chartSeries.map((item) => (
                   <Cell
-                    key={`disappearance-${item.month}`}
+                    key={`cross-${item.month}`}
                     fill="#10b981"
                     fillOpacity={
                       selectedMonth === null ||
@@ -153,12 +155,12 @@ export function EvolutionWidget({
           <div className="bi-chart-legend">
             <span>
               <i className="bi-chart-legend__blue" />
-              Abonos parciales detectados
+              Cobros
             </span>
 
             <span>
               <i className="bi-chart-legend__green" />
-              Cierres por desaparición
+              Cruces
             </span>
 
             <em>
@@ -177,3 +179,5 @@ export function EvolutionWidget({
     </DashboardPanel>
   );
 }
+
+

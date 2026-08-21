@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+﻿import type Database from "better-sqlite3";
 import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
@@ -24,6 +24,7 @@ export interface CreditNotePreviewRow {
   estado: string;
   descripcion: string;
   matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "SIN_DOCUMENTO_RELACIONADO";
+  ingestionStatus: "NUEVA" | "DUPLICADO_HISTORICO";
 }
 
 export interface CreditNotePreviewResult {
@@ -33,6 +34,7 @@ export interface CreditNotePreviewResult {
   totalRows: number;
   uniqueCreditNotes: number;
   duplicateRows: number;
+  historicalDuplicates: number;
   matchedDocuments: number;
   unmatchedDocuments: number;
   missingRelatedDocument: number;
@@ -125,6 +127,16 @@ function parseCreditNotes(
     LIMIT 1
   `);
 
+  const existsCreditNote = db.prepare(`
+    SELECT
+      id,
+      estado_conciliacion,
+      importacion_id
+    FROM notas_credito_importadas
+    WHERE numero_nc_normalizado = ?
+    LIMIT 1
+  `);
+
   const parsedRows: CreditNotePreviewRow[] = [];
 
   for (const row of matrix.slice(headerIndex + 1)) {
@@ -147,10 +159,17 @@ function parseCreditNotes(
           ? "ENCONTRADO"
           : "NO_ENCONTRADO";
 
+    const numeroNcNormalizado = normalizeDocumentNumber(numeroNc);
+
+    const ingestionStatus: CreditNotePreviewRow["ingestionStatus"] =
+      existsCreditNote.get(numeroNcNormalizado)
+        ? "DUPLICADO_HISTORICO"
+        : "NUEVA";
+
     parsedRows.push({
       fecha: formatExcelDate(source["fecha"]),
       numeroNotaCredito: numeroNc,
-      numeroNotaCreditoNormalizado: normalizeDocumentNumber(numeroNc),
+      numeroNotaCreditoNormalizado: numeroNcNormalizado,
       tipoDocumentoRelacionado: text(source["# tipo documento relacionado"]),
       documentoRelacionado: related,
       documentoRelacionadoNormalizado: relatedNormalized,
@@ -166,6 +185,7 @@ function parseCreditNotes(
       estado: text(source["estado"]),
       descripcion: text(source["descripcion"]),
       matchStatus,
+      ingestionStatus,
     });
   }
 
@@ -176,6 +196,10 @@ function parseCreditNotes(
   }
 
   const uniqueRows = [...uniqueMap.values()];
+  const historicalDuplicates = uniqueRows.filter(
+    (r) => r.ingestionStatus === "DUPLICADO_HISTORICO",
+  ).length;
+
   const matchedDocuments = uniqueRows.filter((r) => r.matchStatus === "ENCONTRADO").length;
   const unmatchedDocuments = uniqueRows.filter((r) => r.matchStatus === "NO_ENCONTRADO").length;
   const missingRelatedDocument = uniqueRows.filter(
@@ -190,6 +214,7 @@ function parseCreditNotes(
     totalRows: parsedRows.length,
     uniqueCreditNotes: uniqueRows.length,
     duplicateRows: Math.max(parsedRows.length - uniqueRows.length, 0),
+    historicalDuplicates,
     matchedDocuments,
     unmatchedDocuments,
     missingRelatedDocument,
@@ -263,23 +288,7 @@ export function importCreditNotesExcel(
       @estado_conciliacion,
       @importacion_id
     )
-    ON CONFLICT(numero_nc_normalizado) DO UPDATE SET
-      fecha_nc = excluded.fecha_nc,
-      tipo_documento_relacionado = excluded.tipo_documento_relacionado,
-      documento_relacionado = excluded.documento_relacionado,
-      documento_relacionado_normalizado = excluded.documento_relacionado_normalizado,
-      autorizacion = excluded.autorizacion,
-      persona = excluded.persona,
-      identificacion = excluded.identificacion,
-      vendedor = excluded.vendedor,
-      subtotal = excluded.subtotal,
-      iva = excluded.iva,
-      total_nc = excluded.total_nc,
-      saldo_nc = excluded.saldo_nc,
-      estado_fuente = excluded.estado_fuente,
-      descripcion = excluded.descripcion,
-      estado_conciliacion = excluded.estado_conciliacion,
-      importacion_id = excluded.importacion_id
+    ON CONFLICT(numero_nc_normalizado) DO NOTHING
   `);
 
   const currentDocument = db.prepare(`
@@ -320,6 +329,27 @@ export function importCreditNotesExcel(
       AND COALESCE(anulado, 0) = 0
   `);
 
+  const existingCreditNote = db.prepare(`
+    SELECT
+      id,
+      estado_conciliacion,
+      importacion_id,
+      documento_relacionado_normalizado
+    FROM notas_credito_importadas
+    WHERE numero_nc_normalizado = ?
+    LIMIT 1
+  `);
+
+  const markCreditNoteReconciled = db.prepare(`
+    UPDATE notas_credito_importadas
+    SET estado_conciliacion = 'CONCILIADA'
+    WHERE id = ?
+      AND estado_conciliacion <> 'CONCILIADA'
+  `);
+
+  let newCreditNotes = 0;
+  let historicalDuplicates = 0;
+  let rehydratedCreditNotes = 0;
   let appliedCreditNotes = 0;
   let pendingCreditNotes = 0;
 
@@ -328,15 +358,26 @@ export function importCreditNotesExcel(
 
   const transaction = db.transaction(() => {
     for (const row of replayRows) {
+      const existing = existingCreditNote.get(
+        row.numeroNotaCreditoNormalizado,
+      ) as
+        | {
+            id: number;
+            estado_conciliacion: string;
+            importacion_id: number | null;
+            documento_relacionado_normalizado: string | null;
+          }
+        | undefined;
+
       const linked = row.documentoRelacionadoNormalizado
         ? currentDocument.get(row.documentoRelacionadoNormalizado) as
-            | { estado_documento?: string | null; saldo_pendiente?: number | null }
+            | {
+                estado_documento?: string | null;
+                saldo_pendiente?: number | null;
+              }
             | undefined
         : undefined;
 
-      // Una NCT negativa que todavía aparece en cartera_contifico representa
-      // crédito vivo/remanente. Su existencia no debe provocar un segundo
-      // impacto monetario sobre la proyección de deuda.
       const liveCredit = row.numeroNotaCreditoNormalizado
         ? liveCreditByCreditNote.get(row.numeroNotaCreditoNormalizado) as
             | {
@@ -349,15 +390,100 @@ export function importCreditNotesExcel(
             | undefined
         : undefined;
 
-      const reconciliationStatus = linked ? "CONCILIADA" : "PENDIENTE_CONCILIACION";
+      const creditNoteEventKey =
+        row.documentoRelacionadoNormalizado
+          ? `NC:${row.numeroNotaCreditoNormalizado}:${row.documentoRelacionadoNormalizado}`
+          : "";
+
+      // ------------------------------------------------------
+      // NC YA INGRESADA EN UNA IMPORTACION ANTERIOR
+      // ------------------------------------------------------
+      if (existing) {
+        historicalDuplicates += 1;
+
+        // Si continúa sin documento relacionado disponible,
+        // permanece pendiente y no se reprocesa.
+        if (!linked || !row.documentoRelacionadoNormalizado) {
+          if (existing.estado_conciliacion === "PENDIENTE_CONCILIACION") {
+            pendingCreditNotes += 1;
+          }
+          continue;
+        }
+
+        // Una NC histórica pendiente puede conciliarse posteriormente
+        // cuando la factura reaparece en un snapshot futuro.
+        if (existing.estado_conciliacion === "PENDIENTE_CONCILIACION") {
+          markCreditNoteReconciled.run(existing.id);
+
+          insertDocumentEvent(db, {
+            eventKey: creditNoteEventKey,
+            documentoNormalizado: row.documentoRelacionadoNormalizado,
+            tipoEvento: "NOTA_CREDITO_APLICADA",
+            fuente: "NOTAS_CREDITO",
+            importe: row.total,
+            estadoAnterior:
+              linked.estado_documento ?? "ACTIVO_PENDIENTE",
+            estadoNuevo: "AJUSTADO_NC",
+            provisional: false,
+
+            // Conservamos la trazabilidad de la ingesta original de la NC.
+            importacionId: existing.importacion_id ?? importacionId,
+
+            referenciaExterna: row.numeroNotaCredito,
+            metadata: {
+              autorizacion: row.autorizacion,
+              fecha: row.fecha,
+              descripcion: row.descripcion,
+              persona: row.persona,
+              documentoRelacionado: row.documentoRelacionado,
+              totalNc: row.total,
+              saldoNc: row.saldo,
+              creditoVivoPresente: Boolean(liveCredit),
+              creditoVivoDocumentoId: liveCredit?.id ?? null,
+              creditoVivoSaldo: liveCredit?.total ?? null,
+              rehidratada: true,
+              rehidratadaPorImportacionId: importacionId,
+              regla: liveCredit
+                ? "VINCULO_EXPLICITO_SIN_DOBLE_IMPACTO_CREDITO_VIVO"
+                : "VINCULO_EXPLICITO_DOCUMENTO_RELACIONADO",
+            },
+          });
+
+          if (row.fecha) {
+            db.prepare(`
+              UPDATE documento_eventos
+              SET ocurrido_en = ?
+              WHERE event_key = ?
+            `).run(row.fecha, creditNoteEventKey);
+          }
+
+          updateProjection.run(row.documentoRelacionadoNormalizado);
+
+          rehydratedCreditNotes += 1;
+          appliedCreditNotes += 1;
+        }
+
+        continue;
+      }
+
+      // ------------------------------------------------------
+      // NC REALMENTE NUEVA
+      // ------------------------------------------------------
+      newCreditNotes += 1;
+
+      const reconciliationStatus =
+        linked ? "CONCILIADA" : "PENDIENTE_CONCILIACION";
 
       insertNote.run({
         numero_nc: row.numeroNotaCredito,
         numero_nc_normalizado: row.numeroNotaCreditoNormalizado,
         fecha_nc: row.fecha || null,
-        tipo_documento_relacionado: row.tipoDocumentoRelacionado || null,
-        documento_relacionado: row.documentoRelacionado || null,
-        documento_relacionado_normalizado: row.documentoRelacionadoNormalizado || null,
+        tipo_documento_relacionado:
+          row.tipoDocumentoRelacionado || null,
+        documento_relacionado:
+          row.documentoRelacionado || null,
+        documento_relacionado_normalizado:
+          row.documentoRelacionadoNormalizado || null,
         autorizacion: row.autorizacion || null,
         persona: row.persona || null,
         identificacion: row.identificacion || null,
@@ -377,16 +503,14 @@ export function importCreditNotesExcel(
         continue;
       }
 
-      const creditNoteEventKey =
-        `NC:${row.numeroNotaCreditoNormalizado}:${row.documentoRelacionadoNormalizado}`;
-
       insertDocumentEvent(db, {
         eventKey: creditNoteEventKey,
         documentoNormalizado: row.documentoRelacionadoNormalizado,
         tipoEvento: "NOTA_CREDITO_APLICADA",
         fuente: "NOTAS_CREDITO",
         importe: row.total,
-        estadoAnterior: linked.estado_documento ?? "ACTIVO_PENDIENTE",
+        estadoAnterior:
+          linked.estado_documento ?? "ACTIVO_PENDIENTE",
         estadoNuevo: "AJUSTADO_NC",
         provisional: false,
         importacionId,
@@ -402,14 +526,13 @@ export function importCreditNotesExcel(
           creditoVivoPresente: Boolean(liveCredit),
           creditoVivoDocumentoId: liveCredit?.id ?? null,
           creditoVivoSaldo: liveCredit?.total ?? null,
+          rehidratada: false,
           regla: liveCredit
             ? "VINCULO_EXPLICITO_SIN_DOBLE_IMPACTO_CREDITO_VIVO"
             : "VINCULO_EXPLICITO_DOCUMENTO_RELACIONADO",
         },
       });
 
-      // Effective-date replay: el ledger debe conservar la fecha fiscal de la NC,
-      // no la fecha/hora en que el operador cargó el archivo histórico.
       if (row.fecha) {
         db.prepare(`
           UPDATE documento_eventos
@@ -418,13 +541,12 @@ export function importCreditNotesExcel(
         `).run(row.fecha, creditNoteEventKey);
       }
 
-      // Importante: no se resta saldo aquí. La cartera es un snapshot vivo y la
-      // NC transaccional funciona como evidencia/explicación. Si la propia NCT
-      // sigue presente como CREDITO_VIVO, permanece separada hasta su consumo.
+      // La NC explica el cambio de estado; NO resta de nuevo el saldo
+      // porque Cartera Contífico ya es el snapshot financiero vigente.
       updateProjection.run(row.documentoRelacionadoNormalizado);
+
       appliedCreditNotes += 1;
     }
-
     db.prepare(`
       UPDATE importaciones
       SET
@@ -438,8 +560,8 @@ export function importCreditNotesExcel(
       WHERE id = ?
     `).run(
       preview.totalRows,
-      preview.uniqueCreditNotes,
-      0,
+      newCreditNotes,
+      historicalDuplicates,
       preview.duplicateRows,
       pendingCreditNotes > 0 ? "COMPLETADA_ADVERTENCIAS" : "COMPLETADA",
       `Notas de crédito: ${preview.uniqueCreditNotes} únicas; ` +
@@ -448,6 +570,9 @@ export function importCreditNotesExcel(
         totalRows: preview.totalRows,
         uniqueCreditNotes: preview.uniqueCreditNotes,
         duplicateRows: preview.duplicateRows,
+        historicalDuplicates,
+        newCreditNotes,
+        rehydratedCreditNotes,
         matchedDocuments: preview.matchedDocuments,
         unmatchedDocuments: preview.unmatchedDocuments,
         missingRelatedDocument: preview.missingRelatedDocument,
@@ -471,3 +596,4 @@ export function importCreditNotesExcel(
       `${appliedCreditNotes} conciliadas y ${pendingCreditNotes} pendientes.`,
   };
 }
+

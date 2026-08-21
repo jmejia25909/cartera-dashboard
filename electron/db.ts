@@ -1,3 +1,4 @@
+﻿import { beginReleaseUpgrade, completeReleaseUpgrade, validateReleaseSchema } from "./releaseUpgrade";
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
@@ -919,22 +920,57 @@ export function openDb() {
   db.pragma("foreign_keys = ON");    // Integridad referencial
   db.pragma("temp_store = MEMORY");  // Tablas temp en memoria
 
-  const safety = initializeDataSafety(db, dbPath, app.getVersion());
+  const safety = initializeDataSafety(
+    db,
+    dbPath,
+    app.getVersion(),
+  );
+
+  const releaseUpgrade = beginReleaseUpgrade(
+    db,
+    dbPath,
+    app.getVersion(),
+  );
 
   try {
     ensureSchema(db);
+    validateReleaseSchema(db);
     assertDatabaseIntegrity(db);
+
+    completeReleaseUpgrade(
+      db,
+      releaseUpgrade,
+    );
   } catch (error) {
     db.close();
-    if (safety.backupPath) {
-      restoreDatabaseFile(dbPath, safety.backupPath);
-      console.error(`Base restaurada desde: ${safety.backupPath}`);
+
+    const restoreFrom =
+      releaseUpgrade.backupPath ??
+      safety.backupPath;
+
+    if (restoreFrom) {
+      restoreDatabaseFile(
+        dbPath,
+        restoreFrom,
+      );
+
+      console.error(
+        `Base restaurada desde: ${restoreFrom}`,
+      );
     }
+
     throw error;
   }
 
-  if (safety.backupPath) {
-    console.log(`Respaldo previo a actualizacion: ${safety.backupPath}`);
+  if (releaseUpgrade.backupPath) {
+    console.log(
+      `Respaldo previo al upgrade ${app.getVersion()}: ` +
+      releaseUpgrade.backupPath,
+    );
+  } else if (safety.backupPath) {
+    console.log(
+      `Respaldo previo a actualizacion: ${safety.backupPath}`,
+    );
   }
 
   return { db, dbPath };
@@ -951,5 +987,6 @@ export function getDbFilePath(): string {
     return path.resolve(process.cwd(), "..", "cartera-dashboard-test-data", "data", "cartera.db");
   }
 }
+
 
 

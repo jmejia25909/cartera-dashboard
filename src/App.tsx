@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+﻿import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
 import "./pages/gestion/gestion.css";
 import { GestionFiltersPanel, GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
@@ -20,6 +20,7 @@ import {
   DashboardPage,
   PromisesPage,
   ReportsPage,
+  ManagementReportsPage,
   TendenciasPage,
 } from "./pages";
 import {
@@ -1903,6 +1904,10 @@ export default function App() {
       );
     }
 
+    if (tab === "gerencia") {
+      return <ManagementReportsPage />;
+    }
+
     if (tab === "reportes") {
       const exportarReporteCarteraPdf = async (): Promise<void> => {
         if (docsFiltrados.length === 0) {
@@ -2513,6 +2518,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 

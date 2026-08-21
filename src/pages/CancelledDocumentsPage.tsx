@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { getElectronApi } from "../app/api";
 import { createPdfContext, generateCancelledDocumentsReport } from "../pdf";
 
@@ -10,7 +10,7 @@ type PreviewRow = {
   normalizedDocumentNumber: string;
   sourceStatus: string;
   authorizationNumber: string;
-  matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "YA_ANULADO";
+  matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "YA_ANULADO" | "DUPLICADO_HISTORICO";
   customer: string | null;
   activePayments: number;
 };
@@ -22,6 +22,7 @@ type PreviewResult = {
   companyName: string;
   reportTitle: string;
   totalRows: number;
+  historicalDuplicates: number;
   foundDocuments: number;
   alreadyCancelledDocuments: number;
   unmatchedDocuments: number;
@@ -222,10 +223,11 @@ export function CancelledDocumentsPage() {
 
       {preview && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(150px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(140px, 1fr))", gap: 12 }}>
             {[
               ["Registros", preview.totalRows],
-              ["Encontrados", preview.foundDocuments],
+              ["Nuevos", preview.foundDocuments],
+              ["Duplicados históricos", preview.historicalDuplicates],
               ["Ya anulados", preview.alreadyCancelledDocuments],
               ["No encontrados", preview.unmatchedDocuments],
               ["Abonos a reversar", preview.paymentsToReverse],
@@ -334,3 +336,4 @@ export function CancelledDocumentsPage() {
     </section>
   );
 }
+

@@ -1,0 +1,1002 @@
+﻿.mgr-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+}
+
+.mgr-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-end;
+}
+
+.mgr-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  opacity: .58;
+}
+
+.mgr-header h1 {
+  margin: 4px 0;
+  font-size: 28px;
+}
+
+.mgr-header p,
+.mgr-preview-header p {
+  margin: 0;
+  opacity: .65;
+}
+
+.mgr-period {
+  display: flex;
+  gap: 10px;
+}
+
+.mgr-period label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mgr-period select {
+  min-width: 130px;
+  padding: 9px 11px;
+  border: 1px solid var(--border, #d9dee7);
+  border-radius: 8px;
+  background: var(--card, #fff);
+  color: inherit;
+}
+
+.mgr-freshness,
+.mgr-preview {
+  border: 1px solid var(--border, #d9dee7);
+  border-radius: 12px;
+  background: var(--card, #fff);
+  padding: 16px;
+}
+
+.mgr-freshness-ok {
+  border-left: 4px solid #16a34a;
+}
+
+.mgr-freshness-warning {
+  border-left: 4px solid #d97706;
+}
+
+.mgr-freshness-title,
+.mgr-preview-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+
+.mgr-freshness-title > div {
+  display: grid;
+  gap: 3px;
+}
+
+.mgr-freshness-title span {
+  font-size: 12px;
+  opacity: .65;
+}
+
+.mgr-status {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px !important;
+  font-weight: 800;
+  letter-spacing: .05em;
+  background: rgba(217, 119, 6, .10);
+}
+
+.mgr-freshness-ok .mgr-status {
+  background: rgba(22, 163, 74, .10);
+}
+
+.mgr-source-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.mgr-source-grid article {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 9px;
+}
+
+.mgr-source-grid span,
+.mgr-source-grid small {
+  font-size: 11px;
+  opacity: .65;
+}
+
+.mgr-warning-list {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mgr-catalog {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mgr-report-card {
+  display: grid;
+  gap: 5px;
+  text-align: left;
+  padding: 14px;
+  border: 1px solid var(--border, #d9dee7);
+  border-radius: 10px;
+  background: var(--card, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.mgr-report-card:hover,
+.mgr-report-card.active {
+  border-color: #2563eb;
+}
+
+.mgr-report-card.active {
+  box-shadow: inset 0 3px 0 #2563eb;
+}
+
+.mgr-report-card small {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  opacity: .55;
+}
+
+.mgr-report-card strong {
+  font-size: 14px;
+}
+
+.mgr-report-card span {
+  font-size: 12px;
+  opacity: .65;
+}
+
+.mgr-preview-header span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  opacity: .55;
+}
+
+.mgr-preview-header h2 {
+  margin: 3px 0;
+  font-size: 20px;
+}
+
+.mgr-export-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mgr-export-actions button {
+  padding: 8px 14px;
+  border: 1px solid var(--border, #d9dee7);
+  border-radius: 8px;
+  background: var(--card, #fff);
+  color: inherit;
+  font-weight: 700;
+}
+
+.mgr-export-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .4;
+}
+
+.mgr-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.mgr-kpis article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 9px;
+}
+
+.mgr-kpis span {
+  font-size: 11px;
+  opacity: .6;
+}
+
+.mgr-kpis strong {
+  font-size: 18px;
+}
+
+.mgr-table-wrapper {
+  overflow: auto;
+  margin-top: 16px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 9px;
+}
+
+.mgr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mgr-table th,
+.mgr-table td {
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border, #edf0f4);
+  text-align: left;
+}
+
+.mgr-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 10px;
+  background: var(--card, #fff);
+}
+
+.mgr-state {
+  padding: 36px;
+  text-align: center;
+  opacity: .65;
+}
+
+.mgr-error {
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
+  .mgr-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mgr-period {
+    width: 100%;
+  }
+
+  .mgr-period label {
+    flex: 1;
+  }
+
+  .mgr-period select {
+    width: 100%;
+  }
+
+  .mgr-source-grid,
+  .mgr-catalog,
+  .mgr-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .mgr-source-grid,
+  .mgr-catalog,
+  .mgr-kpis {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   FIX 005 - Vista previa gerencial
+   ============================================================ */
+
+.mgr-table-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+
+.mgr-table-summary strong {
+  font-size: 14px;
+}
+
+.mgr-table-summary span {
+  opacity: .62;
+}
+
+.mgr-table-wrapper {
+  max-height: 480px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.mgr-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 800;
+  letter-spacing: .025em;
+  border-bottom: 1px solid #cbd5e1;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .05);
+}
+
+.mgr-table tbody tr:hover {
+  background: rgba(37, 99, 235, .035);
+}
+
+.mgr-table td {
+  color: var(--text-main, #0f172a);
+}
+
+/* ============================================================
+   PACK 006.3 - Aging gerencial
+   ============================================================ */
+
+.mgr-current-cutoff-note {
+  margin-left: auto;
+  margin-right: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .58;
+}
+
+.mgr-aging-section {
+  margin: 16px 0 18px;
+}
+
+.mgr-aging-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+.mgr-aging-title strong {
+  font-size: 13px;
+}
+
+.mgr-aging-title span {
+  font-size: 11px;
+  opacity: .58;
+}
+
+.mgr-aging-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.mgr-aging-card {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 9px;
+  background: var(--card, #fff);
+}
+
+.mgr-aging-card > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mgr-aging-card > div strong {
+  font-size: 11px;
+}
+
+.mgr-aging-card > div span {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: .55;
+}
+
+.mgr-aging-card b {
+  font-size: 15px;
+}
+
+.mgr-aging-card small {
+  font-size: 10px;
+  opacity: .58;
+}
+
+.mgr-period select:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1050px) {
+  .mgr-aging-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .mgr-aging-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   PACK 007 - Vista única + frescura compacta + paginación
+   ============================================================ */
+
+.mgr-page {
+  gap: 12px;
+  padding: 18px 22px;
+}
+
+.mgr-freshness {
+  padding: 11px 13px;
+}
+
+.mgr-freshness-title {
+  margin-bottom: 8px;
+}
+
+.mgr-source-grid {
+  margin-top: 0;
+  gap: 8px;
+}
+
+.mgr-source-card {
+  min-height: 62px;
+  padding: 8px 10px !important;
+  gap: 2px !important;
+}
+
+.mgr-source-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mgr-source-card-header span {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: .62;
+}
+
+.mgr-source-card-header strong {
+  font-size: 11px;
+}
+
+.mgr-source-card small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.3;
+  opacity: .58;
+}
+
+.mgr-source-updated strong {
+  color: #15803d;
+}
+
+.mgr-source-partial strong {
+  color: #d97706;
+}
+
+.mgr-source-no_data strong {
+  color: #dc2626;
+}
+
+/* Ya no mostramos listado de warnings inferior */
+.mgr-warning-list {
+  display: none !important;
+}
+
+/* Selector de reportes como pestañas/tarjetas en una sola fila */
+.mgr-catalog {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mgr-report-card {
+  min-height: 70px;
+  padding: 10px 12px;
+  gap: 3px;
+}
+
+.mgr-report-card small {
+  font-size: 9px;
+}
+
+.mgr-report-card strong {
+  font-size: 12px;
+}
+
+.mgr-report-card span {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.mgr-report-card.active {
+  box-shadow: inset 0 2px 0 #2563eb;
+}
+
+/* Preview único */
+.mgr-preview {
+  padding: 13px 14px;
+}
+
+.mgr-kpis {
+  margin: 12px 0;
+  gap: 8px;
+}
+
+.mgr-kpis article {
+  padding: 9px 10px;
+}
+
+.mgr-kpis strong {
+  font-size: 16px;
+}
+
+/* Tabla compacta */
+.mgr-table-wrapper {
+  max-height: 390px;
+  margin-top: 8px;
+}
+
+.mgr-table th,
+.mgr-table td {
+  padding: 7px 9px;
+}
+
+.mgr-table-summary {
+  margin-top: 10px;
+}
+
+/* Paginación */
+.mgr-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 2px 0;
+  font-size: 11px;
+}
+
+.mgr-pagination > span {
+  opacity: .62;
+}
+
+.mgr-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mgr-pagination-controls strong {
+  min-width: 110px;
+  text-align: center;
+  font-size: 11px;
+}
+
+.mgr-pagination-controls button {
+  width: 30px;
+  height: 28px;
+  border: 1px solid var(--border, #d9dee7);
+  border-radius: 7px;
+  background: var(--card, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.mgr-pagination-controls button:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .mgr-catalog {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .mgr-catalog {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .mgr-catalog {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================
+   PACK 008.1 - Visualización gerencial de recaudación
+   ============================================================ */
+
+.mgr-chart-card {
+  margin: 4px 0 12px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--border, #dfe4ec);
+  border-radius: 10px;
+  background: var(--card, #fff);
+}
+
+.mgr-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.mgr-chart-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mgr-chart-header strong {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mgr-chart-header span,
+.mgr-chart-header small {
+  font-size: 10px;
+  opacity: .58;
+}
+
+.mgr-chart-container {
+  width: 100%;
+  height: 220px;
+}
+
+.mgr-chart-empty {
+  display: grid;
+  place-items: center;
+  min-height: 130px;
+  font-size: 11px;
+  opacity: .55;
+}
+
+.mgr-chart-card .recharts-cartesian-grid line {
+  opacity: .4;
+}
+
+.mgr-chart-card .recharts-text {
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .mgr-chart-container {
+    height: 190px;
+  }
+
+  .mgr-chart-header {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+/* ============================================================
+   MANAGEMENT TABLE 004
+   Header físico independiente del scroll vertical
+   ============================================================ */
+
+.mgr-table-shell {
+  width: 100%;
+  border: 1px solid #d9e2ff;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* ------------------------------------------------------------
+   HEADER
+   No tiene scroll vertical.
+   El scroll horizontal se sincroniza desde el body.
+   ------------------------------------------------------------ */
+
+.mgr-table-header {
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
+
+  background: #fff;
+  border-bottom: 1px solid #d9e2ff;
+}
+
+.mgr-table-head {
+  width: 100%;
+  min-width: max-content;
+}
+
+
+/* ------------------------------------------------------------
+   BODY
+   ÚNICO CONTENEDOR CON SCROLL
+   ------------------------------------------------------------ */
+
+.mgr-table-body {
+  width: 100%;
+  max-height: 390px;
+
+  overflow-x: auto;
+  overflow-y: auto;
+
+  scrollbar-gutter: stable;
+}
+
+.mgr-table-data {
+  width: 100%;
+  min-width: max-content;
+}
+
+
+/* ------------------------------------------------------------
+   TABLAS
+   ------------------------------------------------------------ */
+
+.mgr-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mgr-table th,
+.mgr-table td {
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.mgr-table-head th {
+  background: #fff;
+  font-weight: 700;
+
+  /* Ya NO usamos sticky */
+  position: static !important;
+}
+
+
+/*
+ * Quitamos borde superior de la primera fila
+ * porque el header ya tiene su propio borde.
+ */
+.mgr-table-data tbody tr:first-child td {
+  border-top: 0;
+}
+
+
+/* Anular reglas antiguas del wrapper */
+.mgr-table-wrapper {
+  display: none;
+}
+
+
+/* ============================================================
+   MANAGEMENT TABLE 005
+   Sincronización exacta de columnas header/body
+   ============================================================ */
+
+.mgr-table-head,
+.mgr-table-data {
+  table-layout: fixed;
+}
+
+.mgr-table-head th,
+.mgr-table-data td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mgr-table-head th {
+  text-align: left;
+}
+
+
+/* ============================================================
+   PACK 008.2 - Actividad CRM
+   ============================================================ */
+
+.mgr-crm-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+
+  min-height: 150px;
+  margin-top: 8px;
+  padding: 20px;
+
+  border: 1px dashed var(--border, #d9dee7);
+  border-radius: 10px;
+}
+
+.mgr-crm-empty-icon {
+  display: grid;
+  place-items: center;
+
+  width: 46px;
+  height: 46px;
+
+  border-radius: 10px;
+  background: rgba(37, 99, 235, .08);
+
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mgr-crm-empty > div:last-child {
+  display: grid;
+  gap: 4px;
+}
+
+.mgr-crm-empty strong {
+  font-size: 13px;
+}
+
+.mgr-crm-empty span {
+  max-width: 520px;
+  font-size: 11px;
+  opacity: .58;
+}
+
+/* ============================================================
+   PACK 008.3 - Aging gerencial
+   ============================================================ */
+
+.mgr-aging-chart-card {
+  margin-top: 4px;
+  margin-bottom: 10px;
+}
+
+.mgr-aging-chart-container {
+  width: 100%;
+  height: 260px;
+}
+
+.mgr-aging-chart-container .recharts-text {
+  font-size: 10px;
+}
+
+.mgr-aging-chart-container
+.recharts-cartesian-grid line {
+  opacity: .35;
+}
+
+@media (max-width: 720px) {
+  .mgr-aging-chart-container {
+    height: 235px;
+  }
+}
+
+/* ============================================================
+   PACK 008.3.1 - Aging compacto
+   ============================================================ */
+
+.mgr-aging-chart-container {
+  height: 215px;
+}
+
+.mgr-aging-chart-card {
+  margin-bottom: 8px;
+}
+
+/*
+ * El grid anterior ya no se utiliza.
+ * Se conserva únicamente para compatibilidad temporal.
+ */
+.mgr-aging-section,
+.mgr-aging-grid {
+  display: none;
+}
+
+/* ============================================================
+   PACK 008.4.2 - Anulados compacto / sin scroll horizontal
+   ============================================================ */
+
+.mgr-table-shell-cancelled {
+  width: 100%;
+}
+
+/*
+ * Header y body ocupan exactamente el ancho disponible.
+ */
+.mgr-table-shell-cancelled .mgr-table-head,
+.mgr-table-shell-cancelled .mgr-table-data {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+
+/*
+ * En esta vista no necesitamos desplazamiento horizontal.
+ */
+.mgr-table-shell-cancelled .mgr-table-header {
+  overflow-x: hidden !important;
+}
+
+.mgr-table-shell-cancelled .mgr-table-body {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+/*
+ * Compactación visual de columnas.
+ */
+.mgr-table-shell-cancelled th,
+.mgr-table-shell-cancelled td {
+  padding-left: 7px;
+  padding-right: 7px;
+
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Cliente, motivo y archivo pueden ser largos.
+ * Se muestran truncados y el contenido completo
+ * queda disponible mediante title/tooltip.
+ */
+.mgr-table-shell-cancelled td {
+  cursor: default;
+}
+
+
+/* ============================================================
+   PACK 008.5 - Notas de crédito gerencial
+   ============================================================ */
+
+.mgr-table-shell-credit-notes {
+  width: 100%;
+}
+
+.mgr-table-shell-credit-notes .mgr-table-head,
+.mgr-table-shell-credit-notes .mgr-table-data {
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed !important;
+}
+
+.mgr-table-shell-credit-notes .mgr-table-header {
+  overflow-x: hidden !important;
+}
+
+.mgr-table-shell-credit-notes .mgr-table-body {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.mgr-table-shell-credit-notes th,
+.mgr-table-shell-credit-notes td {
+  padding-left: 7px;
+  padding-right: 7px;
+
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mgr-table-shell-credit-notes td {
+  cursor: default;
+}
+

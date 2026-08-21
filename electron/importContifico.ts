@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+﻿import * as XLSX from "xlsx";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
@@ -175,16 +175,55 @@ export function importarCarteraPorCobrarExcel(
   );
 
   const previousSnapshot = db.prepare(`
-    SELECT id, fecha_snapshot
-    FROM cartera_snapshots
-    WHERE generation = ?
-    ORDER BY fecha_snapshot DESC, id DESC
+    SELECT
+      cs.id,
+      cs.fecha_snapshot
+    FROM cartera_snapshots cs
+    INNER JOIN importaciones i
+      ON i.id = cs.importacion_id
+    WHERE cs.generation = ?
+      AND i.estado IN (
+        'COMPLETADA',
+        'COMPLETADA_ADVERTENCIAS'
+      )
+    ORDER BY
+      cs.fecha_snapshot DESC,
+      cs.id DESC
     LIMIT 1
-  `).get(generation) as { id: number; fecha_snapshot: string } | undefined;
+  `).get(generation) as
+    | {
+        id: number;
+        fecha_snapshot: string;
+      }
+    | undefined;
 
 
   const snapshotAnteriorId = previousSnapshot?.id ?? null;
   const baseline = snapshotAnteriorId == null;
+
+  // Override fiscal persistente:
+  // si una anulación ya fue observada anteriormente, una futura Cartera
+  // Contífico no puede reactivar el documento como deuda viva.
+  //
+  // Incluye también anulaciones que originalmente fueron NO_ENCONTRADO.
+  const fiscalCancellationRows = db.prepare(`
+    SELECT
+      documento_normalizado,
+      MAX(fecha_anulacion) AS fecha_anulacion
+    FROM documentos_anulados_log
+    WHERE TRIM(COALESCE(documento_normalizado, '')) <> ''
+    GROUP BY documento_normalizado
+  `).all() as Array<{
+    documento_normalizado: string;
+    fecha_anulacion: string | null;
+  }>;
+
+  const fiscalCancellations = new Map<string, string | null>(
+    fiscalCancellationRows.map((row) => [
+      row.documento_normalizado,
+      row.fecha_anulacion ?? null,
+    ]),
+  );
 
   const previousRows: PortfolioSnapshotDocument[] = snapshotAnteriorId
     ? (db.prepare(`
@@ -434,6 +473,21 @@ export function importarCarteraPorCobrarExcel(
       AND documento_normalizado = ?
   `);
 
+  const applyFiscalCancellation = db.prepare(`
+    UPDATE documentos
+    SET estado_documento = 'ANULADO',
+        estado_confirmacion = 'CONFIRMADO',
+        estado_fuente = 'ANULADOS',
+        anulado = 1,
+        saldo_pendiente = 0,
+        fecha_anulacion = ?,
+        motivo_anulacion = 'Override fiscal persistente por Documentos Anulados',
+        fuente_anulacion = 'DOCUMENTOS_ANULADOS_LOG',
+        ultima_conciliacion_en = datetime('now', 'localtime')
+    WHERE is_subtotal = 0
+      AND documento_normalizado = ?
+  `);
+
   let insertedDocs = 0;
   let insertedClientes = 0;
   let omittedRows = 0;
@@ -608,7 +662,19 @@ export function importarCarteraPorCobrarExcel(
 
     for (const delta of comparison.deltas) {
       if (delta.type === "NO_EVENT") {
+        const fiscalCancellationDate =
+          fiscalCancellations.get(delta.documentoNormalizado);
+
+        if (fiscalCancellations.has(delta.documentoNormalizado)) {
+          applyFiscalCancellation.run(
+            fiscalCancellationDate,
+            delta.documentoNormalizado,
+          );
+          continue;
+        }
+
         const preserved = previousProjection.get(delta.documentoNormalizado);
+
         if (preserved) {
           stmtRestoreProjectionState.run(
             preserved.estadoDocumento,
@@ -619,6 +685,7 @@ export function importarCarteraPorCobrarExcel(
             delta.documentoNormalizado,
           );
         }
+
         continue;
       }
 
@@ -693,7 +760,7 @@ export function importarCarteraPorCobrarExcel(
           presenteEnCartera: true,
           cobrosConfirmados: 0,
           notasCredito: 0,
-          anulado: false,
+          anulado: fiscalCancellations.has(delta.documentoNormalizado),
         });
 
         upsertDocumentBalance(db, {
@@ -728,6 +795,14 @@ export function importarCarteraPorCobrarExcel(
         });
 
         applyCurrentProjection(db, delta.documentoNormalizado, result);
+
+        if (fiscalCancellations.has(delta.documentoNormalizado)) {
+          applyFiscalCancellation.run(
+            fiscalCancellations.get(delta.documentoNormalizado) ?? null,
+            delta.documentoNormalizado,
+          );
+        }
+
         eventosGenerados += 1;
         continue;
       }
@@ -743,7 +818,7 @@ export function importarCarteraPorCobrarExcel(
           presenteEnCartera: true,
           cobrosConfirmados: 0,
           notasCredito: 0,
-          anulado: false,
+          anulado: fiscalCancellations.has(delta.documentoNormalizado),
         });
 
         upsertDocumentBalance(db, {
@@ -779,6 +854,14 @@ export function importarCarteraPorCobrarExcel(
         });
 
         applyCurrentProjection(db, delta.documentoNormalizado, result);
+
+        if (fiscalCancellations.has(delta.documentoNormalizado)) {
+          applyFiscalCancellation.run(
+            fiscalCancellations.get(delta.documentoNormalizado) ?? null,
+            delta.documentoNormalizado,
+          );
+        }
+
         eventosGenerados += 1;
         continue;
       }
@@ -931,3 +1014,5 @@ export function importarCarteraPorCobrarExcel(
 }
 
 export const importContificoExcel = importarCarteraPorCobrarExcel;
+
+

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   DashboardDataQualityStatus,
 } from "../../types/dashboardExecutive";
 import {
@@ -29,7 +29,7 @@ export function DashboardHeader({
   return (
     <section className="bi-filterbar">
       <div className="bi-month-filter">
-        <strong>Filtrar por mes:</strong>
+        <strong>Período de movimientos:</strong>
 
         {DASHBOARD_MONTHS.map((month) => (
           <button
@@ -87,3 +87,4 @@ export function DashboardHeader({
     </section>
   );
 }
+

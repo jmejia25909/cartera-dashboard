@@ -1,4 +1,4 @@
-// src/global.d.ts
+﻿// src/global.d.ts
 export {};
 
 import type { 
@@ -22,6 +22,14 @@ import type {
   CollectionReconciliationResult,
   SaveCollectionPeriodReconciliationInput,
 } from '../../types/collectionReconciliation';
+import type {
+  ManagementReportFilters,
+  ManagementReportsSummary,
+} from '../../types/managementReports';
+import type {
+  ManagementReportDetailRequest,
+  ManagementReportDetailResult,
+} from '../../types/managementReportDetails';
 
 declare global {
   interface Window {
@@ -64,6 +72,7 @@ declare global {
         companyName: string;
         reportTitle: string;
         totalRows: number;
+        historicalDuplicates: number;
         foundDocuments: number;
         alreadyCancelledDocuments: number;
         unmatchedDocuments: number;
@@ -164,6 +173,14 @@ declare global {
         filters?: DashboardExecutiveFilters,
       ) => Promise<DashboardExecutiveStats>;
 
+      managementReportsSummary: (
+        filters: ManagementReportFilters,
+      ) => Promise<ManagementReportsSummary>;
+
+      managementReportDetail: (
+        request: ManagementReportDetailRequest,
+      ) => Promise<ManagementReportDetailResult>;
+
       collectionReconciliationGet: (payload: { year: number; month: number }) => Promise<CollectionReconciliationResult>;
       collectionReconciliationSave: (payload: SaveCollectionPeriodReconciliationInput) => Promise<CollectionReconciliationResult>;
 
@@ -212,3 +229,6 @@ declare global {
     api?: Window['carteraApi'];
   }
 }
+
+
+

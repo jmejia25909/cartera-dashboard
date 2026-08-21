@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import * as XLSX from "xlsx";
 import type Database from "better-sqlite3";
 import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
@@ -12,7 +12,7 @@ export type CancelledDocumentPreviewRow = {
   normalizedDocumentNumber: string;
   sourceStatus: string;
   authorizationNumber: string;
-  matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "YA_ANULADO";
+  matchStatus: "ENCONTRADO" | "NO_ENCONTRADO" | "YA_ANULADO" | "DUPLICADO_HISTORICO";
   customer: string | null;
   activePayments: number;
 };
@@ -26,6 +26,7 @@ export type CancelledDocumentPreviewResult = {
   totalRows: number;
   uniqueDocuments: number;
   duplicateRows: number;
+  historicalDuplicates: number;
   foundDocuments: number;
   alreadyCancelledDocuments: number;
   unmatchedDocuments: number;
@@ -40,6 +41,7 @@ export type CancelledDocumentImportResult = {
   totalRows: number;
   uniqueDocuments: number;
   duplicateRows: number;
+  historicalDuplicates: number;
   matchedDocuments: number;
   alreadyCancelledDocuments: number;
   cancelledDocuments: number;
@@ -72,6 +74,19 @@ type ParsedCancelledReport = {
   }>;
 };
 
+function buildCancellationEventKey(args: {
+  normalizedDocumentNumber: string;
+  cancellationDate: string;
+  authorizationNumber: string;
+}): string {
+  const eventIdentity = [
+    args.normalizedDocumentNumber,
+    args.cancellationDate || "SIN_FECHA",
+    args.authorizationNumber || "SIN_AUTORIZACION",
+  ].join(":");
+
+  return `ANULACION_CONFIRMADA:${eventIdentity}`;
+}
 function normalizeHeader(value: unknown): string {
   return String(value ?? "")
     .trim()
@@ -304,7 +319,24 @@ export function previewCancelledDocumentsExcel(
       AND documento_normalizado = ?
   `);
 
+  const eventAlreadyProcessed = db.prepare(`
+    SELECT 1
+    FROM documento_eventos
+    WHERE event_key = ?
+    LIMIT 1
+  `);
+
+  const cancellationAlreadyLogged = db.prepare(`
+    SELECT 1
+    FROM documentos_anulados_log
+    WHERE documento_normalizado = ?
+      AND COALESCE(fecha_anulacion, '') = COALESCE(?, '')
+      AND COALESCE(numero_autorizacion, '') = COALESCE(?, '')
+    LIMIT 1
+  `);
+
   const seenDocuments = new Set<string>();
+  let historicalDuplicates = 0;
   let foundDocuments = 0;
   let alreadyCancelledDocuments = 0;
   let unmatchedDocuments = 0;
@@ -315,7 +347,25 @@ export function previewCancelledDocumentsExcel(
     let matchStatus: CancelledDocumentPreviewRow["matchStatus"];
     let activePayments = 0;
 
-    if (!document) {
+    const cancellationEventKey = buildCancellationEventKey({
+      normalizedDocumentNumber: row.normalizedDocumentNumber,
+      cancellationDate: row.cancellationDate,
+      authorizationNumber: row.authorizationNumber,
+    });
+
+    const historicalDuplicate =
+      Boolean(eventAlreadyProcessed.get(cancellationEventKey)) ||
+      Boolean(
+        cancellationAlreadyLogged.get(
+          row.normalizedDocumentNumber,
+          row.cancellationDate || "",
+          row.authorizationNumber || "",
+        ),
+      );
+
+    if (historicalDuplicate) {
+      matchStatus = "DUPLICADO_HISTORICO";
+    } else if (!document) {
       matchStatus = "NO_ENCONTRADO";
     } else if (
       document.anulado === 1 ||
@@ -338,7 +388,9 @@ export function previewCancelledDocumentsExcel(
     if (!seenDocuments.has(row.normalizedDocumentNumber)) {
       seenDocuments.add(row.normalizedDocumentNumber);
 
-      if (matchStatus === "NO_ENCONTRADO") {
+      if (matchStatus === "DUPLICADO_HISTORICO") {
+        historicalDuplicates += 1;
+      } else if (matchStatus === "NO_ENCONTRADO") {
         unmatchedDocuments += 1;
       } else if (matchStatus === "YA_ANULADO") {
         alreadyCancelledDocuments += 1;
@@ -368,6 +420,7 @@ export function previewCancelledDocumentsExcel(
     totalRows: rows.length,
     uniqueDocuments,
     duplicateRows,
+    historicalDuplicates,
     foundDocuments,
     alreadyCancelledDocuments,
     unmatchedDocuments,
@@ -459,8 +512,27 @@ export function importCancelledDocumentsExcel(
   );
 
   const cutoff = (db.prepare(`SELECT cutoff_date FROM reconciliation_control WHERE id=1`).get() as { cutoff_date?: string } | undefined)?.cutoff_date ?? "2024-01-01";
-  const replayRows = uniqueRows.filter((row) => !row.cancellationDate || row.cancellationDate >= cutoff).sort((a, b) => a.cancellationDate.localeCompare(b.cancellationDate));
+  const eventAlreadyProcessed = db.prepare(`
+    SELECT 1
+    FROM documento_eventos
+    WHERE event_key = ?
+    LIMIT 1
+  `);
 
+  const cancellationAlreadyLogged = db.prepare(`
+    SELECT 1
+    FROM documentos_anulados_log
+    WHERE documento_normalizado = ?
+      AND COALESCE(fecha_anulacion, '') = COALESCE(?, '')
+      AND COALESCE(numero_autorizacion, '') = COALESCE(?, '')
+    LIMIT 1
+  `);
+
+  const replayRows = uniqueRows
+    .filter((row) => !row.cancellationDate || row.cancellationDate >= cutoff)
+    .sort((a, b) => a.cancellationDate.localeCompare(b.cancellationDate));
+
+  let historicalDuplicates = 0;
   let matchedDocuments = 0;
   let alreadyCancelledDocuments = 0;
   let cancelledDocuments = 0;
@@ -470,6 +542,28 @@ export function importCancelledDocumentsExcel(
   const transaction = db.transaction(() => {
     for (const row of replayRows) {
       const document = documentsByKey.get(row.normalizedDocumentNumber);
+
+      const cancellationEventKey = buildCancellationEventKey({
+        normalizedDocumentNumber: row.normalizedDocumentNumber,
+        cancellationDate: row.cancellationDate,
+        authorizationNumber: row.authorizationNumber,
+      });
+
+      const historicalDuplicate =
+        Boolean(eventAlreadyProcessed.get(cancellationEventKey)) ||
+        Boolean(
+          cancellationAlreadyLogged.get(
+            row.normalizedDocumentNumber,
+            row.cancellationDate || "",
+            row.authorizationNumber || "",
+          ),
+        );
+
+      if (historicalDuplicate) {
+        historicalDuplicates += 1;
+        continue;
+      }
+
       let result = "NO_ENCONTRADO";
 
       if (!document) {
@@ -505,9 +599,6 @@ export function importCancelledDocumentsExcel(
           row.cancellationDate || "SIN_FECHA",
           row.authorizationNumber || "SIN_AUTORIZACION",
         ].join(":");
-
-        const cancellationEventKey =
-          `ANULACION_CONFIRMADA:${eventIdentity}`;
 
         insertDocumentEvent(db, {
           eventKey: cancellationEventKey,
@@ -592,7 +683,7 @@ export function importCancelledDocumentsExcel(
         SET
           registros_leidos = ?,
           registros_importados = ?,
-          registros_ignorados = 0,
+          registros_ignorados = ?,
           registros_duplicados = ?,
           estado = 'COMPLETADA',
           observacion = ?,
@@ -600,7 +691,8 @@ export function importCancelledDocumentsExcel(
         WHERE id = ?
       `).run(
         preview.totalRows,
-        preview.uniqueDocuments,
+        Math.max(0, replayRows.length - historicalDuplicates),
+        historicalDuplicates,
         preview.duplicateRows,
         `Anulados procesados: ${preview.uniqueDocuments} documentos únicos; ` +
           `${preview.duplicateRows} filas duplicadas consolidadas; ` +
@@ -609,6 +701,7 @@ export function importCancelledDocumentsExcel(
           totalRows: preview.totalRows,
           uniqueDocuments: preview.uniqueDocuments,
           duplicateRows: preview.duplicateRows,
+          historicalDuplicates,
           matchedDocuments,
           alreadyCancelledDocuments,
           cancelledDocuments,
@@ -628,6 +721,7 @@ export function importCancelledDocumentsExcel(
     totalRows: preview.totalRows,
     uniqueDocuments: preview.uniqueDocuments,
     duplicateRows: preview.duplicateRows,
+    historicalDuplicates,
     matchedDocuments,
     alreadyCancelledDocuments,
     cancelledDocuments,
@@ -640,3 +734,4 @@ export function importCancelledDocumentsExcel(
       `${cancelledDocuments} anulados y ${unmatchedDocuments} no encontrados.`,
   };
 }
+

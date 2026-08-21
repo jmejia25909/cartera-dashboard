@@ -1,64 +1,92 @@
+﻿# ============================================================
+# ZENITH CARTERA - GITIGNORE
+# ============================================================
+
 # Dependencias
 node_modules/
+.pnpm-store/
 
-# Compilación y empaquetado
+# Builds / distribución
 dist/
 dist-electron/
-dist-ssr/
 release/
 out/
-coverage/
-.vite/
 *.tsbuildinfo
-vite.config.js
-vite.config.d.ts
 
-# Variables de entorno y secretos
-.env
-.env.*
-!.env.example
-*.local
-
-# Bases de datos locales
+# Bases de datos y almacenamiento local
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
+data/
+backups/
 
 # Logs
-logs/
 *.log
+logs/
 npm-debug.log*
+pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
-# Respaldos y archivos temporales
-backup-*.zip
-cartera-dashboard-backup-*.zip
-respaldo/
-_BACKUP_*/
-_RECOVERY_*/
-_AUDITORIA_*/
+# Temporales / respaldos
 *.tmp
 *.temp
+*.bak
+*.bak-*
+*.old
+*~
+*.swp
 
-# Editores y sistema operativo
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
+# Paquetes y contextos temporales
+PACK*_CONTEXT/
+PACK*_CONTEXT.txt
+PACK*_CONTEXT.zip
+SINGLE_QA_DB_CONTEXT*
+_BACKUP_*/
+_pack_backups/
+
+# Diagnósticos temporales de desarrollo
+diagnostico-*.cjs
+auditoria-*.cjs
+cleanup-*.cjs
+backfill-*.cjs
+fragmentos-*.txt
+
+# Instaladores / binarios
+*.exe
+*.blockmap
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# IDE / SO
+.vscode/
 .idea/
 .DS_Store
 Thumbs.db
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+desktop.ini
 
-# Backups y paquetes temporales
-*.backup-*
-/ARCHITECTURE-PACK-*.zip
-/cartera-dashboard-*.zip
+# Cobertura y resultados temporales de pruebas
+coverage/
+playwright-report/
+test-results/
+tests/.build/
+
+# ============================================================
+# BRANDING OFICIAL
+# ============================================================
+
+# El icono corporativo SÍ pertenece al repositorio.
+!build/
+build/*
+!build/icon.ico
+
+# Configuraciones JS/DTS generadas desde TypeScript
+vite.config.js
+vite.config.d.ts
+electron.vite.config.js
+electron.vite.config.d.ts

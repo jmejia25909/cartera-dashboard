@@ -1,9 +1,11 @@
-﻿import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+﻿import { app, BrowserWindow, ipcMain, dialog, shell, session } from "electron";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join, extname } from "node:path";
 import { validateExcelStructure } from "./excelStructureValidator";
 import { openDb, getDbFilePath } from "./db";
 import { computeDashboardExecutiveStats } from "./dashboardExecutive";
+import { getManagementReportsSummary } from "./managementReports";
+import { getManagementReportDetail } from "./managementReportDetails";
 import { importContificoExcel } from "./importContifico";
 import { reconcileCollections } from "./collectionReconciliation";
 import {
@@ -39,6 +41,17 @@ const __dirname = dirname(__filename);
 // Exponer __dirname para dependencias CommonJS (ej. ngrok) en entorno ESM
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (globalThis as any).__dirname = __dirname;
+
+/*
+ * CONTRATO PERMANENTE DE ACTUALIZACIÓN OFFLINE:
+ * el rebranding NO cambia la carpeta persistente histórica.
+ */
+app.setPath(
+  "userData",
+  join(app.getPath("appData"), "cartera-dashboard"),
+);
+
+app.setName("Zenith Cartera");
 
 let mainWindow: BrowserWindow | null = null;
 let db: any;
@@ -742,17 +755,28 @@ async function createWindow() {
       nodeIntegration: false,
     },
     // Intentar cargar icono personalizado
-    icon: fs.existsSync(join(app.getPath('userData'), 'custom-logo.png')) 
-      ? join(app.getPath('userData'), 'custom-logo.png') 
-      : undefined
+    icon: fs.existsSync(join(app.getPath("userData"), "custom-logo.png"))
+      ? join(app.getPath("userData"), "custom-logo.png")
+      : app.isPackaged
+        ? join(process.resourcesPath, "icon.ico")
+        : join(process.cwd(), "build", "icon.ico")
   });
 
   mainWindow.maximize();
   mainWindow.show();
 
   const devUrl = process.env.VITE_DEV_SERVER_URL;
+
   if (devUrl) {
-    await mainWindow.loadURL(devUrl);
+    /*
+     * En desarrollo evitamos que Chromium reutilice módulos ESM
+     * antiguos después de cambios estructurales/HMR.
+     */
+    await session.defaultSession.clearCache();
+
+    await mainWindow.loadURL(
+      `${devUrl}?renderer=${Date.now()}`,
+    );
     if (shouldOpenDevTools()) mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
     await mainWindow.loadFile(join(__dirname, "../dist/index.html"));
@@ -1988,6 +2012,26 @@ ipcMain.handle(
       db,
       new Date(),
       filters || {},
+    );
+  },
+);
+
+ipcMain.handle(
+  "managementReportsSummary",
+  async (_evt, filters) => {
+    return getManagementReportsSummary(
+      db,
+      filters,
+    );
+  },
+);
+
+ipcMain.handle(
+  "managementReportDetail",
+  async (_evt, request) => {
+    return getManagementReportDetail(
+      db,
+      request,
     );
   },
 );
@@ -3394,6 +3438,9 @@ ipcMain.handle("creditPolicySave", (_event, payload: {
 // Legacy import helpers retained temporarily.
 void _parseExcel;
 void _saveDocumentsToDb;
+
+
+
 
 
 

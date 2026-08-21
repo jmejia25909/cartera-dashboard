@@ -18,6 +18,36 @@ const apiMethods = {
       "dashboardExecutiveStats",
       filters,
     ),
+
+  managementReportsSummary: (filters: {
+    year: number;
+    month?: number | null;
+  }) =>
+    ipcRenderer.invoke(
+      "managementReportsSummary",
+      filters,
+    ),
+  managementReportDetail: (request: {
+    type:
+      | "COLLECTIONS_DETAIL"
+      | "CRM_ACTIVITY"
+      | "PORTFOLIO_AGING"
+      | "CANCELLED_DOCUMENTS"
+      | "CREDIT_NOTES";
+    filters: {
+      year: number;
+      month?: number | null;
+      customer?: string;
+      seller?: string;
+      movementClass?: "COBRO" | "CRUCE" | null;
+      reconciliationStatus?: string | null;
+    };
+  }) =>
+    ipcRenderer.invoke(
+      "managementReportDetail",
+      request,
+    ),
+
   collectionReconciliationGet: (payload: { year: number; month: number }) => ipcRenderer.invoke("collectionReconciliationGet", payload),
   collectionReconciliationSave: (payload: { year: number; month: number; officialValue: number; observation?: string; user?: string }) => ipcRenderer.invoke("collectionReconciliationSave", payload),
   filtrosListar: () => ipcRenderer.invoke("filtrosListar"),
@@ -97,3 +127,6 @@ const apiMethods = {
 
 contextBridge.exposeInMainWorld("carteraApi", apiMethods);
 contextBridge.exposeInMainWorld("api", apiMethods);
+
+
+

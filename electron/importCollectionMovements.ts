@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+﻿import type Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
@@ -44,6 +44,7 @@ export interface CollectionMovementPreviewResult {
   legacyRows: number;
   uniqueMovements: number;
   duplicateRows: number;
+  historicalDuplicates: number;
   matchedDocuments: number;
   unmatchedDocuments: number;
   missingDocument: number;
@@ -288,6 +289,13 @@ function parseReport(
     LIMIT 1
   `);
 
+  const existsHistoricalMovement = db.prepare(`
+    SELECT 1
+    FROM cobros_movimientos_importados
+    WHERE movimiento_key = ?
+    LIMIT 1
+  `);
+
   const rows: CollectionMovementPreviewRow[] = [];
   let ignoredPayments = 0;
 
@@ -404,6 +412,10 @@ function parseReport(
     );
   }
 
+  const historicalDuplicates = uniqueRows.filter(
+    (row) => Boolean(existsHistoricalMovement.get(row.movementKey)),
+  ).length;
+
   const matchedDocuments = uniqueRows.filter(
     (row) => row.matchStatus === "ENCONTRADO",
   ).length;
@@ -434,6 +446,7 @@ function parseReport(
     legacyRows,
     uniqueMovements: uniqueRows.length,
     duplicateRows: Math.max(rows.length - uniqueRows.length, 0),
+    historicalDuplicates,
     matchedDocuments,
     unmatchedDocuments,
     missingDocument,
@@ -465,7 +478,12 @@ export function importCollectionMovementsExcel(
   );
 
   const existsLedger = db.prepare(`
-    SELECT 1
+    SELECT
+      id,
+      movimiento_key,
+      estado_conciliacion,
+      importacion_id,
+      documento_relacionado_normalizado
     FROM cobros_movimientos_importados
     WHERE movimiento_key = ?
     LIMIT 1
@@ -510,15 +528,24 @@ export function importCollectionMovementsExcel(
   `);
 
   const currentDocument = db.prepare(`
-    SELECT estado_documento
+    SELECT
+      estado_documento
     FROM documentos
     WHERE is_subtotal = 0
       AND documento_normalizado = ?
     LIMIT 1
   `);
 
+  const markMovementReconciled = db.prepare(`
+    UPDATE cobros_movimientos_importados
+    SET estado_conciliacion = 'CONCILIADO'
+    WHERE id = ?
+      AND estado_conciliacion = 'PENDIENTE_CONCILIACION'
+  `);
+
   let importedMovements = 0;
   let existingMovements = 0;
+  let rehydratedMovements = 0;
   let reconciledMovements = 0;
   let pendingMovements = 0;
 
@@ -527,14 +554,107 @@ export function importCollectionMovementsExcel(
 
   const transaction = db.transaction(() => {
     for (const row of replayRows) {
-      if (existsLedger.get(row.movementKey)) {
-        existingMovements += 1;
-        continue;
-      }
+      const existing = existsLedger.get(row.movementKey) as
+        | {
+            id: number;
+            movimiento_key: string;
+            estado_conciliacion: string;
+            importacion_id: number | null;
+            documento_relacionado_normalizado: string | null;
+          }
+        | undefined;
 
       const linked =
         row.documentoRelacionadoNormalizado &&
         currentDocument.get(row.documentoRelacionadoNormalizado);
+
+      // ======================================================
+      // MOVIMIENTO HISTORICO YA INGRESADO
+      // ======================================================
+      if (existing) {
+        existingMovements += 1;
+
+        // Ya fue conciliado anteriormente: idempotencia pura.
+        if (existing.estado_conciliacion === "CONCILIADO") {
+          continue;
+        }
+
+        // Sigue pendiente porque aún no existe el documento.
+        if (!linked || !row.documentoRelacionadoNormalizado) {
+          pendingMovements += 1;
+          continue;
+        }
+
+        // ------------------------------------------------------
+        // REHIDRATACION:
+        // el movimiento existía, estaba pendiente y ahora la factura
+        // reapareció. No se reinserta ni se reasigna importacion_id.
+        // ------------------------------------------------------
+        markMovementReconciled.run(existing.id);
+
+        const linkedRow = linked as {
+          estado_documento?: string | null;
+        };
+
+        const eventKey = `COBRO:${row.movementKey}`;
+
+        insertDocumentEvent(db, {
+          eventKey,
+          documentoNormalizado: row.documentoRelacionadoNormalizado,
+          tipoEvento: "COBRO_CONFIRMADO",
+          fuente: "COBROS_MOVIMIENTOS",
+          importe: row.valor,
+          estadoAnterior:
+            linkedRow.estado_documento ?? "ACTIVO_PENDIENTE",
+          estadoNuevo:
+            linkedRow.estado_documento ?? "ACTIVO_PENDIENTE",
+          provisional: false,
+
+          // El evento pertenece conceptualmente a la ingesta original.
+          importacionId: existing.importacion_id ?? importacionId,
+
+          referenciaExterna:
+            row.asiento ||
+            row.codigoComprobante ||
+            row.movementKey.slice(0, 16),
+
+          metadata: {
+            fechaMovimiento: row.fecha,
+            persona: row.persona,
+            identificacion: row.identificacion,
+            formaCobroPago: row.formaCobroPago,
+            codigoComprobante: row.codigoComprobante,
+            documentoCruce: row.documentoCruce,
+            claseMovimiento: row.claseMovimiento,
+            detalle: row.detalle,
+
+            rehidratado: true,
+            rehidratadoPorImportacionId: importacionId,
+
+            regla:
+              "COBRO_EXPLICITO_AUDITABLE_SIN_REDUCIR_BASELINE_ACTUAL",
+          },
+        });
+
+        if (row.fecha) {
+          db.prepare(`
+            UPDATE documento_eventos
+            SET ocurrido_en = ?
+            WHERE event_key = ?
+              AND fuente = 'COBROS_MOVIMIENTOS'
+              AND tipo_evento = 'COBRO_CONFIRMADO'
+          `).run(row.fecha, eventKey);
+        }
+
+        rehydratedMovements += 1;
+        reconciledMovements += 1;
+
+        continue;
+      }
+
+      // ======================================================
+      // MOVIMIENTO REALMENTE NUEVO
+      // ======================================================
 
       const estadoConciliacion = linked
         ? "CONCILIADO"
@@ -563,20 +683,30 @@ export function importCollectionMovementsExcel(
       importedMovements += 1;
 
       if (linked && row.documentoRelacionadoNormalizado) {
-        const linkedRow = linked as { estado_documento?: string | null };
+        const linkedRow = linked as {
+          estado_documento?: string | null;
+        };
+
+        const eventKey = `COBRO:${row.movementKey}`;
 
         insertDocumentEvent(db, {
-          eventKey: `COBRO:${row.movementKey}`,
+          eventKey,
           documentoNormalizado: row.documentoRelacionadoNormalizado,
           tipoEvento: "COBRO_CONFIRMADO",
           fuente: "COBROS_MOVIMIENTOS",
           importe: row.valor,
-          estadoAnterior: linkedRow.estado_documento ?? "ACTIVO_PENDIENTE",
-          estadoNuevo: linkedRow.estado_documento ?? "ACTIVO_PENDIENTE",
+          estadoAnterior:
+            linkedRow.estado_documento ?? "ACTIVO_PENDIENTE",
+          estadoNuevo:
+            linkedRow.estado_documento ?? "ACTIVO_PENDIENTE",
           provisional: false,
           importacionId,
+
           referenciaExterna:
-            row.asiento || row.codigoComprobante || row.movementKey.slice(0, 16),
+            row.asiento ||
+            row.codigoComprobante ||
+            row.movementKey.slice(0, 16),
+
           metadata: {
             fechaMovimiento: row.fecha,
             persona: row.persona,
@@ -586,14 +716,14 @@ export function importCollectionMovementsExcel(
             documentoCruce: row.documentoCruce,
             claseMovimiento: row.claseMovimiento,
             detalle: row.detalle,
+
+            rehidratado: false,
+
             regla:
               "COBRO_EXPLICITO_AUDITABLE_SIN_REDUCIR_BASELINE_ACTUAL",
           },
         });
 
-        // El ledger histórico debe reproducir la fecha económica real, no la fecha
-        // de ingesta. insertDocumentEvent es compartido y conserva su API; aquí
-        // proyectamos ocurrido_en de forma idempotente usando event_key.
         if (row.fecha) {
           db.prepare(`
             UPDATE documento_eventos
@@ -601,7 +731,7 @@ export function importCollectionMovementsExcel(
             WHERE event_key = ?
               AND fuente = 'COBROS_MOVIMIENTOS'
               AND tipo_evento = 'COBRO_CONFIRMADO'
-          `).run(row.fecha, `COBRO:${row.movementKey}`);
+          `).run(row.fecha, eventKey);
         }
 
         reconciledMovements += 1;
@@ -609,9 +739,11 @@ export function importCollectionMovementsExcel(
         pendingMovements += 1;
       }
     }
+    const ignoredTotal =
+      preview.ignoredPayments + existingMovements;
 
     const duplicateTotal =
-      preview.duplicateRows + existingMovements;
+      preview.duplicateRows;
 
     db.prepare(`
       UPDATE importaciones
@@ -627,13 +759,16 @@ export function importCollectionMovementsExcel(
     `).run(
       preview.totalRows,
       importedMovements,
-      preview.ignoredPayments,
+      ignoredTotal,
       duplicateTotal,
       pendingMovements > 0 ? "COMPLETADA_ADVERTENCIAS" : "COMPLETADA",
       `Cobros/Pagos: ${preview.sourceCollections} filas tipo Cobro; ` +
-        `${preview.ignoredPayments} filas tipo Pago excluidas; ` +
+        `${preview.ignoredPayments} filas excluidas; ` +
+        `${existingMovements} movimientos históricos omitidos; ` +
         `${importedMovements} movimientos nuevos; ` +
-        `${reconciledMovements} conciliados; ${pendingMovements} pendientes.`,
+        `${rehydratedMovements} rehidratados; ` +
+        `${reconciledMovements} conciliados en esta ejecución; ` +
+        `${pendingMovements} pendientes.`,
       JSON.stringify({
         sourceCollections: preview.sourceCollections,
         ignoredPayments: preview.ignoredPayments,
@@ -643,7 +778,9 @@ export function importCollectionMovementsExcel(
         uniqueMovements: preview.uniqueMovements,
         duplicateRowsInFile: preview.duplicateRows,
         existingMovements,
+        historicalDuplicates: existingMovements,
         importedMovements,
+        rehydratedMovements,
         reconciledMovements,
         pendingMovements,
         matchedDocuments: preview.matchedDocuments,
@@ -673,3 +810,5 @@ export function importCollectionMovementsExcel(
       `${preview.ignoredPayments} filas tipo Pago excluidas de cartera de clientes.`,
   };
 }
+
+

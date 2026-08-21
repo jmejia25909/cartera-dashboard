@@ -1,6 +1,7 @@
-{
+﻿{
   appId: "com.mm.carteradashboard",
-  productName: "CarteraDashBoardM&M",
+  productName: "Zenith Cartera",
+  artifactName: "Zenith Cartera Setup ${version}.${ext}",
   copyright: "© 2026 Jhon Franklin Mejia Castro (RUC: 0950998104001). All rights reserved.",
   directories: {
     output: "release",
@@ -12,6 +13,9 @@
     "package.json",
     "node_modules/**"
   ],
+  extraResources: [
+    { from: "build/icon.ico", to: "icon.ico" }
+  ],
   asar: true,
   asarUnpack: [
     "node_modules/better-sqlite3/**",
@@ -20,14 +24,19 @@
   npmRebuild: true,
   win: {
     target: ["nsis"],
-    signAndEditExecutable: false
+    icon: "build/icon.ico",
+    signAndEditExecutable: true
   },
   nsis: {
     oneClick: false,
     perMachine: false,
     allowElevation: true,
     allowToChangeInstallationDirectory: true,
+    deleteAppDataOnUninstall: false,
+    installerIcon: "build/icon.ico",
+    uninstallerIcon: "build/icon.ico",
     createDesktopShortcut: true,
     createStartMenuShortcut: true
   }
 }
+

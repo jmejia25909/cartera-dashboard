@@ -221,26 +221,31 @@ export function computeDashboardExecutiveStats(
   `).get() as { value?: string | null } | undefined;
 
   const ultimaDeteccionAbonoRow = db.prepare(`
-    SELECT MAX(fecha) AS value
-    FROM abonos
-    WHERE COALESCE(reversado, 0) = 0
-      AND COALESCE(estado, 'ACTIVO') = 'ACTIVO'
-      AND (
-        COALESCE(total_anterior, 0) -
-        COALESCE(total_nuevo, 0)
-      ) > 0
+    SELECT MAX(fecha_movimiento) AS value
+    FROM cobros_movimientos_importados
+    WHERE clase_movimiento IN ('COBRO', 'CRUCE')
+      AND fecha_movimiento IS NOT NULL
   `).get() as { value?: string | null } | undefined;
 
   const availableYearsRows = db.prepare(`
     SELECT DISTINCT year
     FROM (
-      SELECT CAST(strftime('%Y', fecha) AS INTEGER) AS year
-      FROM abonos
-      WHERE datetime(fecha) IS NOT NULL
+      SELECT
+        CAST(
+          strftime('%Y', fecha_movimiento)
+          AS INTEGER
+        ) AS year
+      FROM cobros_movimientos_importados
+      WHERE fecha_movimiento IS NOT NULL
+        AND clase_movimiento IN ('COBRO', 'CRUCE')
 
       UNION
 
-      SELECT CAST(strftime('%Y', importado_en) AS INTEGER) AS year
+      SELECT
+        CAST(
+          strftime('%Y', importado_en)
+          AS INTEGER
+        ) AS year
       FROM documentos
       WHERE datetime(importado_en) IS NOT NULL
     )
@@ -267,24 +272,16 @@ export function computeDashboardExecutiveStats(
 
   const collectionRows = db.prepare(`
     SELECT
-      observacion,
+      clase_movimiento,
       COUNT(*) AS movimientos,
-      ROUND(
-        SUM(total_anterior - total_nuevo),
-        2
-      ) AS valor
-    FROM abonos
-    WHERE COALESCE(reversado, 0) = 0
-      AND COALESCE(estado, 'ACTIVO') = 'ACTIVO'
-      AND (
-        COALESCE(total_anterior, 0) -
-        COALESCE(total_nuevo, 0)
-      ) > 0
-      AND datetime(fecha) >= datetime(?)
-      AND datetime(fecha) < datetime(?)
-    GROUP BY observacion
+      ROUND(SUM(valor), 2) AS valor
+    FROM cobros_movimientos_importados
+    WHERE fecha_movimiento >= ?
+      AND fecha_movimiento < ?
+      AND clase_movimiento IN ('COBRO', 'CRUCE')
+    GROUP BY clase_movimiento
   `).all(period.from, period.toExclusive) as Array<{
-    observacion: string | null;
+    clase_movimiento: "COBRO" | "CRUCE";
     movimientos: number;
     valor: number;
   }>;
@@ -297,30 +294,19 @@ export function computeDashboardExecutiveStats(
   let otrosDetectados = 0;
 
   for (const item of collectionRows) {
-    const observation = String(item.observacion || "");
     const movements = Number(item.movimientos || 0);
     const amount = Number(item.valor || 0);
 
-    if (
-      observation ===
-      "Abono detectado por cambio de total"
-    ) {
+    if (item.clase_movimiento === "COBRO") {
       movimientosParciales += movements;
       abonosParcialesDetectados += amount;
       continue;
     }
 
-    if (
-      observation ===
-      "Cobro Total: Documento ya no aparece en cartera (Cancelado)"
-    ) {
-      movimientosPorDesaparicion += movements;
-      cierresPorDesaparicionDetectados += amount;
-      continue;
+    if (item.clase_movimiento === "CRUCE") {
+      otrosMovimientos += movements;
+      otrosDetectados += amount;
     }
-
-    otrosMovimientos += movements;
-    otrosDetectados += amount;
   }
 
   const movimientosDetectados =
@@ -332,7 +318,6 @@ export function computeDashboardExecutiveStats(
     abonosParcialesDetectados +
     cierresPorDesaparicionDetectados +
     otrosDetectados;
-
   const collectionReconciliation =
     period.selectedMonth === null
       ? null
@@ -363,51 +348,46 @@ export function computeDashboardExecutiveStats(
 
   const monthlyRows = db.prepare(`
     SELECT
-      CAST(strftime('%m', fecha) AS INTEGER) AS month,
+      CAST(
+        strftime('%m', fecha_movimiento)
+        AS INTEGER
+      ) AS month,
+
       ROUND(
         SUM(
           CASE
-            WHEN observacion =
-              'Abono detectado por cambio de total'
-            THEN total_anterior - total_nuevo
+            WHEN clase_movimiento = 'COBRO'
+            THEN valor
             ELSE 0
           END
         ),
         2
       ) AS partial_payments,
+
+      0 AS disappearances,
+
       ROUND(
         SUM(
           CASE
-            WHEN observacion =
-              'Cobro Total: Documento ya no aparece en cartera (Cancelado)'
-            THEN total_anterior - total_nuevo
-            ELSE 0
-          END
-        ),
-        2
-      ) AS disappearances,
-      ROUND(
-        SUM(
-          CASE
-            WHEN observacion NOT IN (
-              'Abono detectado por cambio de total',
-              'Cobro Total: Documento ya no aparece en cartera (Cancelado)'
-            )
-            THEN total_anterior - total_nuevo
+            WHEN clase_movimiento = 'CRUCE'
+            THEN valor
             ELSE 0
           END
         ),
         2
       ) AS other_movements
-    FROM abonos
-    WHERE COALESCE(reversado, 0) = 0
-      AND COALESCE(estado, 'ACTIVO') = 'ACTIVO'
-      AND (
-        COALESCE(total_anterior, 0) -
-        COALESCE(total_nuevo, 0)
-      ) > 0
-      AND strftime('%Y', fecha) = ?
-    GROUP BY CAST(strftime('%m', fecha) AS INTEGER)
+
+    FROM cobros_movimientos_importados
+
+    WHERE strftime('%Y', fecha_movimiento) = ?
+      AND clase_movimiento IN ('COBRO', 'CRUCE')
+
+    GROUP BY
+      CAST(
+        strftime('%m', fecha_movimiento)
+        AS INTEGER
+      )
+
     ORDER BY month
   `).all(String(period.selectedYear)) as Array<{
     month: number;
@@ -415,7 +395,6 @@ export function computeDashboardExecutiveStats(
     disappearances: number;
     other_movements: number;
   }>;
-
   const monthlyMap = new Map(
     monthlyRows.map((item) => [Number(item.month), item]),
   );
@@ -895,7 +874,7 @@ export function computeDashboardExecutiveStats(
       toExclusive: period.toExclusive,
       availableYears,
       note:
-        "El filtro mensual aplica a movimientos detectados. " +
+        "El filtro mensual aplica a cobros y cruces según su fecha efectiva. " +
         "Los saldos, aging y rankings corresponden al corte actual.",
     },
 
@@ -943,9 +922,9 @@ export function computeDashboardExecutiveStats(
       desde: period.from,
       hastaExclusivo: period.toExclusive,
       nota:
-        "La fecha corresponde a la detección del cambio. " +
-        "Los cierres por desaparición no constituyen cobro " +
-        "bancario conciliado.",
+        "Los valores corresponden a movimientos reales de Contífico " +
+        "según fecha_movimiento. Incluye COBRO y CRUCE, independientemente " +
+        "de que el documento relacionado esté conciliado actualmente.",
     },
 
     operacion: {
@@ -985,8 +964,8 @@ export function computeDashboardExecutiveStats(
       disponible: hasHistoricalMovements,
       motivo:
         hasHistoricalMovements
-          ? "Movimientos detectados por mes."
-          : "No existen movimientos detectados para el año seleccionado.",
+          ? "Cobros y cruces efectivos por mes."
+          : "No existen cobros o cruces para el año seleccionado.",
       series: monthlySeries,
     },
 
@@ -1022,4 +1001,5 @@ export function computeDashboardExecutiveStats(
     ],
   };
 }
+
 

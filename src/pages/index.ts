@@ -1,4 +1,4 @@
-export { DashboardPage } from './DashboardPage';
+﻿export { DashboardPage } from './DashboardPage';
 export { ReportsPage } from './ReportsPage';
 export type { ReportsPageProps } from './ReportsPage';
 
@@ -27,3 +27,5 @@ export type { AbonoItem, AbonosPageProps } from './AbonosPage';
 export { CreditPoliciesPage } from './CreditPoliciesPage';
 
 export { CancelledDocumentsPage } from './CancelledDocumentsPage';
+
+export { ManagementReportsPage } from "./ManagementReportsPage";

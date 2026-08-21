@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import "./import-center.css";
 
 type ImportType =
@@ -58,6 +58,7 @@ type ImportCenterApi = typeof window.carteraApi & {
     totalRows?: number;
     uniqueCreditNotes?: number;
     duplicateRows?: number;
+    historicalDuplicates?: number;
     matchedDocuments?: number;
     unmatchedDocuments?: number;
     missingRelatedDocument?: number;
@@ -79,6 +80,7 @@ type ImportCenterApi = typeof window.carteraApi & {
     ignoredPayments?: number;
     uniqueMovements?: number;
     duplicateRows?: number;
+    historicalDuplicates?: number;
     matchedDocuments?: number;
     unmatchedDocuments?: number;
     missingDocument?: number;
@@ -325,18 +327,33 @@ export function ImportCenterPanel({
         return;
       }
 
+      const uniqueCreditNotes =
+        Number(preview.uniqueCreditNotes ?? 0);
+
+      const historicalDuplicates =
+        Number(preview.historicalDuplicates ?? 0);
+
+      const newCreditNotes = Math.max(
+        0,
+        uniqueCreditNotes - historicalDuplicates,
+      );
+
       const accepted = window.confirm(
         "Vista previa de Notas de Crédito\n\n" +
-          `Registros: ${preview.totalRows ?? 0}\n` +
-          `Notas únicas: ${preview.uniqueCreditNotes ?? 0}\n` +
-          `Duplicados: ${preview.duplicateRows ?? 0}\n` +
+          `Registros leídos: ${preview.totalRows ?? 0}\n` +
+          `Notas de crédito únicas: ${uniqueCreditNotes}\n` +
+          `Nuevas: ${newCreditNotes}\n` +
+          `Duplicados históricos: ${historicalDuplicates}\n` +
+          `Duplicados dentro del archivo: ${preview.duplicateRows ?? 0}\n` +
           `Facturas encontradas: ${preview.matchedDocuments ?? 0}\n` +
           `Facturas no encontradas: ${preview.unmatchedDocuments ?? 0}\n` +
           `Sin documento relacionado: ${preview.missingRelatedDocument ?? 0}\n` +
           `Valor total NC: $${Number(preview.totalAmount ?? 0).toFixed(2)}\n\n` +
+          "Los duplicados históricos no volverán a importarse. " +
+          "Si una NC histórica estaba pendiente y ahora su factura está disponible, " +
+          "el sistema podrá completar su conciliación sin duplicar el movimiento.\n\n" +
           "¿Confirmar importación?",
       );
-
       if (!accepted || !preview.filePath) return;
 
       const result = await api.confirmCreditNotesImport(preview.filePath);
@@ -389,12 +406,25 @@ export function ImportCenterPanel({
           : `${label}: 0 · $0.00`;
       };
 
+      const uniqueMovements =
+        Number(preview.uniqueMovements ?? 0);
+
+      const historicalDuplicates =
+        Number(preview.historicalDuplicates ?? 0);
+
+      const newMovements = Math.max(
+        0,
+        uniqueMovements - historicalDuplicates,
+      );
+
       const accepted = window.confirm(
         "Vista previa de Cobros y Movimientos Relacionados\n\n" +
           `Filas tipo Cobro: ${preview.sourceCollections ?? 0}\n` +
-          `Filas tipo Pago excluidas: ${preview.ignoredPayments ?? 0}\n` +
-          `Movimientos únicos: ${preview.uniqueMovements ?? 0}\n` +
-          `Duplicados en archivo: ${preview.duplicateRows ?? 0}\n` +
+          `Filas excluidas: ${preview.ignoredPayments ?? 0}\n` +
+          `Movimientos únicos: ${uniqueMovements}\n` +
+          `Movimientos nuevos: ${newMovements}\n` +
+          `Duplicados históricos: ${historicalDuplicates}\n` +
+          `Duplicados dentro del archivo: ${preview.duplicateRows ?? 0}\n` +
           `Documentos vigentes encontrados: ${preview.matchedDocuments ?? 0}\n` +
           `Documentos no encontrados: ${preview.unmatchedDocuments ?? 0}\n` +
           `Sin comprobante relacionado: ${preview.missingDocument ?? 0}\n` +
@@ -404,11 +434,11 @@ export function ImportCenterPanel({
           `${classLine("ANTICIPO", "Anticipos")}\n` +
           `${classLine("RETENCION", "Retenciones")}\n` +
           `${classLine("OTRO", "Otros")}\n\n` +
-          "Importante: este reporte confirma movimientos históricos y su fecha real. " +
-          "No vuelve a descontarlos del saldo del corte de cartera vigente.\n\n" +
+          "Los duplicados históricos no volverán a importarse. " +
+          "Si un movimiento histórico estaba pendiente y ahora su documento está disponible, " +
+          "el sistema podrá completar su conciliación sin duplicar el movimiento ni reducir nuevamente el saldo vigente.\n\n" +
           "¿Confirmar importación?",
       );
-
       if (!accepted || !preview.filePath) return;
 
       const result = await api.confirmCollectionMovementsImport(
@@ -847,3 +877,6 @@ export function ImportCenterPanel({
     </>
   );
 }
+
+
+
