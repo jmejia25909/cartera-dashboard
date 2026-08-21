@@ -37,7 +37,9 @@
     "verify:credit-policy-ui": "node scripts/verify-credit-policy-ui.mjs",
     "verify:cancelled-documents-import": "node scripts/verify-cancelled-documents-import.mjs",
     "verify:collection-reconciliation": "node scripts/verify-collection-reconciliation.mjs",
-    "verify:cancelled-documents-pdf": "node scripts/verify-cancelled-documents-pdf.mjs"
+    "verify:cancelled-documents-pdf": "node scripts/verify-cancelled-documents-pdf.mjs",
+    "verify:production-isolation": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production-isolation.ps1",
+    "verify:packaged-isolation": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-production-isolation.ps1 -Packaged"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",

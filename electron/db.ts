@@ -1,4 +1,4 @@
-﻿import { beginReleaseUpgrade, completeReleaseUpgrade, validateReleaseSchema } from "./releaseUpgrade";
+import { beginReleaseUpgrade, completeReleaseUpgrade, validateReleaseSchema } from "./releaseUpgrade";
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
@@ -895,17 +895,36 @@ function ensureSchema(db: Database.Database) {
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
 }
 
-function resolveDbFilePath(): string {
+function resolveDevelopmentDbPath(): string {
   const configuredPath = process.env.CARTERA_DB_PATH?.trim();
-  if (configuredPath) return path.resolve(configuredPath);
 
-  // En desarrollo usamos una unica base QA fuera del repositorio.
-  // En produccion se conserva la ubicacion estandar de Electron.
-  if (!app.isPackaged) {
-    return path.resolve(process.cwd(), "..", "cartera-dashboard-test-data", "data", "cartera.db");
+  if (configuredPath) {
+    return path.resolve(configuredPath);
   }
 
-  return path.join(app.getPath("userData"), "data", "cartera.db");
+  return path.resolve(
+    process.cwd(),
+    "..",
+    "cartera-dashboard-test-data",
+    "data",
+    "cartera.db",
+  );
+}
+
+function resolveProductionDbPath(): string {
+  return path.join(
+    app.getPath("userData"),
+    "data",
+    "cartera.db",
+  );
+}
+
+function resolveDbFilePath(): string {
+  if (app.isPackaged) {
+    return resolveProductionDbPath();
+  }
+
+  return resolveDevelopmentDbPath();
 }
 
 export function openDb() {
@@ -981,11 +1000,7 @@ export function openDb() {
  * Útil para mostrar la "Ruta DB" en el renderer.
  */
 export function getDbFilePath(): string {
-  try {
-    return resolveDbFilePath();
-  } catch {
-    return path.resolve(process.cwd(), "..", "cartera-dashboard-test-data", "data", "cartera.db");
-  }
+  return resolveDbFilePath();
 }
 
 

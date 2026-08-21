@@ -1,4 +1,4 @@
-﻿import Database from "better-sqlite3";
+import Database from "better-sqlite3";
 import type {
   DashboardAgingItem,
   DashboardCriticalAlert,
@@ -288,8 +288,8 @@ export function computeDashboardExecutiveStats(
 
   let movimientosParciales = 0;
   let abonosParcialesDetectados = 0;
-  let movimientosPorDesaparicion = 0;
-  let cierresPorDesaparicionDetectados = 0;
+  const movimientosPorDesaparicion = 0;
+  const cierresPorDesaparicionDetectados = 0;
   let otrosMovimientos = 0;
   let otrosDetectados = 0;
 
