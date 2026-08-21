@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
 import { reconcileDocument } from "./reconciliation/reconciliationEngine";
+import { reconcileDocumentHistory } from "./reconciliation/documentHistoryReconciliation";
 import { comparePortfolioSnapshots, type PortfolioSnapshotDocument } from "./reconciliation/portfolioDeltaEngine";
 import { classifyTemporalScope, toMoneyCents } from "./reconciliation/reconciliationConfig";
 import {
@@ -900,6 +901,13 @@ export function importarCarteraPorCobrarExcel(
         });
 
         eventosGenerados += 1;
+      }
+    }
+
+    if (importacionId && importacionId > 0) {
+      for (const delta of comparison.deltas) {
+        if (delta.type === "NO_EVENT") continue;
+        reconcileDocumentHistory(db, delta.documentoNormalizado);
       }
     }
 

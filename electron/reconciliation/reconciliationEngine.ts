@@ -30,6 +30,20 @@ export function reconcileDocument(
 
   if (!context.presenteEnCartera) {
     const confirmed = cobros + notas >= previous - 0.01;
+
+    if (notas > 0) {
+      return {
+        estado: "AJUSTADO_NC",
+        confirmacion: "CONFIRMADO",
+        fuentePrincipal: "NOTAS_CREDITO",
+        saldoPendiente: 0,
+        deltaTotal: money(previous),
+        deltaCobros: money(cobros),
+        deltaNotasCredito: money(notas),
+        deltaNoConciliado: money(Math.max(0, previous - cobros - notas)),
+      };
+    }
+
     return {
       estado: "PAGADO_TOTAL",
       confirmacion: confirmed ? "CONFIRMADO" : "PROVISIONAL",

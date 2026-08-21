@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
 import { insertDocumentEvent } from "./reconciliation/eventRepository";
+import { reconcileDocumentHistory } from "./reconciliation/documentHistoryReconciliation";
 
 type RawRow = Record<string, unknown>;
 
@@ -553,7 +554,12 @@ export function importCollectionMovementsExcel(
   const replayRows = uniqueRows.filter((row) => !row.fecha || row.fecha >= cutoff).sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   const transaction = db.transaction(() => {
+    const affectedDocumentKeys = new Set<string>();
+
     for (const row of replayRows) {
+      if (row.documentoRelacionadoNormalizado) {
+        affectedDocumentKeys.add(row.documentoRelacionadoNormalizado);
+      }
       const existing = existsLedger.get(row.movementKey) as
         | {
             id: number;
@@ -739,6 +745,16 @@ export function importCollectionMovementsExcel(
         pendingMovements += 1;
       }
     }
+
+    for (const documentKey of affectedDocumentKeys) {
+      const reconciliation = reconcileDocumentHistory(db, documentKey);
+      pendingMovements = Math.max(
+        0,
+        pendingMovements - reconciliation.linkedCollections,
+      );
+      reconciledMovements += reconciliation.linkedCollections;
+    }
+
     const ignoredTotal =
       preview.ignoredPayments + existingMovements;
 
