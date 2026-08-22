@@ -8,6 +8,8 @@ import { importCancelledDocumentsExcel } from "../../electron/importCancelledDoc
 import { importCollectionMovementsExcel } from "../../electron/importCollectionMovements";
 import { importarCarteraPorCobrarExcel } from "../../electron/importContifico";
 import { importCreditNotesExcel } from "../../electron/importCreditNotes";
+import { getNetRecoveryTotal } from "../../electron/reconciliation/recoveryProjection";
+import { ensureEvidenceAttributionBaseline } from "../../electron/reconciliation/evidenceAttribution";
 
 export type PortfolioDocument = {
   document: string;
@@ -257,6 +259,7 @@ export function createScenarioContext(label: string): ScenarioContext {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), `zenith-${safeLabel}-`));
   const db = new Database(path.join(directory, "integration.sqlite"));
   db.exec(SCHEMA);
+  ensureEvidenceAttributionBaseline(db);
 
   return {
     db,
@@ -432,16 +435,10 @@ export function latestEvent(db: Database.Database, document: string) {
 }
 
 export function recovery(db: Database.Database, document?: string): number {
-  const where = document ? "AND documento_relacionado_normalizado = ?" : "";
-  const params = document ? [normalized(document)] : [];
-  const row = db.prepare(`
-    SELECT COALESCE(SUM(valor), 0) AS value
-    FROM cobros_movimientos_importados
-    WHERE clase_movimiento = 'COBRO'
-      AND estado_conciliacion = 'CONCILIADO'
-      ${where}
-  `).get(...params) as { value: number };
-  return Number(row.value ?? 0);
+  return getNetRecoveryTotal(
+    db,
+    document ? normalized(document) : undefined,
+  );
 }
 
 export function creditAdjustment(db: Database.Database, document: string): number {

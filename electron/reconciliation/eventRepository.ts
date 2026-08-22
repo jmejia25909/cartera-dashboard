@@ -15,11 +15,10 @@ export type DocumentEventInput = {
   metadata?: Record<string, unknown>;
 };
 
-export function insertDocumentEvent(
+export function prepareDocumentEventInserter(
   db: Database.Database,
-  event: DocumentEventInput,
-): void {
-  db.prepare(`
+): (event: DocumentEventInput) => number {
+  const statement = db.prepare(`
     INSERT OR IGNORE INTO documento_eventos (
       event_key,
       documento_normalizado,
@@ -33,7 +32,9 @@ export function insertDocumentEvent(
       referencia_externa,
       metadata_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `);
+
+  return (event: DocumentEventInput): number => statement.run(
     event.eventKey,
     event.documentoNormalizado,
     event.tipoEvento,
@@ -45,7 +46,14 @@ export function insertDocumentEvent(
     event.importacionId ?? null,
     event.referenciaExterna ?? null,
     JSON.stringify(event.metadata ?? {}),
-  );
+  ).changes;
+}
+
+export function insertDocumentEvent(
+  db: Database.Database,
+  event: DocumentEventInput,
+): number {
+  return prepareDocumentEventInserter(db)(event);
 }
 
 export function upsertDocumentBalance(

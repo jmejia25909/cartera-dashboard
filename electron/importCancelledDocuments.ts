@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import type Database from "better-sqlite3";
 import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
 import { insertDocumentEvent } from "./reconciliation/eventRepository";
+import { reconcileDocumentHistory } from "./reconciliation/documentHistoryReconciliation";
 
 export type CancelledDocumentPreviewRow = {
   rowNumber: number;
@@ -540,7 +541,10 @@ export function importCancelledDocumentsExcel(
   let unmatchedDocuments = 0;
 
   const transaction = db.transaction(() => {
+    const affectedDocumentKeys = new Set<string>();
+
     for (const row of replayRows) {
+      affectedDocumentKeys.add(row.normalizedDocumentNumber);
       const document = documentsByKey.get(row.normalizedDocumentNumber);
 
       const cancellationEventKey = buildCancellationEventKey({
@@ -675,6 +679,10 @@ export function importCancelledDocumentsExcel(
         numero_autorizacion: row.authorizationNumber || null,
         importacion_id: importacionId ?? null,
       });
+    }
+
+    for (const documentKey of affectedDocumentKeys) {
+      reconcileDocumentHistory(db, documentKey);
     }
 
     if (importacionId != null) {

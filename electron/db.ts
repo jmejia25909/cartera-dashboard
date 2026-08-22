@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
 import Database from "better-sqlite3";
+import { ensureEvidenceAttributionBaseline } from "./reconciliation/evidenceAttribution";
 import {
   assertDatabaseIntegrity,
   initializeDataSafety,
@@ -893,6 +894,7 @@ function ensureSchema(db: Database.Database) {
 
   // Insertar registro de empresa por defecto si no existe
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
+  ensureEvidenceAttributionBaseline(db);
 }
 
 function resolveDevelopmentDbPath(): string {

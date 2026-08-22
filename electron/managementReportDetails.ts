@@ -2,6 +2,7 @@
 import type {
   ManagementReportFilters,
 } from "./managementReports";
+import { RECOVERY_PROJECTION_CTES } from "./reconciliation/recoveryProjection";
 
 export type ManagementReportType =
   | "COLLECTIONS_DETAIL"
@@ -117,6 +118,7 @@ function collectionsDetail(
   }
 
   const rows = db.prepare(`
+    WITH ${RECOVERY_PROJECTION_CTES}
     SELECT
       m.id,
       m.fecha_movimiento,
@@ -129,8 +131,11 @@ function collectionsDetail(
       m.clase_movimiento,
       m.estado_conciliacion,
       m.valor,
+      m.recuperacion_bruta,
+      m.recuperacion_reversada,
+      m.recuperacion_neta,
       m.detalle
-    FROM cobros_movimientos_importados m
+    FROM recuperacion_conciliada m
     WHERE ${where.join(" AND ")}
     ORDER BY
       m.fecha_movimiento DESC,
@@ -145,12 +150,15 @@ function collectionsDetail(
   }>(
     (acc, row) => {
       const value = Number(row.valor ?? 0);
+      const netRecovery = Number(row.recuperacion_neta ?? 0);
       const type = String(row.clase_movimiento ?? "");
 
       acc.movements += 1;
-      acc.total += value;
+      acc.total += netRecovery;
 
-      if (type === "COBRO") acc.collections += value;
+      if (type === "COBRO") acc.collections += netRecovery;
+      // Métrica nominal informativa. `total` usa exclusivamente recuperación
+      // neta y por tanto nunca incorpora cruces.
       if (type === "CRUCE") acc.crossings += value;
 
       return acc;

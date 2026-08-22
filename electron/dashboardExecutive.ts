@@ -13,6 +13,7 @@ import {
   getCollectionPeriodReconciliation,
   isCollectionReconciliationCurrent,
 } from "./collectionPeriodReconciliation";
+import { RECOVERY_PROJECTION_CTES } from "./reconciliation/recoveryProjection";
 
 type NumericRow = {
   value?: number | null;
@@ -271,11 +272,12 @@ export function computeDashboardExecutiveStats(
     .sort((left, right) => left - right);
 
   const collectionRows = db.prepare(`
+    WITH ${RECOVERY_PROJECTION_CTES}
     SELECT
       clase_movimiento,
       COUNT(*) AS movimientos,
-      ROUND(SUM(valor), 2) AS valor
-    FROM cobros_movimientos_importados
+      ROUND(SUM(recuperacion_neta), 2) AS valor
+    FROM recuperacion_conciliada
     WHERE fecha_movimiento >= ?
       AND fecha_movimiento < ?
       AND clase_movimiento IN ('COBRO', 'CRUCE')
@@ -347,6 +349,7 @@ export function computeDashboardExecutiveStats(
       : null;
 
   const monthlyRows = db.prepare(`
+    WITH ${RECOVERY_PROJECTION_CTES}
     SELECT
       CAST(
         strftime('%m', fecha_movimiento)
@@ -357,7 +360,7 @@ export function computeDashboardExecutiveStats(
         SUM(
           CASE
             WHEN clase_movimiento = 'COBRO'
-            THEN valor
+            THEN recuperacion_neta
             ELSE 0
           END
         ),
@@ -370,14 +373,14 @@ export function computeDashboardExecutiveStats(
         SUM(
           CASE
             WHEN clase_movimiento = 'CRUCE'
-            THEN valor
+            THEN 0
             ELSE 0
           END
         ),
         2
       ) AS other_movements
 
-    FROM cobros_movimientos_importados
+    FROM recuperacion_conciliada
 
     WHERE strftime('%Y', fecha_movimiento) = ?
       AND clase_movimiento IN ('COBRO', 'CRUCE')
