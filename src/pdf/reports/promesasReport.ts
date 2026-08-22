@@ -7,9 +7,9 @@ export interface PromesaPagoReportRow {
   cliente?: string;
   razon_social?: string;
   fecha_promesa?: string;
-  monto_promesa?: number;
+  monto_prometido?: number;
   monto_pagado?: number;
-  estado_promesa?: string;
+  estado?: string;
   observacion?: string;
 }
 
@@ -82,7 +82,7 @@ const getStatusLabel = (
   promesa: PromesaPagoReportRow,
   generatedAt: Date
 ): string => {
-  const explicitStatus = cleanStatus(promesa.estado_promesa);
+  const explicitStatus = cleanStatus(promesa.estado);
   if (explicitStatus) return explicitStatus;
 
   const days = getDayDifference(promesa.fecha_promesa, generatedAt);
@@ -108,7 +108,7 @@ const drawMetricCards = (
 
   const totalPromesas = promesas.length;
   const montoTotal = promesas.reduce(
-    (sum, promesa) => sum + (promesa.monto_promesa || 0),
+    (sum, promesa) => sum + (promesa.monto_prometido || 0),
     0
   );
   const vencidas = promesas.filter(
@@ -197,7 +197,7 @@ export const generatePromesasReport = async ({
   });
 
   const tableData = promesasFiltradas.map((promesa) => {
-    const montoPrometido = promesa.monto_promesa || 0;
+    const montoPrometido = promesa.monto_prometido || 0;
     const montoPagado = promesa.monto_pagado || 0;
     const falta = montoPrometido - montoPagado;
 

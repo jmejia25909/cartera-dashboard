@@ -1,5 +1,23 @@
 ﻿import { contextBridge, ipcRenderer } from "electron";
 
+import { prepareLegacyPromises } from "../src/services/promesaLegacyMigration";
+
+const LEGACY_PROMISES_KEY = "cartera_promesas_locales";
+try {
+  const status = ipcRenderer.sendSync("promesasLegacyBootstrapStatusInternal") as { closed?: boolean };
+  if (!status?.closed) {
+    const stored = window.localStorage.getItem(LEGACY_PROMISES_KEY);
+    const parsed: unknown = stored ? JSON.parse(stored) : [];
+    const records = Array.isArray(parsed) && parsed.length > 0
+      ? prepareLegacyPromises(parsed, () => crypto.randomUUID(), (value) =>
+          window.localStorage.setItem(LEGACY_PROMISES_KEY, JSON.stringify(value)))
+      : [];
+    ipcRenderer.sendSync("promesasLegacyBootstrapInternal", records);
+  }
+} catch (error) {
+  console.error("Bootstrap interno de promesas legacy pendiente:", error);
+}
+
 const apiMethods = {
   cambiarLogo: () => {
     console.log("🔄 Preload: Iniciando cambio de logo...");
@@ -104,8 +122,17 @@ const apiMethods = {
   clienteGuardarInfo: (data: unknown) => ipcRenderer.invoke("clienteGuardarInfo", data),
   gestionGuardar: (data: unknown) => ipcRenderer.invoke("gestionGuardar", data),
   gestionesListar: (cliente: string) => ipcRenderer.invoke("gestionesListar", cliente),
+  gestionEditar: (data: unknown) => ipcRenderer.invoke("gestionEditar", data),
   gestionCumplir: (id: number) => ipcRenderer.invoke("gestionCumplir", id),
   gestionEliminar: (id: number) => ipcRenderer.invoke("gestionEliminar", id),
+  gestionesLegacyMigrar: (data: unknown) => ipcRenderer.invoke("gestionesLegacyMigrar", data),
+  promesaGuardar: (data: unknown) => ipcRenderer.invoke("promesaGuardar", data),
+  promesasListar: () => ipcRenderer.invoke("promesasListar"),
+  promesaObtener: (id: number) => ipcRenderer.invoke("promesaObtener", id),
+  promesaEditar: (data: unknown) => ipcRenderer.invoke("promesaEditar", data),
+  promesaActualizar: (data: unknown) => ipcRenderer.invoke("promesaActualizar", data),
+  promesaCambiarEstado: (data: unknown) => ipcRenderer.invoke("promesaCambiarEstado", data),
+  promesasReconciliar: () => ipcRenderer.invoke("promesasReconciliar"),
   gestionesReporte: (args: unknown) => ipcRenderer.invoke("gestionesReporte", args),
   campanasListar: () => ipcRenderer.invoke("campanasListar"),
   campanasGuardar: (data: unknown) => ipcRenderer.invoke("campanasGuardar", data),

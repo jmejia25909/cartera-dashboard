@@ -19,6 +19,36 @@ function tableHasColumn(db: Database.Database, table: string, col: string): bool
   return rows.some((r) => String(r.name).toLowerCase() === col.toLowerCase());
 }
 
+function ensureGestionLegacyMigrationSchema(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(gestion_legacy_migrations)").all() as Array<{ name: string; notnull: number }>;
+  const gestionId = columns.find((column) => column.name === "gestion_id");
+  const requiresRebuild = Boolean(gestionId?.notnull) || !columns.some((column) => column.name === "deleted_at");
+  if (!requiresRebuild) return;
+
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE gestion_legacy_migrations_v2 (
+        source TEXT NOT NULL,
+        legacy_id TEXT NOT NULL,
+        gestion_id INTEGER NULL,
+        migrated_at TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        deleted_at TEXT NULL,
+        PRIMARY KEY (source, legacy_id),
+        FOREIGN KEY (gestion_id) REFERENCES gestiones(id)
+      );
+      INSERT INTO gestion_legacy_migrations_v2
+        (source, legacy_id, gestion_id, migrated_at, payload_hash, deleted_at)
+      SELECT source, legacy_id, gestion_id, migrated_at,
+             COALESCE(payload_hash, ''), NULL
+      FROM gestion_legacy_migrations;
+      DROP TABLE gestion_legacy_migrations;
+      ALTER TABLE gestion_legacy_migrations_v2 RENAME TO gestion_legacy_migrations;
+      CREATE INDEX idx_gestion_legacy_migrations_gestion ON gestion_legacy_migrations(gestion_id);
+    `);
+  })();
+}
+
 function ensureSchema(db: Database.Database) {
       // Tabla de campañas de cobranza
       db.exec(`
@@ -170,6 +200,94 @@ function ensureSchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_gestiones_cliente ON gestiones(cliente);
 
+    CREATE TABLE IF NOT EXISTS gestion_legacy_migrations (
+      source TEXT NOT NULL,
+      legacy_id TEXT NOT NULL,
+      gestion_id INTEGER NULL,
+      migrated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      payload_hash TEXT NOT NULL,
+      deleted_at TEXT NULL,
+      PRIMARY KEY (source, legacy_id),
+      FOREIGN KEY (gestion_id) REFERENCES gestiones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_gestion_legacy_migrations_gestion
+      ON gestion_legacy_migrations(gestion_id);
+
+    CREATE TABLE IF NOT EXISTS promesas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente TEXT NOT NULL,
+      gestion_id INTEGER NULL UNIQUE,
+      documento_id INTEGER NULL,
+      fecha_promesa TEXT NOT NULL,
+      monto_prometido REAL NOT NULL CHECK (monto_prometido >= 0),
+      monto_pagado REAL NOT NULL DEFAULT 0 CHECK (monto_pagado >= 0 AND monto_pagado <= monto_prometido),
+      estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','CUMPLIDA','CUMPLIDA_PARCIAL','INCUMPLIDA','CANCELADA','REPROGRAMADA')),
+      fecha_pago TEXT NULL,
+      motivo_incumplimiento TEXT NULL,
+      observacion TEXT NULL,
+      origen TEXT NOT NULL DEFAULT 'NATIVE' CHECK (origen IN ('NATIVE','MIGRATED_GESTION','MIGRATED_LEGACY')),
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      actualizado_en TEXT NULL,
+      FOREIGN KEY (gestion_id) REFERENCES gestiones(id),
+      FOREIGN KEY (documento_id) REFERENCES documentos(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesas_cliente ON promesas(cliente);
+    CREATE INDEX IF NOT EXISTS idx_promesas_estado ON promesas(estado);
+    CREATE INDEX IF NOT EXISTS idx_promesas_fecha ON promesas(fecha_promesa);
+    CREATE INDEX IF NOT EXISTS idx_promesas_gestion ON promesas(gestion_id);
+
+    CREATE TABLE IF NOT EXISTS promesa_legacy_migrations (
+      source TEXT NOT NULL,
+      legacy_id TEXT NOT NULL,
+      promesa_id INTEGER NOT NULL,
+      payload_hash TEXT NOT NULL,
+      migrated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (source, legacy_id),
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_legacy_promesa ON promesa_legacy_migrations(promesa_id);
+
+    CREATE TABLE IF NOT EXISTS app_migrations (
+      key TEXT PRIMARY KEY,
+      completed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      metadata TEXT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS promesa_eventos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      promesa_id INTEGER NOT NULL,
+      tipo_evento TEXT NOT NULL,
+      estado_anterior TEXT NULL,
+      estado_nuevo TEXT NULL,
+      fecha TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      metadata TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_eventos_promesa ON promesa_eventos(promesa_id, id);
+
+    CREATE TABLE IF NOT EXISTS promesa_documentos (
+      promesa_id INTEGER NOT NULL,
+      documento_normalizado TEXT NOT NULL,
+      monto_comprometido REAL NULL CHECK (monto_comprometido IS NULL OR monto_comprometido > 0),
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (promesa_id, documento_normalizado),
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_documentos_documento ON promesa_documentos(documento_normalizado);
+
+    CREATE TABLE IF NOT EXISTS promesa_cobro_atribuciones (
+      promesa_id INTEGER NOT NULL,
+      movement_key TEXT NOT NULL,
+      importe_atribuido REAL NOT NULL CHECK (importe_atribuido > 0),
+      attributed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      documento_normalizado TEXT NOT NULL,
+      PRIMARY KEY (promesa_id, movement_key),
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id),
+      FOREIGN KEY (movement_key) REFERENCES cobros_movimientos_importados(movimiento_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_atribuciones_movement ON promesa_cobro_atribuciones(movement_key);
+
     /* Tabla de Disputas */
     CREATE TABLE IF NOT EXISTS disputas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,6 +323,8 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cuentas_cliente ON cuentas_aplicar(cliente);
     CREATE INDEX IF NOT EXISTS idx_cuentas_estado ON cuentas_aplicar(estado);
   `);
+
+  ensureGestionLegacyMigrationSchema(db);
 
   // Migración suave: agregar columnas de auditoría si faltan
   const gestionCols = [
@@ -893,6 +1013,18 @@ function ensureSchema(db: Database.Database) {
   `);
 
   // Insertar registro de empresa por defecto si no existe
+  if (!tableHasColumn(db, "promesas", "origen")) {
+    db.exec("ALTER TABLE promesas ADD COLUMN origen TEXT NOT NULL DEFAULT 'NATIVE' CHECK (origen IN ('NATIVE','MIGRATED_GESTION','MIGRATED_LEGACY'))");
+  }
+  if (!tableHasColumn(db, "promesas", "monto_cumplido_base")) {
+    db.exec("ALTER TABLE promesas ADD COLUMN monto_cumplido_base REAL NOT NULL DEFAULT 0 CHECK (monto_cumplido_base >= 0)");
+    db.exec("UPDATE promesas SET monto_cumplido_base=monto_pagado");
+  }
+  if (!tableHasColumn(db, "promesas", "cumplimiento_automatico_desde")) {
+    db.exec("ALTER TABLE promesas ADD COLUMN cumplimiento_automatico_desde TEXT NULL");
+    db.exec("UPDATE promesas SET cumplimiento_automatico_desde=datetime('now','localtime')");
+  }
+
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
   ensureEvidenceAttributionBaseline(db);
 }

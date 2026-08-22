@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
+import { useRef } from "react";
 import "./pages/gestion/gestion.css";
 import { GestionFiltersPanel, GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import { buildGestionClientSummaries } from "./pages/gestion/services";
@@ -35,7 +36,16 @@ import {
   generateTendenciasReport,
 } from "./pdf";
 
-import type { Alerta, Documento } from "./types";
+import type {
+  Alerta,
+  Documento,
+} from "./types";
+import type {
+  GestionData,
+  GestionLegacyInput,
+  Promesa,
+  PromesaState,
+} from "./types/api.types";
 import type { DashboardExecutiveStats } from "./types/dashboardExecutive";
 import {
   fmtMoney,
@@ -57,6 +67,7 @@ import {
   getDocumentosVencidos,
   getResumenVencidos,
 } from "./services";
+import { persistLegacyGestionIds } from "./services/gestionLegacyMigration";
 import {
   checkHttpApiAvailable,
   createHttpApiClient,
@@ -64,6 +75,60 @@ import {
 } from "./app/api";
 import { createDemoData } from "./app/demoData";
 import { APP_NAVIGATION_TABS } from "./app/config/navigation";
+
+const LEGACY_GESTIONES_KEY = "cartera_gestiones_locales";
+const LEGACY_GESTIONES_SOURCE = "localStorage:cartera_gestiones_locales";
+const LEGACY_GESTIONES_COMPLETE_KEY = "cartera_gestiones_migration_complete_v1";
+
+async function migrarGestionesLegacy(
+  api: NonNullable<Window["carteraApi"]>,
+): Promise<void> {
+  const stored = localStorage.getItem(LEGACY_GESTIONES_KEY);
+  if (!stored) return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch (error) {
+    console.error("No se pudo interpretar la persistencia CRM legacy:", error);
+    return;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+  const normalized = persistLegacyGestionIds(
+    parsed,
+    () => crypto.randomUUID(),
+    (records) => localStorage.setItem(LEGACY_GESTIONES_KEY, JSON.stringify(records)),
+  );
+
+  const records: GestionLegacyInput[] = normalized.map((record) => ({
+    legacy_id: String(record.legacy_id),
+    ...(typeof record.id === "number" ? { id: record.id } : {}),
+    cliente: String(record.cliente ?? "").trim(),
+    fecha: typeof record.fecha === "string" ? record.fecha : undefined,
+    tipo: typeof record.tipo === "string" ? record.tipo : undefined,
+    resultado: typeof record.resultado === "string" ? record.resultado : undefined,
+    observacion: typeof record.observacion === "string" ? record.observacion : undefined,
+    fecha_promesa: typeof record.fecha_promesa === "string" ? record.fecha_promesa : undefined,
+    monto_promesa: Number(record.monto_promesa) || 0,
+    usuario: typeof record.usuario === "string" ? record.usuario : undefined,
+    motivo: typeof record.motivo === "string" ? record.motivo : undefined,
+  }));
+
+  const result = await api.gestionesLegacyMigrar({
+    source: LEGACY_GESTIONES_SOURCE,
+    records,
+  });
+
+  if (result.ok === false) {
+    throw new Error(`${result.code} (${result.legacy_id}): ${result.message}`);
+  }
+  if (result.mappings.length !== records.length) {
+    throw new Error("La migración legacy CRM quedó incompleta.");
+  }
+
+  localStorage.setItem(LEGACY_GESTIONES_COMPLETE_KEY, "1");
+}
 
 export default function App() {
   // --- ESTADOS RESTAURADOS ---
@@ -96,7 +161,7 @@ export default function App() {
   const [tendencias, setTendencias] = useState<any[]>([]);
   const [abonos, setAbonos] = useState<any[]>([]);
   const [_cuentasAplicar, setCuentasAplicar] = useState<any[]>([]);
-  const [promesas, setPromesas] = useState<any[]>([]);
+  const [promesas, setPromesas] = useState<Promesa[]>([]);
   const [alertas, setAlertas] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [executiveStats, setExecutiveStats] =
@@ -130,6 +195,9 @@ export default function App() {
   const [promesaEditando, setPromesaEditando] = useState<any>(null);
   const [toasts, setToasts] = useState<any[]>([]);
   const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: "" });
+  const [promesaDocumentosSeleccionados,setPromesaDocumentosSeleccionados]=useState<string[]>([]);
+  const [gestionSaving, setGestionSaving] = useState(false);
+  const gestionSavingRef = useRef(false);
   
   // Configuración
   const [empresa, setEmpresa] = useState<any>({});
@@ -260,23 +328,16 @@ export default function App() {
       setHasWritePermissions(false);
     }
   }; 
-  const registrarGestion = async (g: any) => {
-    const nuevasGestiones = [g, ...allGestiones];
-    setAllGestiones(nuevasGestiones);
-    // Persistir en localStorage
-    try {
-      localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-    } catch (e) {
-      console.error("Error guardando en localStorage:", e);
-    }
+  const registrarGestion = async (g: GestionData) => {
     const api = getElectronApi();
     if (isWeb || !api?.gestionGuardar) return;
     try {
       const targetCliente = (g?.cliente || selectedCliente || '').trim();
       const payload = { cliente: targetCliente, ...g };
-      await api.gestionGuardar(payload);
-      // No recargar - confiar solo en estado local
+      const result = await api.gestionGuardar(payload);
+      setAllGestiones((current) => [result.gestion, ...current]);
     } catch (e) {
+      addToast("Error registrando gestión", "error");
       console.error("Error registrando gestión automática:", e);
     }
   };
@@ -434,12 +495,21 @@ export default function App() {
     // const apiToUse = api || httpApi;
 
     try {
-      const [empData, statsData, filtros, top, gestionesData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
+      if (api?.gestionesLegacyMigrar) {
+        try {
+          await migrarGestionesLegacy(api);
+        } catch (error) {
+          console.error("La migración CRM legacy no pudo completarse:", error);
+          addToast("Migración de gestiones legacy pendiente", "warning");
+        }
+      }
+      const [empData, statsData, filtros, top, gestionesData, promesasData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
         api ? api.empresaObtener() : httpApi.empresaObtener(),
         api ? api.statsObtener() : httpApi.statsObtener(),
         api ? api.filtrosListar() : httpApi.filtrosListar(),
         api ? api.topClientes() : httpApi.topClientes(),
         api ? api.gestionesListar("") : httpApi.gestionesListar(""),
+        api ? api.promesasListar() : Promise.resolve([]),
         api ? api.alertasIncumplimiento() : httpApi.alertasIncumplimiento(),
         api ? api.tendenciasHistoricas() : httpApi.tendenciasHistoricas(),
         api ? api.cuentasAplicarListar() : httpApi.cuentasAplicarListar(),
@@ -469,68 +539,12 @@ export default function App() {
         if (filtros.vendedores) setVendedores(filtros.vendedores);
       }
       if (gestionesData) {
-          let gestionesLocales: any[] = [];
-          try {
-            const stored = localStorage.getItem('cartera_gestiones_locales');
-            if (stored) gestionesLocales = JSON.parse(stored);
-          } catch (e) {
-            console.error("Error cargando localStorage:", e);
-          }
-          
-          const gestionesBackend = Array.isArray(gestionesData) ? gestionesData : [];
-          
-          const deduplicateGestiones = (backend: any[], local: any[]) => {
-            const deduped = [...backend];
-            const localNoSincronizadas: any[] = [];
-            
-            for (const localGestion of local) {
-              const found = backend.some((bg) => {
-                const sameClient = bg.cliente === localGestion.cliente;
-                const sameType = bg.tipo === localGestion.tipo;
-                const sameObs = bg.observacion === localGestion.observacion;
-                
-                let sameDateish = false;
-                try {
-                  if (localGestion.fecha && bg.fecha) {
-                    const localTime = new Date(localGestion.fecha).getTime();
-                    const bgTime = new Date(bg.fecha).getTime();
-                    if (!isNaN(localTime) && !isNaN(bgTime)) {
-                      sameDateish = Math.abs(localTime - bgTime) < 10000;
-                    }
-                  }
-                } catch (e) {
-                  sameDateish = false;
-                }
-                
-                return sameClient && sameType && sameObs && sameDateish;
-              });
-              
-              if (!found) {
-                deduped.push(localGestion);
-                localNoSincronizadas.push(localGestion);
-              }
-            }
-            
-            try {
-              localStorage.setItem('cartera_gestiones_locales', JSON.stringify(localNoSincronizadas));
-            } catch (e) {
-              console.error("Error actualizando localStorage:", e);
-            }
-            
-            return deduped.sort((a: any, b: any) => {
-              const dateA = new Date(a.fecha).getTime();
-              const dateB = new Date(b.fecha).getTime();
-              return dateB - dateA;
-            });
-          };
-          
-          const gestionesMerged = deduplicateGestiones(gestionesBackend, gestionesLocales);
-          setAllGestiones(gestionesMerged);
-          const promesasPendientes = gestionesMerged.filter((g: any) => 
-            g.resultado?.includes('Promesa') && !g.resultado?.includes('Cumplida') && g.fecha_promesa
-          );
-          setPromesas(promesasPendientes);
+          const gestionesBackend: GestionData[] = Array.isArray(gestionesData)
+            ? gestionesData as GestionData[]
+            : [];
+          setAllGestiones(gestionesBackend);
       }
+      if(promesasData)setPromesas(promesasData);
       if (alertasData) setAlertas(alertasData as any[]);
       if (tendData) setTendencias(tendData as any[]);
       if (cuentasData) setCuentasAplicar(cuentasData);
@@ -655,7 +669,9 @@ export default function App() {
 
   async function guardarGestion() {
     const api = getElectronApi();
-    if (isWeb || !selectedCliente || !api?.gestionGuardar) return;
+    if (gestionSavingRef.current || isWeb || !selectedCliente || !api?.gestionGuardar) return;
+    gestionSavingRef.current = true;
+    setGestionSaving(true);
     try {
       // Convertir monto_promesa a número si es una promesa de pago
       const gestionParaGuardar = {
@@ -666,28 +682,14 @@ export default function App() {
       // Guardar en backend
       const result = await api.gestionGuardar({
         cliente: selectedCliente,
-        ...gestionParaGuardar
+        ...gestionParaGuardar,
+        promesa_documentos: promesaDocumentosSeleccionados.map(documento_normalizado=>({documento_normalizado}))
       });
       
       if (result?.ok) {
         addToast("Gestión guardada exitosamente", "success");
-        
-        // Agregar gestión al estado local con ID único
-        const nuevaGestion = {
-          id: `manual_${Date.now()}`,
-          cliente: selectedCliente,
-          fecha: new Date().toISOString(),
-          ...gestionParaGuardar
-        };
-        const nuevasGestiones = [nuevaGestion, ...allGestiones];
-        setAllGestiones(nuevasGestiones);
-        
-        // Persistir en localStorage
-        try {
-          localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-        } catch (e) {
-          console.error("Error guardando en localStorage:", e);
-        }
+        setAllGestiones((current) => [result.gestion, ...current]);
+        if(gestionParaGuardar.resultado==='Promesa de Pago')setPromesas(await api.promesasListar());
         
         // Limpiar formulario
         setShowModalGestion(false);
@@ -699,12 +701,14 @@ export default function App() {
           fecha_promesa: "",
           monto_promesa: ""
         });
-      } else {
-        addToast(result?.message || "Error guardando gestión", "error");
+        setPromesaDocumentosSeleccionados([]);
       }
     } catch (e) {
       addToast("Error guardando gestión", "error");
       console.error("Error guardando gestión:", e);
+    } finally {
+      gestionSavingRef.current = false;
+      setGestionSaving(false);
     }
   }
 
@@ -712,19 +716,13 @@ export default function App() {
     const api = getElectronApi();
     if (isWeb || !api?.gestionEliminar) return;
     try {
-      await api.gestionEliminar(id);
-      addToast("Gestión eliminada", "success");
-      
-      // Actualizar solo estado local
-      const nuevasGestiones = allGestiones.filter(g => g.id !== id);
-      setAllGestiones(nuevasGestiones);
-      
-      // Persistir en localStorage
-      try {
-        localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-      } catch (e) {
-        console.error("Error guardando en localStorage:", e);
+      const result = await api.gestionEliminar(id);
+      if (!result.ok) {
+        addToast("message" in result ? result.message : "Gestión no encontrada", "error");
+        return;
       }
+      addToast("Gestión eliminada", "success");
+      setAllGestiones((current) => current.filter(g => g.id !== id));
     } catch (e) {
       addToast("Error eliminando gestión", "error");
       console.error("Error eliminando gestión:", e);
@@ -732,25 +730,13 @@ export default function App() {
   }
 
   async function cumplirPromesa(id: number) {
+    void id;
     const api = getElectronApi();
-    if (isWeb || !api?.gestionCumplir) return;
+    if (isWeb || !api?.promesasReconciliar) return;
     try {
-      await api.gestionCumplir(id);
-      addToast("Promesa cumplida", "success");
-      
-      // Actualizar solo estado local
-      const nuevasGestiones = allGestiones.map(g => 
-        g.id === id ? { ...g, resultado: 'Promesa Cumplida' } : g
-      );
-      setAllGestiones(nuevasGestiones);
-      setPromesas(prev => prev.filter(p => p.id !== id));
-      
-      // Persistir en localStorage
-      try {
-        localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-      } catch (e) {
-        console.error("Error guardando en localStorage:", e);
-      }
+      const result = await api.promesasReconciliar();
+      setPromesas(result.promesas);
+      addToast(result.updated>0?"Pagos importados conciliados":"No hay pagos importados nuevos para esta promesa",result.updated>0?"success":"info");
     } catch (e) {
       addToast("Error cumpliendo promesa", "error");
       console.error("Error cumpliendo promesa:", e);
@@ -758,28 +744,23 @@ export default function App() {
   }
 
   async function actualizarPromesa(promesaActualizada: any) {
-    if (isWeb) return;
+    const api=getElectronApi();if (isWeb||!api?.promesaActualizar) return;
     try {
-      // Actualizar promesa en estado local
-      const nuevasPromesas = promesas.map(p => 
-        p.id === promesaActualizada.id ? promesaActualizada : p
-      );
-      setPromesas(nuevasPromesas);
+      const result=await api.promesaActualizar({id:promesaActualizada.id,fecha_promesa:promesaActualizada.fecha_promesa,monto_prometido:Number(promesaActualizada.monto_prometido),motivo_incumplimiento:promesaActualizada.motivo_incumplimiento||null,observacion:promesaActualizada.observacion||null,estado:promesaActualizada.estado as PromesaState});
+      if(result.ok===false)throw new Error(result.message);
+      const saved=result.promesa;
+      setPromesas(current=>current.map(p=>p.id===saved.id?saved:p));
       setShowModalEditarPromesa(false);
       setPromesaEditando(null);
       addToast("Promesa actualizada correctamente", "success");
       
-      // Persistir en localStorage
-      try {
-        localStorage.setItem('cartera_promesas_locales', JSON.stringify(nuevasPromesas));
-      } catch (e) {
-        console.error("Error guardando en localStorage:", e);
-      }
     } catch (e) {
       addToast("Error actualizando promesa", "error");
       console.error("Error actualizando promesa:", e);
     }
   }
+
+  async function cancelarPromesa(id:number){const api=getElectronApi();if(isWeb||!api?.promesaCambiarEstado)return;const result=await api.promesaCambiarEstado({id,estado:'CANCELADA'});if(result.ok===false){addToast(result.message,'error');return;}setPromesas(current=>current.map(p=>p.id===id?result.promesa:p));addToast('Promesa cancelada','success');}
 
   async function guardarEmpresa() {
     const api = getElectronApi();
@@ -1155,7 +1136,6 @@ export default function App() {
           addToast("Estado de cuenta generado", "success");
 
           registrarGestion({
-            id: `pdf_${Date.now()}`,
             cliente: clienteNombre,
             tipo: "PDF",
             resultado: "Generado",
@@ -1190,7 +1170,6 @@ export default function App() {
 
         // Registrar gestión automática de Email
         registrarGestion({
-          id: `email_${Date.now()}`,
           cliente: clienteNombre,
           tipo: "Email",
           resultado: "Enviado",
@@ -1593,7 +1572,6 @@ export default function App() {
                     const mensaje = encodeURIComponent(lineas.join('\n'));
                     window.open(`https://wa.me/?text=${mensaje}`, '_blank');
                     registrarGestion({
-                      id: `whatsapp_${Date.now()}`,
                       cliente: selectedCliente,
                       tipo: "WhatsApp",
                       resultado: "Enviado",
@@ -2000,12 +1978,13 @@ export default function App() {
           hasWritePermissions={hasWritePermissions}
           isMobile={isMobile}
           onExportPdf={exportarReportePromesas}
+          onCrearPromesa={()=>{setGestionForm({tipo:'Llamada',resultado:'Promesa de Pago',observacion:'',motivo:'',fecha_promesa:'',monto_promesa:''});setShowModalGestion(true);}}
           onCumplirPromesa={cumplirPromesa}
           onEditarPromesa={(promesa) => {
             setPromesaEditando(promesa);
             setShowModalEditarPromesa(true);
           }}
-          onEliminarPromesa={eliminarGestion}
+          onEliminarPromesa={cancelarPromesa}
         />
       );
     }
@@ -2312,6 +2291,13 @@ export default function App() {
             <div className="modal-header">Nueva Gestión</div>
             <div className="modal-body">
               <label className="field">
+                <span>Cliente</span>
+                <select value={selectedCliente} onChange={e=>setSelectedCliente(e.target.value)}>
+                  <option value="">-- Seleccionar cliente --</option>
+                  {clientes.map((cliente:any)=><option key={cliente.cliente??cliente} value={cliente.cliente??cliente}>{cliente.razon_social??cliente.cliente??cliente}</option>)}
+                </select>
+              </label>
+              <label className="field">
                 <span>Tipo</span>
                 <select value={gestionForm.tipo} onChange={e => setGestionForm({...gestionForm, tipo: e.target.value})}>
                   <option>Llamada</option>
@@ -2357,12 +2343,19 @@ export default function App() {
                     <span>Monto Promesa</span>
                     <input type="number" value={gestionForm.monto_promesa} onChange={e => setGestionForm({...gestionForm, monto_promesa: e.target.value})} placeholder="0" />
                   </label>
+                  <label className="field">
+                    <span>Documentos asociados (opcional)</span>
+                    <select multiple value={promesaDocumentosSeleccionados} onChange={e=>setPromesaDocumentosSeleccionados(Array.from(e.currentTarget.selectedOptions,option=>option.value))} style={{minHeight:'90px'}}>
+                      {docs.filter(doc=>(doc.cliente===selectedCliente||doc.razon_social===selectedCliente)&&Number(doc.total)>0).map(doc=>{const key=String(doc.documento_normalizado||doc.documento||'').trim();return key?<option key={doc.id||key} value={key}>{doc.documento||key} — ${Number(doc.total).toLocaleString()}</option>:null;})}
+                    </select>
+                    <small>Ctrl/Cmd + clic para seleccionar varios. Sin documentos, el cumplimiento queda para revisión manual.</small>
+                  </label>
                 </>
               )}
             </div>
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalGestion(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarGestion}>Guardar</button>
+              <button className="btn primary" onClick={guardarGestion} disabled={gestionSaving}>{gestionSaving ? "Guardando…" : "Guardar"}</button>
             </div>
           </div>
         </div>
@@ -2394,43 +2387,44 @@ export default function App() {
                 <span>Monto Prometido</span>
                 <input 
                   type="number" 
-                  value={promesaEditando.monto_promesa || ''} 
-                  onChange={e => setPromesaEditando({...promesaEditando, monto_promesa: Number(e.target.value)})}
+                  value={promesaEditando.monto_prometido || ''}
+                  onChange={e => setPromesaEditando({...promesaEditando, monto_prometido: Number(e.target.value)})}
                   placeholder="0"
                 />
               </label>
               
               <label className="field">
-                <span>Monto Pagado</span>
+                <span>Monto cumplido (desde importaciones)</span>
                 <input 
                   type="number" 
                   value={promesaEditando.monto_pagado || ''} 
-                  onChange={e => setPromesaEditando({...promesaEditando, monto_pagado: Number(e.target.value)})}
+                  readOnly
                   placeholder="0"
                 />
               </label>
               
               <label className="field">
-                <span>Fecha Pago</span>
+                <span>Fecha último cumplimiento</span>
                 <input 
                   type="date" 
                   value={promesaEditando.fecha_pago || ''} 
-                  onChange={e => setPromesaEditando({...promesaEditando, fecha_pago: e.target.value})}
+                  readOnly
                 />
               </label>
               
               <label className="field">
                 <span>Estado</span>
                 <select 
-                  value={promesaEditando.estado_promesa || 'Pendiente'} 
-                  onChange={e => setPromesaEditando({...promesaEditando, estado_promesa: e.target.value})}
+                  value={promesaEditando.estado || 'PENDIENTE'}
+                  onChange={e => setPromesaEditando({...promesaEditando, estado: e.target.value})}
                   style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
                 >
-                  <option value="Pendiente">⏳ Pendiente</option>
-                  <option value="Parcialmente Cumplida">⚠️ Parcialmente Cumplida</option>
-                  <option value="Cumplida">✅ Cumplida</option>
-                  <option value="Incumplida">❌ Incumplida</option>
-                  <option value="Reprogramada">🔄 Reprogramada</option>
+                  <option value="PENDIENTE">⏳ Pendiente</option>
+                  <option value="CUMPLIDA_PARCIAL" disabled>⚠️ Parcialmente Cumplida (automática)</option>
+                  <option value="CUMPLIDA" disabled>✅ Cumplida (automática)</option>
+                  <option value="INCUMPLIDA">❌ Incumplida</option>
+                  <option value="CANCELADA">🚫 Cancelada</option>
+                  <option value="REPROGRAMADA">🔄 Reprogramada</option>
                 </select>
               </label>
               
@@ -2445,7 +2439,7 @@ export default function App() {
               </label>
               
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-nav)', padding: '8px', borderRadius: '4px', marginBottom: '12px' }}>
-                <strong>ℹ️ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica únicamente con importaciones.
+                <strong>ℹ️ Nota:</strong> Cumplimiento calculado desde importaciones. Estos cambios no registran pagos ni afectan el saldo financiero.
               </div>
             </div>
             <div className="modal-footer">

@@ -28,6 +28,25 @@ import {
   backfillHistoricalTransactionBatches,
   registerHistoricalTransactionBatch,
 } from "./reconciliation/historicalTransactionBatchRegistry";
+import {
+  createGestion,
+  deleteGestion as deleteGestionById,
+  fulfillGestion,
+  migrateLegacyGestiones,
+  updateGestion as updateGestionById,
+} from "./repositories/gestionRepository";
+import {
+  changePromesaState,
+  bootstrapLegacyPromises,
+  createPromesa,
+  getPromesaById,
+  listPromesas,
+  migrateHistoricalPromises,
+  isPromiseLegacyBootstrapClosed,
+  reconcilePromises,
+  updatePromesaAtomic,
+  updatePromesa,
+} from "./repositories/promesaRepository";
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
@@ -470,40 +489,6 @@ function listGestionesCombinadas(cliente: string): any[] {
   }
 }
 
-function markGestionFulfilled(id: number) {
-  try {
-    // Cambiamos el resultado para que ya no salga en la lista de pendientes
-    db.prepare("UPDATE gestiones SET resultado = 'Promesa Cumplida' WHERE id = ?").run(id);
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
-  }
-}
-
-function updateGestion(id: number, data: any) {
-  try {
-    const { tipo, resultado, observacion, fecha_promesa, monto_promesa } = data;
-    db.prepare(`
-      UPDATE gestiones 
-      SET tipo = @tipo, resultado = @resultado, observacion = @observacion, 
-          fecha_promesa = @fecha_promesa, monto_promesa = @monto_promesa 
-      WHERE id = @id
-    `).run({ id, tipo, resultado, observacion, fecha_promesa, monto_promesa });
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
-  }
-}
-
-function deleteGestion(id: number) {
-  try {
-    db.prepare("DELETE FROM gestiones WHERE id = ?").run(id);
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
-  }
-}
-
 function getGestionesReporte(args?: { desde?: string, hasta?: string }) {
   try {
     const where: string[] = [];
@@ -938,10 +923,10 @@ function computeStats() {
 
   // 6. Tasa de cumplimiento de promesas
   const totalPromesas = Number(
-    db.prepare(`SELECT COUNT(1) AS c FROM gestiones WHERE resultado LIKE '%Promesa%'`).get().c
+    db.prepare(`SELECT COUNT(1) AS c FROM promesas`).get().c
   );
   const promesasCumplidas = Number(
-    db.prepare(`SELECT COUNT(1) AS c FROM gestiones WHERE resultado = 'Promesa Cumplida'`).get().c
+    db.prepare(`SELECT COUNT(1) AS c FROM promesas WHERE estado = 'CUMPLIDA'`).get().c
   );
   const tasaCumplimientoPromesas = totalPromesas > 0 ? Math.round((promesasCumplidas / totalPromesas) * 100) : 0;
 
@@ -1900,6 +1885,7 @@ app.whenReady().then(async () => {
   // Inicializar DB cuando la app esté lista
   const dbInstance = openDb();
   db = dbInstance.db;
+  migrateHistoricalPromises(db);
 
   try {
     const backfilled = backfillHistoricalTransactionBatches(db);
@@ -2181,6 +2167,12 @@ ipcMain.handle("limpiarBaseDatos", async () => {
         "notas_credito_importadas",
         "importacion_snapshots",
         "documentos_anulados_log",
+        "promesa_cobro_atribuciones",
+        "promesa_eventos",
+        "promesa_documentos",
+        "promesa_legacy_migrations",
+        "promesas",
+        "gestion_legacy_migrations",
         "gestiones",
         "disputas",
         "cuentas_aplicar",
@@ -2290,7 +2282,7 @@ ipcMain.handle("historicalBootstrapReset", () => {
       const current = currentReconciliationGeneration();
       const nextGeneration = current + 1;
       const tables = [
-        "cartera_snapshot_documentos", "cartera_snapshots", "documento_eventos",
+        "promesa_cobro_atribuciones", "cartera_snapshot_documentos", "cartera_snapshots", "documento_eventos",
         "documento_saldos", "cobros_movimientos_importados", "notas_credito_importadas",
         "importacion_snapshots", "documentos_anulados_log", "conciliaciones_cobros",
         "abonos", "alertas_credito", "documentos", "clientes", "importaciones", "historical_bootstrap_batches"
@@ -2341,15 +2333,21 @@ ipcMain.handle("clienteGuardarInfo", (_evt, data) => {
 });
 
 ipcMain.handle("gestionGuardar", (_evt, data) => {
-  db.prepare(`
-    INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario, motivo, fecha, creado_en) 
-    VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario, @motivo, datetime('now', 'localtime'), datetime('now', 'localtime'))
-  `).run({
-    ...data,
-    usuario: data.usuario || 'sistema',
-    motivo: data.motivo || null
-  });
-  return { ok: true };
+  return db.transaction(() => {
+    const gestion = createGestion(db, data);
+    if (data?.resultado === "Promesa de Pago") {
+      const promiseResult = createPromesa(db, {
+        cliente: gestion.cliente,
+        gestion_id: gestion.id,
+        fecha_promesa: data.fecha_promesa,
+        monto_prometido: Number(data.monto_promesa),
+        observacion: data.observacion,
+        documentos: Array.isArray(data.promesa_documentos) ? data.promesa_documentos : [],
+      });
+      if (promiseResult.ok === false) throw new Error(promiseResult.message);
+    }
+    return { ok: true, gestion };
+  })();
 });
 
 ipcMain.handle("gestionesListar", (_evt, cliente) => {
@@ -2357,16 +2355,37 @@ ipcMain.handle("gestionesListar", (_evt, cliente) => {
 });
 
 ipcMain.handle("gestionEditar", (_evt, { id, ...data }) => {
-  // Añadir actualizado_en y usuario si viene
-  return updateGestion(id, { ...data, actualizado_en: new Date().toISOString(), usuario: data.usuario || 'sistema' });
+  return updateGestionById(db, id, data);
 });
 
 ipcMain.handle("gestionEliminar", (_evt, id) => {
-  return deleteGestion(id);
+  return deleteGestionById(db, id);
 });
 
 ipcMain.handle("gestionCumplir", (_evt, id) => {
-  return markGestionFulfilled(id);
+  return fulfillGestion(db, id);
+});
+
+ipcMain.handle("gestionesLegacyMigrar", (_evt, payload) => {
+  return migrateLegacyGestiones(
+    db,
+    payload?.source || "localStorage:cartera_gestiones_locales",
+    Array.isArray(payload?.records) ? payload.records : [],
+  );
+});
+
+ipcMain.handle("promesaGuardar", (_evt, data) => createPromesa(db, data));
+ipcMain.handle("promesasListar", () => { migrateHistoricalPromises(db); return listPromesas(db); });
+ipcMain.handle("promesaObtener", (_evt, id) => getPromesaById(db, Number(id)) ?? null);
+ipcMain.handle("promesaEditar", (_evt, { id, ...data }) => updatePromesa(db, Number(id), data));
+ipcMain.handle("promesaActualizar", (_evt, { id, ...data }) => updatePromesaAtomic(db, Number(id), data));
+ipcMain.handle("promesaCambiarEstado", (_evt, { id, estado, ...data }) => changePromesaState(db, Number(id), estado, data));
+ipcMain.handle("promesasReconciliar", () => ({ ok: true, updated: reconcilePromises(db), promesas: listPromesas(db) }));
+ipcMain.on("promesasLegacyBootstrapInternal", (event, records) => {
+  event.returnValue = bootstrapLegacyPromises(db, Array.isArray(records) ? records : []);
+});
+ipcMain.on("promesasLegacyBootstrapStatusInternal", (event) => {
+  event.returnValue = { closed: isPromiseLegacyBootstrapClosed(db) };
 });
 
 ipcMain.handle("gestionesReporte", (_evt, args) => {
@@ -2424,12 +2443,13 @@ ipcMain.handle("productividadGestor", async () => {
     SELECT 
       g.usuario,
       COUNT(*) as total_gestiones,
-      SUM(CASE WHEN g.resultado LIKE '%Promesa%' THEN 1 ELSE 0 END) as promesas,
+      COUNT(DISTINCT p.id) as promesas,
       SUM(CASE WHEN g.resultado LIKE '%Pagado%' OR g.resultado LIKE '%Abonado%' THEN 1 ELSE 0 END) as pagos,
-      ROUND(100.0 * SUM(CASE WHEN g.resultado LIKE '%Promesa%' THEN 1 ELSE 0 END) / COUNT(*), 1) as tasa_promesa,
+      ROUND(100.0 * COUNT(DISTINCT p.id) / COUNT(DISTINCT g.id), 1) as tasa_promesa,
       ROUND(SUM(COALESCE(d.total - d.cobros, 0)), 2) as saldo_recuperable
     FROM gestiones g
     LEFT JOIN documentos d ON g.cliente = d.cliente
+    LEFT JOIN promesas p ON p.gestion_id = g.id
     WHERE g.usuario IS NOT NULL AND g.usuario != ''
     GROUP BY g.usuario
     ORDER BY total_gestiones DESC
@@ -2475,9 +2495,9 @@ ipcMain.handle("pronosticoFlujoCaja", async () => {
     fecha_hasta.setDate(fecha_hasta.getDate() + dias);
     
     const promesas = db.prepare(`
-      SELECT SUM(COALESCE(monto_promesa, 0)) as total
-      FROM gestiones
-      WHERE resultado LIKE '%Promesa%' 
+      SELECT SUM(MAX(monto_prometido - monto_pagado, 0)) as total
+      FROM promesas
+      WHERE estado IN ('PENDIENTE','CUMPLIDA_PARCIAL')
         AND fecha_promesa >= date('now')
         AND fecha_promesa <= date(?)
         AND monto_promesa > 0
@@ -3184,6 +3204,7 @@ ipcMain.handle(
       importacionId = Number(insert.lastInsertRowid);
 
       const result = importCollectionMovementsExcel(filePath, db, importacionId);
+      if (result.ok) reconcilePromises(db);
       registerHistoricalTransactionBatch(db, importacionId, "COBROS_MOVIMIENTOS");
       return result;
     } catch (error: unknown) {

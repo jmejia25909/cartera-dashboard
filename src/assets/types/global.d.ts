@@ -7,6 +7,17 @@ import type {
   EmpresaData, 
   ClienteInfo, 
   GestionData, 
+  GestionCreateInput,
+  GestionUpdateInput,
+  GestionMutationResult,
+  GestionLegacyInput,
+  GestionLegacyMigrationResult,
+  Promesa,
+  PromesaCreateInput,
+  PromesaUpdateInput,
+  PromesaAtomicUpdateInput,
+  PromesaState,
+  PromesaMutationResult,
   GestionesReporteArgs,
   CampanaData,
   DisputaData,
@@ -192,10 +203,22 @@ declare global {
       empresaGuardar: (data: EmpresaData) => Promise<{ ok: boolean; message?: string }>;
       clienteObtenerInfo: (codigo: string) => Promise<ClienteInfo | null>;
       clienteGuardarInfo: (data: ClienteInfo) => Promise<{ ok: boolean; message?: string }>;
-      gestionGuardar: (data: GestionData) => Promise<{ ok: boolean; message?: string }>;
+      gestionGuardar: (data: GestionCreateInput) => Promise<{ ok: true; gestion: GestionData }>;
       gestionesListar: (cliente: string) => Promise<GestionData[]>;
-      gestionCumplir: (id: number) => Promise<{ ok: boolean; message?: string }>;
-      gestionEliminar: (id: number) => Promise<{ ok: boolean; message?: string }>;
+      gestionEditar: (data: GestionUpdateInput & { id: number }) => Promise<GestionMutationResult>;
+      gestionCumplir: (id: number) => Promise<GestionMutationResult>;
+      gestionEliminar: (id: number) => Promise<GestionMutationResult>;
+      gestionesLegacyMigrar: (data: {
+        source: string;
+        records: GestionLegacyInput[];
+      }) => Promise<GestionLegacyMigrationResult>;
+      promesaGuardar: (data: PromesaCreateInput) => Promise<PromesaMutationResult>;
+      promesasListar: () => Promise<Promesa[]>;
+      promesaObtener: (id: number) => Promise<Promesa | null>;
+      promesaEditar: (data: PromesaUpdateInput & { id: number }) => Promise<PromesaMutationResult>;
+      promesaActualizar: (data: PromesaAtomicUpdateInput & { id: number }) => Promise<PromesaMutationResult>;
+      promesaCambiarEstado: (data: PromesaUpdateInput & { id: number; estado: PromesaState }) => Promise<PromesaMutationResult>;
+      promesasReconciliar: () => Promise<{ ok: true; updated: number; promesas: Promesa[] }>;
       gestionesReporte: (args: GestionesReporteArgs) => Promise<GestionData[]>;
       campanasListar: () => Promise<CampanaData[]>;
       campanasGuardar: (data: CampanaData) => Promise<{ ok: boolean; message?: string }>;
