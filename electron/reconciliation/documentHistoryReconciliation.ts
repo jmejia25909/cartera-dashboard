@@ -32,6 +32,7 @@ export type DocumentHistoryReconciliation = {
   result: ReconciliationResult | null;
   linkedCollections: number;
   linkedCreditNotes: number;
+  linkedFiscalRetentions: number;
   eventWritten: boolean;
 };
 
@@ -170,6 +171,67 @@ function linkCollections(
   return pending.length;
 }
 
+function linkFiscalRetentions(
+  db: Database.Database,
+  documentKey: string,
+): number {
+  const pending = db.prepare(`
+    SELECT
+      id,
+      movimiento_key,
+      valor,
+      importacion_id,
+      asiento,
+      codigo_comprobante,
+      fecha_movimiento
+    FROM cobros_movimientos_importados
+    WHERE documento_relacionado_normalizado = ?
+      AND clase_movimiento = 'RETENCION'
+      AND estado_conciliacion = 'PENDIENTE_CONCILIACION'
+    ORDER BY id
+  `).all(documentKey) as Array<{
+    id: number;
+    movimiento_key: string;
+    valor: number;
+    importacion_id: number | null;
+    asiento: string | null;
+    codigo_comprobante: string | null;
+    fecha_movimiento: string | null;
+  }>;
+
+  const mark = db.prepare(`
+    UPDATE cobros_movimientos_importados
+    SET estado_conciliacion = 'CONCILIADO'
+    WHERE id = ?
+      AND estado_conciliacion = 'PENDIENTE_CONCILIACION'
+  `);
+
+  for (const row of pending) {
+    mark.run(row.id);
+    insertDocumentEvent(db, {
+      eventKey: `RETENCION:${row.movimiento_key}`,
+      documentoNormalizado: documentKey,
+      tipoEvento: "RETENCION_FISCAL_REGISTRADA",
+      fuente: "COBROS_MOVIMIENTOS",
+      importe: row.valor,
+      estadoAnterior: null,
+      estadoNuevo: null,
+      provisional: false,
+      importacionId: row.importacion_id,
+      referenciaExterna:
+        row.asiento || row.codigo_comprobante || row.movimiento_key.slice(0, 16),
+      metadata: {
+        claseMovimiento: "RETENCION",
+        fechaMovimiento: row.fecha_movimiento,
+        naturaleza: "EVIDENCIA_FISCAL_NO_MONETARIA",
+        vinculacion: "RECONCILIACION_HISTORICA",
+      },
+    });
+  }
+
+  return pending.length;
+}
+
 function linkCreditNotes(
   db: Database.Database,
   documentKey: string,
@@ -281,6 +343,7 @@ export function reconcileDocumentHistory(
       result: null,
       linkedCollections: 0,
       linkedCreditNotes: 0,
+      linkedFiscalRetentions: 0,
       eventWritten: false,
     };
   }
@@ -292,11 +355,13 @@ export function reconcileDocumentHistory(
       result: null,
       linkedCollections: 0,
       linkedCreditNotes: 0,
+      linkedFiscalRetentions: 0,
       eventWritten: false,
     };
   }
 
   const linkedCollections = linkCollections(db, key);
+  const linkedFiscalRetentions = linkFiscalRetentions(db, key);
   const linkedCreditNotes = linkCreditNotes(db, key);
   const collections = collectionEvidence(db, key);
   const creditNotes = creditNoteEvidence(db, key);
@@ -333,6 +398,7 @@ export function reconcileDocumentHistory(
       result,
       linkedCollections,
       linkedCreditNotes,
+      linkedFiscalRetentions,
       eventWritten: false,
     };
   }
@@ -383,6 +449,7 @@ export function reconcileDocumentHistory(
     result,
     linkedCollections,
     linkedCreditNotes,
+    linkedFiscalRetentions,
     eventWritten: !before,
   };
 }

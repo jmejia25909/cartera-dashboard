@@ -212,9 +212,17 @@ const scenarios: Scenario[] = [
     run: (ctx) => {
       importPortfolio(ctx, "portfolio-a", [{ document: DOCUMENT, balance: 1000 }]);
       importCollection(ctx, "retention", DOCUMENT, 20, { form: "RETENCION FISCAL", detail: "RETENCION" });
+      const beforeDisappearance = projected(ctx);
+      assert.equal(Number(beforeDisappearance?.saldo_pendiente), 1000);
+      assert.equal(beforeDisappearance?.estado_documento, "ACTIVO_PENDIENTE");
       assert.equal(recovery(ctx.db, DOCUMENT), 0);
       assert.equal(eventCount(ctx, "COBRO_CONFIRMADO"), 0);
       assert.equal(eventCount(ctx, "RETENCION_FISCAL_REGISTRADA"), 1);
+      importPortfolio(ctx, "portfolio-b", []);
+      const disappearance = latestEvent(ctx.db, DOCUMENT);
+      assert.equal(disappearance?.estado_nuevo, "PAGADO_TOTAL");
+      assert.equal(Number(disappearance?.provisional), 1);
+      assert.equal(recovery(ctx.db, DOCUMENT), 0);
     },
   },
   {

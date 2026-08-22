@@ -241,6 +241,21 @@ function movementKey(row: {
     .digest("hex");
 }
 
+function movementEventIdentity(
+  movementClass: CollectionMovementClass,
+  key: string,
+): { eventKey: string; eventType: string } {
+  return movementClass === "RETENCION"
+    ? {
+        eventKey: `RETENCION:${key}`,
+        eventType: "RETENCION_FISCAL_REGISTRADA",
+      }
+    : {
+        eventKey: `COBRO:${key}`,
+        eventType: "COBRO_CONFIRMADO",
+      };
+}
+
 function emptyClasses(): Record<
   CollectionMovementClass,
   { count: number; value: number }
@@ -602,12 +617,15 @@ export function importCollectionMovementsExcel(
           estado_documento?: string | null;
         };
 
-        const eventKey = `COBRO:${row.movementKey}`;
+        const eventIdentity = movementEventIdentity(
+          row.claseMovimiento,
+          row.movementKey,
+        );
 
         insertDocumentEvent(db, {
-          eventKey,
+          eventKey: eventIdentity.eventKey,
           documentoNormalizado: row.documentoRelacionadoNormalizado,
-          tipoEvento: "COBRO_CONFIRMADO",
+          tipoEvento: eventIdentity.eventType,
           fuente: "COBROS_MOVIMIENTOS",
           importe: row.valor,
           estadoAnterior:
@@ -646,10 +664,14 @@ export function importCollectionMovementsExcel(
           db.prepare(`
             UPDATE documento_eventos
             SET ocurrido_en = ?
-            WHERE event_key = ?
-              AND fuente = 'COBROS_MOVIMIENTOS'
-              AND tipo_evento = 'COBRO_CONFIRMADO'
-          `).run(row.fecha, eventKey);
+              WHERE event_key = ?
+                AND fuente = 'COBROS_MOVIMIENTOS'
+                AND tipo_evento = ?
+          `).run(
+            row.fecha,
+            eventIdentity.eventKey,
+            eventIdentity.eventType,
+          );
         }
 
         rehydratedMovements += 1;
@@ -693,12 +715,15 @@ export function importCollectionMovementsExcel(
           estado_documento?: string | null;
         };
 
-        const eventKey = `COBRO:${row.movementKey}`;
+        const eventIdentity = movementEventIdentity(
+          row.claseMovimiento,
+          row.movementKey,
+        );
 
         insertDocumentEvent(db, {
-          eventKey,
+          eventKey: eventIdentity.eventKey,
           documentoNormalizado: row.documentoRelacionadoNormalizado,
-          tipoEvento: "COBRO_CONFIRMADO",
+          tipoEvento: eventIdentity.eventType,
           fuente: "COBROS_MOVIMIENTOS",
           importe: row.valor,
           estadoAnterior:
@@ -734,10 +759,14 @@ export function importCollectionMovementsExcel(
           db.prepare(`
             UPDATE documento_eventos
             SET ocurrido_en = ?
-            WHERE event_key = ?
-              AND fuente = 'COBROS_MOVIMIENTOS'
-              AND tipo_evento = 'COBRO_CONFIRMADO'
-          `).run(row.fecha, eventKey);
+              WHERE event_key = ?
+                AND fuente = 'COBROS_MOVIMIENTOS'
+                AND tipo_evento = ?
+          `).run(
+            row.fecha,
+            eventIdentity.eventKey,
+            eventIdentity.eventType,
+          );
         }
 
         reconciledMovements += 1;
@@ -750,9 +779,13 @@ export function importCollectionMovementsExcel(
       const reconciliation = reconcileDocumentHistory(db, documentKey);
       pendingMovements = Math.max(
         0,
-        pendingMovements - reconciliation.linkedCollections,
+        pendingMovements -
+          reconciliation.linkedCollections -
+          reconciliation.linkedFiscalRetentions,
       );
-      reconciledMovements += reconciliation.linkedCollections;
+      reconciledMovements +=
+        reconciliation.linkedCollections +
+        reconciliation.linkedFiscalRetentions;
     }
 
     const ignoredTotal =
