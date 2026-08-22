@@ -37,11 +37,13 @@ import {
 } from "./repositories/gestionRepository";
 import {
   changePromesaState,
+  bootstrapLegacyPromises,
   createPromesa,
   getPromesaById,
   listPromesas,
   migrateHistoricalPromises,
-  migrateLegacyPromises,
+  isPromiseLegacyBootstrapClosed,
+  reconcilePromises,
   updatePromesaAtomic,
   updatePromesa,
 } from "./repositories/promesaRepository";
@@ -2165,7 +2167,9 @@ ipcMain.handle("limpiarBaseDatos", async () => {
         "notas_credito_importadas",
         "importacion_snapshots",
         "documentos_anulados_log",
+        "promesa_cobro_atribuciones",
         "promesa_eventos",
+        "promesa_documentos",
         "promesa_legacy_migrations",
         "promesas",
         "gestion_legacy_migrations",
@@ -2278,7 +2282,7 @@ ipcMain.handle("historicalBootstrapReset", () => {
       const current = currentReconciliationGeneration();
       const nextGeneration = current + 1;
       const tables = [
-        "cartera_snapshot_documentos", "cartera_snapshots", "documento_eventos",
+        "promesa_cobro_atribuciones", "cartera_snapshot_documentos", "cartera_snapshots", "documento_eventos",
         "documento_saldos", "cobros_movimientos_importados", "notas_credito_importadas",
         "importacion_snapshots", "documentos_anulados_log", "conciliaciones_cobros",
         "abonos", "alertas_credito", "documentos", "clientes", "importaciones", "historical_bootstrap_batches"
@@ -2338,6 +2342,7 @@ ipcMain.handle("gestionGuardar", (_evt, data) => {
         fecha_promesa: data.fecha_promesa,
         monto_prometido: Number(data.monto_promesa),
         observacion: data.observacion,
+        documentos: Array.isArray(data.promesa_documentos) ? data.promesa_documentos : [],
       });
       if (promiseResult.ok === false) throw new Error(promiseResult.message);
     }
@@ -2375,7 +2380,13 @@ ipcMain.handle("promesaObtener", (_evt, id) => getPromesaById(db, Number(id)) ??
 ipcMain.handle("promesaEditar", (_evt, { id, ...data }) => updatePromesa(db, Number(id), data));
 ipcMain.handle("promesaActualizar", (_evt, { id, ...data }) => updatePromesaAtomic(db, Number(id), data));
 ipcMain.handle("promesaCambiarEstado", (_evt, { id, estado, ...data }) => changePromesaState(db, Number(id), estado, data));
-ipcMain.handle("promesasLegacyMigrar", (_evt, payload) => migrateLegacyPromises(db, payload?.source || "localStorage:cartera_promesas_locales", Array.isArray(payload?.records) ? payload.records : []));
+ipcMain.handle("promesasReconciliar", () => ({ ok: true, updated: reconcilePromises(db), promesas: listPromesas(db) }));
+ipcMain.on("promesasLegacyBootstrapInternal", (event, records) => {
+  event.returnValue = bootstrapLegacyPromises(db, Array.isArray(records) ? records : []);
+});
+ipcMain.on("promesasLegacyBootstrapStatusInternal", (event) => {
+  event.returnValue = { closed: isPromiseLegacyBootstrapClosed(db) };
+});
 
 ipcMain.handle("gestionesReporte", (_evt, args) => {
   return getGestionesReporte(args);
@@ -3193,6 +3204,7 @@ ipcMain.handle(
       importacionId = Number(insert.lastInsertRowid);
 
       const result = importCollectionMovementsExcel(filePath, db, importacionId);
+      if (result.ok) reconcilePromises(db);
       registerHistoricalTransactionBatch(db, importacionId, "COBROS_MOVIMIENTOS");
       return result;
     } catch (error: unknown) {

@@ -18,8 +18,6 @@ import type {
   PromesaAtomicUpdateInput,
   PromesaState,
   PromesaMutationResult,
-  PromesaLegacyInput,
-  PromesaLegacyMigrationResult,
   GestionesReporteArgs,
   CampanaData,
   DisputaData,
@@ -220,7 +218,7 @@ declare global {
       promesaEditar: (data: PromesaUpdateInput & { id: number }) => Promise<PromesaMutationResult>;
       promesaActualizar: (data: PromesaAtomicUpdateInput & { id: number }) => Promise<PromesaMutationResult>;
       promesaCambiarEstado: (data: PromesaUpdateInput & { id: number; estado: PromesaState }) => Promise<PromesaMutationResult>;
-      promesasLegacyMigrar: (data: { source: string; records: PromesaLegacyInput[] }) => Promise<PromesaLegacyMigrationResult>;
+      promesasReconciliar: () => Promise<{ ok: true; updated: number; promesas: Promesa[] }>;
       gestionesReporte: (args: GestionesReporteArgs) => Promise<GestionData[]>;
       campanasListar: () => Promise<CampanaData[]>;
       campanasGuardar: (data: CampanaData) => Promise<{ ok: boolean; message?: string }>;

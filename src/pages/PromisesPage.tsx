@@ -179,7 +179,7 @@ export function PromisesPage({
                 <th>Cliente</th>
                 <th>Fecha Promesa</th>
                 <th className="num">Prometido</th>
-                <th className="num">Pagado</th>
+                <th className="num">Cumplido por imports</th>
                 <th className="num">Falta</th>
                 <th>Estado</th>
                 <th>Observación</th>
@@ -266,7 +266,7 @@ export function PromisesPage({
                             style={{ padding: '4px 8px', fontSize: '0.8rem' }}
                             onClick={() => void onCumplirPromesa(promesa.id)}
                             disabled={!hasWritePermissions}
-                            title="Marcar como cumplida"
+                            title="Reconciliar pagos importados"
                           >
                             ✓
                           </button>

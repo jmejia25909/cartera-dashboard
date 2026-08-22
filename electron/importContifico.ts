@@ -5,6 +5,7 @@ import type Database from "better-sqlite3";
 import { normalizeDocumentNumber } from "./reconciliation/documentIdentity";
 import { reconcileDocument } from "./reconciliation/reconciliationEngine";
 import { reconcileDocumentHistory } from "./reconciliation/documentHistoryReconciliation";
+import { reconcilePromises } from "./repositories/promesaRepository";
 import { comparePortfolioSnapshots, type PortfolioSnapshotDocument } from "./reconciliation/portfolioDeltaEngine";
 import { classifyTemporalScope, toMoneyCents } from "./reconciliation/reconciliationConfig";
 import {
@@ -986,6 +987,7 @@ export function importarCarteraPorCobrarExcel(
   });
 
   tx();
+  reconcilePromises(db);
 
   const comparison = comparePortfolioSnapshots(
     previousRows,

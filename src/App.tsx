@@ -68,7 +68,6 @@ import {
   getResumenVencidos,
 } from "./services";
 import { persistLegacyGestionIds } from "./services/gestionLegacyMigration";
-import { prepareLegacyPromises } from "./services/promesaLegacyMigration";
 import {
   checkHttpApiAvailable,
   createHttpApiClient,
@@ -80,7 +79,6 @@ import { APP_NAVIGATION_TABS } from "./app/config/navigation";
 const LEGACY_GESTIONES_KEY = "cartera_gestiones_locales";
 const LEGACY_GESTIONES_SOURCE = "localStorage:cartera_gestiones_locales";
 const LEGACY_GESTIONES_COMPLETE_KEY = "cartera_gestiones_migration_complete_v1";
-const LEGACY_PROMESAS_KEY = "cartera_promesas_locales";
 
 async function migrarGestionesLegacy(
   api: NonNullable<Window["carteraApi"]>,
@@ -130,14 +128,6 @@ async function migrarGestionesLegacy(
   }
 
   localStorage.setItem(LEGACY_GESTIONES_COMPLETE_KEY, "1");
-}
-
-async function migrarPromesasLegacy(api: NonNullable<Window["carteraApi"]>): Promise<void> {
-  const stored=localStorage.getItem(LEGACY_PROMESAS_KEY);if(!stored)return;
-  const parsed:unknown=JSON.parse(stored);if(!Array.isArray(parsed)||parsed.length===0)return;
-  const records=prepareLegacyPromises(parsed,()=>crypto.randomUUID(),value=>localStorage.setItem(LEGACY_PROMESAS_KEY,JSON.stringify(value)));
-  const result=await api.promesasLegacyMigrar({source:'localStorage:cartera_promesas_locales',records});
-  if(result.ok===false)throw new Error(result.message);
 }
 
 export default function App() {
@@ -205,6 +195,7 @@ export default function App() {
   const [promesaEditando, setPromesaEditando] = useState<any>(null);
   const [toasts, setToasts] = useState<any[]>([]);
   const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: "" });
+  const [promesaDocumentosSeleccionados,setPromesaDocumentosSeleccionados]=useState<string[]>([]);
   const [gestionSaving, setGestionSaving] = useState(false);
   const gestionSavingRef = useRef(false);
   
@@ -512,8 +503,6 @@ export default function App() {
           addToast("Migración de gestiones legacy pendiente", "warning");
         }
       }
-      if(api?.promesasLegacyMigrar){try{await migrarPromesasLegacy(api);}catch(error){console.error('Migración legacy de promesas pendiente:',error);addToast('Migración de promesas legacy pendiente','warning');}}
-
       const [empData, statsData, filtros, top, gestionesData, promesasData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
         api ? api.empresaObtener() : httpApi.empresaObtener(),
         api ? api.statsObtener() : httpApi.statsObtener(),
@@ -693,7 +682,8 @@ export default function App() {
       // Guardar en backend
       const result = await api.gestionGuardar({
         cliente: selectedCliente,
-        ...gestionParaGuardar
+        ...gestionParaGuardar,
+        promesa_documentos: promesaDocumentosSeleccionados.map(documento_normalizado=>({documento_normalizado}))
       });
       
       if (result?.ok) {
@@ -711,6 +701,7 @@ export default function App() {
           fecha_promesa: "",
           monto_promesa: ""
         });
+        setPromesaDocumentosSeleccionados([]);
       }
     } catch (e) {
       addToast("Error guardando gestión", "error");
@@ -739,16 +730,13 @@ export default function App() {
   }
 
   async function cumplirPromesa(id: number) {
+    void id;
     const api = getElectronApi();
-    if (isWeb || !api?.promesaCambiarEstado) return;
+    if (isWeb || !api?.promesasReconciliar) return;
     try {
-      const result = await api.promesaCambiarEstado({id,estado:'CUMPLIDA'});
-      if (!result.ok) {
-        addToast("message" in result ? result.message : "Gestión no encontrada", "error");
-        return;
-      }
-      addToast("Promesa cumplida", "success");
-      setPromesas(prev => prev.map(p=>p.id===id?result.promesa:p));
+      const result = await api.promesasReconciliar();
+      setPromesas(result.promesas);
+      addToast(result.updated>0?"Pagos importados conciliados":"No hay pagos importados nuevos para esta promesa",result.updated>0?"success":"info");
     } catch (e) {
       addToast("Error cumpliendo promesa", "error");
       console.error("Error cumpliendo promesa:", e);
@@ -758,7 +746,7 @@ export default function App() {
   async function actualizarPromesa(promesaActualizada: any) {
     const api=getElectronApi();if (isWeb||!api?.promesaActualizar) return;
     try {
-      const result=await api.promesaActualizar({id:promesaActualizada.id,fecha_promesa:promesaActualizada.fecha_promesa,monto_prometido:Number(promesaActualizada.monto_prometido),monto_pagado:Number(promesaActualizada.monto_pagado),fecha_pago:promesaActualizada.fecha_pago||null,motivo_incumplimiento:promesaActualizada.motivo_incumplimiento||null,observacion:promesaActualizada.observacion||null,estado:promesaActualizada.estado as PromesaState});
+      const result=await api.promesaActualizar({id:promesaActualizada.id,fecha_promesa:promesaActualizada.fecha_promesa,monto_prometido:Number(promesaActualizada.monto_prometido),motivo_incumplimiento:promesaActualizada.motivo_incumplimiento||null,observacion:promesaActualizada.observacion||null,estado:promesaActualizada.estado as PromesaState});
       if(result.ok===false)throw new Error(result.message);
       const saved=result.promesa;
       setPromesas(current=>current.map(p=>p.id===saved.id?saved:p));
@@ -2355,6 +2343,13 @@ export default function App() {
                     <span>Monto Promesa</span>
                     <input type="number" value={gestionForm.monto_promesa} onChange={e => setGestionForm({...gestionForm, monto_promesa: e.target.value})} placeholder="0" />
                   </label>
+                  <label className="field">
+                    <span>Documentos asociados (opcional)</span>
+                    <select multiple value={promesaDocumentosSeleccionados} onChange={e=>setPromesaDocumentosSeleccionados(Array.from(e.currentTarget.selectedOptions,option=>option.value))} style={{minHeight:'90px'}}>
+                      {docs.filter(doc=>(doc.cliente===selectedCliente||doc.razon_social===selectedCliente)&&Number(doc.total)>0).map(doc=>{const key=String(doc.documento_normalizado||doc.documento||'').trim();return key?<option key={doc.id||key} value={key}>{doc.documento||key} — ${Number(doc.total).toLocaleString()}</option>:null;})}
+                    </select>
+                    <small>Ctrl/Cmd + clic para seleccionar varios. Sin documentos, el cumplimiento queda para revisión manual.</small>
+                  </label>
                 </>
               )}
             </div>
@@ -2399,21 +2394,21 @@ export default function App() {
               </label>
               
               <label className="field">
-                <span>Monto Pagado</span>
+                <span>Monto cumplido (desde importaciones)</span>
                 <input 
                   type="number" 
                   value={promesaEditando.monto_pagado || ''} 
-                  onChange={e => setPromesaEditando({...promesaEditando, monto_pagado: Number(e.target.value)})}
+                  readOnly
                   placeholder="0"
                 />
               </label>
               
               <label className="field">
-                <span>Fecha Pago</span>
+                <span>Fecha último cumplimiento</span>
                 <input 
                   type="date" 
                   value={promesaEditando.fecha_pago || ''} 
-                  onChange={e => setPromesaEditando({...promesaEditando, fecha_pago: e.target.value})}
+                  readOnly
                 />
               </label>
               
@@ -2425,8 +2420,8 @@ export default function App() {
                   style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
                 >
                   <option value="PENDIENTE">⏳ Pendiente</option>
-                  <option value="CUMPLIDA_PARCIAL">⚠️ Parcialmente Cumplida</option>
-                  <option value="CUMPLIDA">✅ Cumplida</option>
+                  <option value="CUMPLIDA_PARCIAL" disabled>⚠️ Parcialmente Cumplida (automática)</option>
+                  <option value="CUMPLIDA" disabled>✅ Cumplida (automática)</option>
                   <option value="INCUMPLIDA">❌ Incumplida</option>
                   <option value="CANCELADA">🚫 Cancelada</option>
                   <option value="REPROGRAMADA">🔄 Reprogramada</option>
@@ -2444,7 +2439,7 @@ export default function App() {
               </label>
               
               <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-nav)', padding: '8px', borderRadius: '4px', marginBottom: '12px' }}>
-                <strong>ℹ️ Nota:</strong> Estos cambios son solo para seguimiento. No afectan el saldo del cliente que se modifica únicamente con importaciones.
+                <strong>ℹ️ Nota:</strong> Cumplimiento calculado desde importaciones. Estos cambios no registran pagos ni afectan el saldo financiero.
               </div>
             </div>
             <div className="modal-footer">

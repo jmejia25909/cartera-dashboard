@@ -1,5 +1,23 @@
 ﻿import { contextBridge, ipcRenderer } from "electron";
 
+import { prepareLegacyPromises } from "../src/services/promesaLegacyMigration";
+
+const LEGACY_PROMISES_KEY = "cartera_promesas_locales";
+try {
+  const status = ipcRenderer.sendSync("promesasLegacyBootstrapStatusInternal") as { closed?: boolean };
+  if (!status?.closed) {
+    const stored = window.localStorage.getItem(LEGACY_PROMISES_KEY);
+    const parsed: unknown = stored ? JSON.parse(stored) : [];
+    const records = Array.isArray(parsed) && parsed.length > 0
+      ? prepareLegacyPromises(parsed, () => crypto.randomUUID(), (value) =>
+          window.localStorage.setItem(LEGACY_PROMISES_KEY, JSON.stringify(value)))
+      : [];
+    ipcRenderer.sendSync("promesasLegacyBootstrapInternal", records);
+  }
+} catch (error) {
+  console.error("Bootstrap interno de promesas legacy pendiente:", error);
+}
+
 const apiMethods = {
   cambiarLogo: () => {
     console.log("🔄 Preload: Iniciando cambio de logo...");
@@ -114,7 +132,7 @@ const apiMethods = {
   promesaEditar: (data: unknown) => ipcRenderer.invoke("promesaEditar", data),
   promesaActualizar: (data: unknown) => ipcRenderer.invoke("promesaActualizar", data),
   promesaCambiarEstado: (data: unknown) => ipcRenderer.invoke("promesaCambiarEstado", data),
-  promesasLegacyMigrar: (data: unknown) => ipcRenderer.invoke("promesasLegacyMigrar", data),
+  promesasReconciliar: () => ipcRenderer.invoke("promesasReconciliar"),
   gestionesReporte: (args: unknown) => ipcRenderer.invoke("gestionesReporte", args),
   campanasListar: () => ipcRenderer.invoke("campanasListar"),
   campanasGuardar: (data: unknown) => ipcRenderer.invoke("campanasGuardar", data),

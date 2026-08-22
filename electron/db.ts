@@ -248,6 +248,12 @@ function ensureSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_promesa_legacy_promesa ON promesa_legacy_migrations(promesa_id);
 
+    CREATE TABLE IF NOT EXISTS app_migrations (
+      key TEXT PRIMARY KEY,
+      completed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      metadata TEXT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS promesa_eventos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       promesa_id INTEGER NOT NULL,
@@ -259,6 +265,28 @@ function ensureSchema(db: Database.Database) {
       FOREIGN KEY (promesa_id) REFERENCES promesas(id)
     );
     CREATE INDEX IF NOT EXISTS idx_promesa_eventos_promesa ON promesa_eventos(promesa_id, id);
+
+    CREATE TABLE IF NOT EXISTS promesa_documentos (
+      promesa_id INTEGER NOT NULL,
+      documento_normalizado TEXT NOT NULL,
+      monto_comprometido REAL NULL CHECK (monto_comprometido IS NULL OR monto_comprometido > 0),
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (promesa_id, documento_normalizado),
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_documentos_documento ON promesa_documentos(documento_normalizado);
+
+    CREATE TABLE IF NOT EXISTS promesa_cobro_atribuciones (
+      promesa_id INTEGER NOT NULL,
+      movement_key TEXT NOT NULL,
+      importe_atribuido REAL NOT NULL CHECK (importe_atribuido > 0),
+      attributed_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      documento_normalizado TEXT NOT NULL,
+      PRIMARY KEY (promesa_id, movement_key),
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id),
+      FOREIGN KEY (movement_key) REFERENCES cobros_movimientos_importados(movimiento_key)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_atribuciones_movement ON promesa_cobro_atribuciones(movement_key);
 
     /* Tabla de Disputas */
     CREATE TABLE IF NOT EXISTS disputas (
@@ -987,6 +1015,14 @@ function ensureSchema(db: Database.Database) {
   // Insertar registro de empresa por defecto si no existe
   if (!tableHasColumn(db, "promesas", "origen")) {
     db.exec("ALTER TABLE promesas ADD COLUMN origen TEXT NOT NULL DEFAULT 'NATIVE' CHECK (origen IN ('NATIVE','MIGRATED_GESTION','MIGRATED_LEGACY'))");
+  }
+  if (!tableHasColumn(db, "promesas", "monto_cumplido_base")) {
+    db.exec("ALTER TABLE promesas ADD COLUMN monto_cumplido_base REAL NOT NULL DEFAULT 0 CHECK (monto_cumplido_base >= 0)");
+    db.exec("UPDATE promesas SET monto_cumplido_base=monto_pagado");
+  }
+  if (!tableHasColumn(db, "promesas", "cumplimiento_automatico_desde")) {
+    db.exec("ALTER TABLE promesas ADD COLUMN cumplimiento_automatico_desde TEXT NULL");
+    db.exec("UPDATE promesas SET cumplimiento_automatico_desde=datetime('now','localtime')");
   }
 
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");

@@ -243,6 +243,33 @@ const SCHEMA = `
     importacion_id INTEGER,
     UNIQUE(documento_normalizado, archivo_origen)
   );
+
+  CREATE TABLE promesas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, cliente TEXT NOT NULL, gestion_id INTEGER NULL UNIQUE,
+    documento_id INTEGER NULL, fecha_promesa TEXT NOT NULL, monto_prometido REAL NOT NULL,
+    monto_pagado REAL NOT NULL DEFAULT 0, estado TEXT NOT NULL DEFAULT 'PENDIENTE', fecha_pago TEXT,
+    motivo_incumplimiento TEXT, observacion TEXT, origen TEXT NOT NULL DEFAULT 'NATIVE',
+    monto_cumplido_base REAL NOT NULL DEFAULT 0, cumplimiento_automatico_desde TEXT,
+    creado_en TEXT NOT NULL DEFAULT(datetime('now','localtime')), actualizado_en TEXT
+  );
+  CREATE TABLE promesa_documentos (
+    promesa_id INTEGER NOT NULL, documento_normalizado TEXT NOT NULL, monto_comprometido REAL,
+    creado_en TEXT NOT NULL DEFAULT(datetime('now','localtime')),
+    PRIMARY KEY(promesa_id,documento_normalizado)
+  );
+  CREATE TABLE promesa_cobro_atribuciones (
+    promesa_id INTEGER NOT NULL, movement_key TEXT NOT NULL, importe_atribuido REAL NOT NULL,
+    attributed_at TEXT NOT NULL DEFAULT(datetime('now','localtime')), documento_normalizado TEXT NOT NULL,
+    PRIMARY KEY(promesa_id,movement_key)
+  );
+  CREATE TABLE promesa_eventos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, promesa_id INTEGER NOT NULL, tipo_evento TEXT NOT NULL,
+    estado_anterior TEXT, estado_nuevo TEXT, fecha TEXT NOT NULL DEFAULT(datetime('now','localtime')),
+    metadata TEXT NOT NULL DEFAULT '{}'
+  );
+  CREATE TABLE app_migrations (
+    key TEXT PRIMARY KEY, completed_at TEXT NOT NULL DEFAULT(datetime('now','localtime')), metadata TEXT
+  );
 `;
 
 function safeRemove(directory: string): void {
