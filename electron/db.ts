@@ -214,6 +214,52 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_gestion_legacy_migrations_gestion
       ON gestion_legacy_migrations(gestion_id);
 
+    CREATE TABLE IF NOT EXISTS promesas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente TEXT NOT NULL,
+      gestion_id INTEGER NULL UNIQUE,
+      documento_id INTEGER NULL,
+      fecha_promesa TEXT NOT NULL,
+      monto_prometido REAL NOT NULL CHECK (monto_prometido >= 0),
+      monto_pagado REAL NOT NULL DEFAULT 0 CHECK (monto_pagado >= 0 AND monto_pagado <= monto_prometido),
+      estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','CUMPLIDA','CUMPLIDA_PARCIAL','INCUMPLIDA','CANCELADA','REPROGRAMADA')),
+      fecha_pago TEXT NULL,
+      motivo_incumplimiento TEXT NULL,
+      observacion TEXT NULL,
+      origen TEXT NOT NULL DEFAULT 'NATIVE' CHECK (origen IN ('NATIVE','MIGRATED_GESTION','MIGRATED_LEGACY')),
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      actualizado_en TEXT NULL,
+      FOREIGN KEY (gestion_id) REFERENCES gestiones(id),
+      FOREIGN KEY (documento_id) REFERENCES documentos(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesas_cliente ON promesas(cliente);
+    CREATE INDEX IF NOT EXISTS idx_promesas_estado ON promesas(estado);
+    CREATE INDEX IF NOT EXISTS idx_promesas_fecha ON promesas(fecha_promesa);
+    CREATE INDEX IF NOT EXISTS idx_promesas_gestion ON promesas(gestion_id);
+
+    CREATE TABLE IF NOT EXISTS promesa_legacy_migrations (
+      source TEXT NOT NULL,
+      legacy_id TEXT NOT NULL,
+      promesa_id INTEGER NOT NULL,
+      payload_hash TEXT NOT NULL,
+      migrated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (source, legacy_id),
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_legacy_promesa ON promesa_legacy_migrations(promesa_id);
+
+    CREATE TABLE IF NOT EXISTS promesa_eventos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      promesa_id INTEGER NOT NULL,
+      tipo_evento TEXT NOT NULL,
+      estado_anterior TEXT NULL,
+      estado_nuevo TEXT NULL,
+      fecha TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      metadata TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_promesa_eventos_promesa ON promesa_eventos(promesa_id, id);
+
     /* Tabla de Disputas */
     CREATE TABLE IF NOT EXISTS disputas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -939,6 +985,10 @@ function ensureSchema(db: Database.Database) {
   `);
 
   // Insertar registro de empresa por defecto si no existe
+  if (!tableHasColumn(db, "promesas", "origen")) {
+    db.exec("ALTER TABLE promesas ADD COLUMN origen TEXT NOT NULL DEFAULT 'NATIVE' CHECK (origen IN ('NATIVE','MIGRATED_GESTION','MIGRATED_LEGACY'))");
+  }
+
   db.exec("INSERT OR IGNORE INTO empresa (id, nombre) VALUES (1, 'Mi Empresa')");
   ensureEvidenceAttributionBaseline(db);
 }

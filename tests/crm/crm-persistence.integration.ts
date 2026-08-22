@@ -15,6 +15,8 @@ import {
   updateGestion,
 } from "../../electron/repositories/gestionRepository";
 import { createSingleFlight, ensureLegacyGestionIds, persistLegacyGestionIds } from "../../src/services/gestionLegacyMigration";
+import { prepareLegacyPromises } from "../../src/services/promesaLegacyMigration";
+import { changePromesaState, createPromesa, getPromesaById, hashLegacyPromise, listPromesas, migrateHistoricalPromises, migrateLegacyPromises, updatePromesa, updatePromesaAtomic } from "../../electron/repositories/promesaRepository";
 
 type Gestion = {
   id?: number | string;
@@ -38,6 +40,7 @@ type Scenario = {
 };
 
 const SCHEMA = `
+  CREATE TABLE documentos (id INTEGER PRIMARY KEY AUTOINCREMENT, cliente TEXT, razon_social TEXT);
   CREATE TABLE gestiones (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     cliente TEXT NOT NULL,
@@ -63,6 +66,9 @@ const SCHEMA = `
     PRIMARY KEY (source, legacy_id),
     FOREIGN KEY (gestion_id) REFERENCES gestiones(id)
   );
+  CREATE TABLE promesas (id INTEGER PRIMARY KEY AUTOINCREMENT,cliente TEXT NOT NULL,gestion_id INTEGER NULL UNIQUE,documento_id INTEGER NULL,fecha_promesa TEXT NOT NULL,monto_prometido REAL NOT NULL CHECK(monto_prometido>=0),monto_pagado REAL NOT NULL DEFAULT 0 CHECK(monto_pagado>=0 AND monto_pagado<=monto_prometido),estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK(estado IN('PENDIENTE','CUMPLIDA','CUMPLIDA_PARCIAL','INCUMPLIDA','CANCELADA','REPROGRAMADA')),fecha_pago TEXT NULL,motivo_incumplimiento TEXT NULL,observacion TEXT NULL,origen TEXT NOT NULL DEFAULT 'NATIVE' CHECK(origen IN('NATIVE','MIGRATED_GESTION','MIGRATED_LEGACY')),creado_en TEXT NOT NULL DEFAULT(datetime('now','localtime')),actualizado_en TEXT NULL,FOREIGN KEY(gestion_id) REFERENCES gestiones(id));
+  CREATE TABLE promesa_legacy_migrations(source TEXT NOT NULL,legacy_id TEXT NOT NULL,promesa_id INTEGER NOT NULL,payload_hash TEXT NOT NULL,migrated_at TEXT NOT NULL DEFAULT(datetime('now','localtime')),PRIMARY KEY(source,legacy_id),FOREIGN KEY(promesa_id) REFERENCES promesas(id));
+  CREATE TABLE promesa_eventos(id INTEGER PRIMARY KEY AUTOINCREMENT,promesa_id INTEGER NOT NULL,tipo_evento TEXT NOT NULL,estado_anterior TEXT,estado_nuevo TEXT,fecha TEXT NOT NULL DEFAULT(datetime('now','localtime')),metadata TEXT NOT NULL DEFAULT '{}');
 `;
 
 const tempRoot = path.resolve(os.tmpdir());
@@ -130,6 +136,7 @@ function insertedId(db: Database.Database): number {
     (db.prepare("SELECT MAX(id) AS id FROM gestiones").get() as { id: number }).id,
   );
 }
+const basePromesa=()=>({cliente:'CLIENTE-P',fecha_promesa:'2026-12-15',monto_prometido:100,monto_pagado:0,estado:'PENDIENTE' as const,observacion:'Compromiso'});
 
 function assertProductionContract(): void {
   const root = process.cwd();
@@ -137,7 +144,8 @@ function assertProductionContract(): void {
   const app = fs.readFileSync(path.join(root, "src", "App.tsx"), "utf8");
 
   assert.match(main, /ipcMain\.handle\("gestionGuardar"/);
-  assert.match(main, /ok: true, gestion: createGestion\(db, data\)/);
+  assert.match(main, /const gestion = createGestion\(db, data\)/);
+  assert.match(main, /createPromesa\(db/);
   assert.match(main, /LIMIT 5000/);
   assert.match(main, /fulfillGestion\(db, id\)/);
   assert.match(app, /cartera_gestiones_locales/);
@@ -237,22 +245,20 @@ const scenarios: Scenario[] = [
   {
     id: "C1-07",
     name: "edición UI de promesa sobrevive reinicio SQLite",
-    expectedFailure: true,
-    defect: "La UI edita sólo cartera_promesas_locales; no invoca gestionEditar ni actualiza SQLite.",
+    expectedFailure: false,
     run: () => withDatabase((db, file) => {
       saveGestion(db, baseGestion({
         resultado: "Promesa de Pago",
         fecha_promesa: "2026-09-15",
         monto_promesa: 100,
       }));
-      const id = insertedId(db);
-      const localEdit = { ...row(db, id), fecha_promesa: "2026-10-01", monto_promesa: 250 };
-      assert.equal(localEdit.monto_promesa, 250);
+      migrateHistoricalPromises(db);const promise=listPromesas(db)[0]!;
+      assert.equal(updatePromesa(db,promise.id,{fecha_promesa:"2026-10-01",monto_prometido:250}).ok,true);
       db.close();
       const reopened = new Database(file);
       try {
-        assert.equal(row(reopened, id)?.fecha_promesa, "2026-10-01");
-        assert.equal(row(reopened, id)?.monto_promesa, 250);
+        assert.equal(getPromesaById(reopened,promise.id)?.fecha_promesa,"2026-10-01");
+        assert.equal(getPromesaById(reopened,promise.id)?.monto_prometido,250);
       } finally {
         reopened.close();
       }
@@ -334,19 +340,17 @@ const scenarios: Scenario[] = [
   {
     id: "C1-13",
     name: "cartera_promesas_locales se rehidrata después de reinicio",
-    expectedFailure: true,
-    defect: "cargarDatos no lee cartera_promesas_locales; reconstruye promesas exclusivamente desde gestiones.",
+    expectedFailure: false,
     run: () => withDatabase((db) => {
       saveGestion(db, baseGestion({
         resultado: "Promesa de Pago",
         fecha_promesa: "2026-09-15",
         monto_promesa: 100,
       }));
-      const localPromises = [{ ...row(db, insertedId(db)), monto_promesa: 900 }];
-      const rehydrated = listGestiones(db).filter((item) =>
-        item.resultado.includes("Promesa") && item.fecha_promesa,
-      );
-      assert.equal(rehydrated[0]?.monto_promesa, localPromises[0]?.monto_promesa);
+      const gestionId=insertedId(db);migrateHistoricalPromises(db);
+      const promise=listPromesas(db)[0]!;
+      const result=migrateLegacyPromises(db,'localStorage',[{legacy_id:'local-edit',gestion_id:gestionId,cliente:'CLIENTE-C1',fecha_promesa:'2026-09-15',monto_prometido:900}]);assert.equal(result.ok,true);
+      assert.equal(getPromesaById(db,promise.id)?.monto_prometido,100);assert.equal(listPromesas(db).length,2);
     }),
   },
   {
@@ -674,6 +678,64 @@ const scenarios: Scenario[] = [
     id: "C2H-14", name: "fallo insertando mapping revierte gestión", expectedFailure: false,
     run: () => withDatabase((db) => { db.exec(`CREATE TRIGGER fail_mapping BEFORE INSERT ON gestion_legacy_migrations BEGIN SELECT RAISE(ABORT,'mapping'); END`); assert.throws(()=>migrateLegacyGestiones(db,"s",[{...baseGestion(),legacy_id:"atomic"}]),/mapping/); assert.equal(listGestiones(db).length,0); assert.equal((db.prepare("SELECT count(*) n FROM gestion_legacy_migrations").get() as any).n,0); }),
   },
+  {id:'C3-01',name:'crear promesa y recuperar tras reinicio',expectedFailure:false,run:()=>withDatabase((db,file)=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);db.close();const reopened=new Database(file);try{assert.equal(getPromesaById(reopened,r.promesa.id)?.cliente,'CLIENTE-P');}finally{reopened.close();}})},
+  {id:'C3-02',name:'editar fecha y monto persiste',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);updatePromesa(db,r.promesa.id,{fecha_promesa:'2027-01-01',monto_prometido:200});assert.equal(getPromesaById(db,r.promesa.id)?.monto_prometido,200);})},
+  {id:'C3-03',name:'cumplir promesa',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);const x=changePromesaState(db,r.promesa.id,'CUMPLIDA');assert.equal(x.ok&&x.promesa.monto_pagado,100);})},
+  {id:'C3-04',name:'cumplimiento parcial',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);const x=changePromesaState(db,r.promesa.id,'CUMPLIDA_PARCIAL',{monto_pagado:40});assert.equal(x.ok&&x.promesa.estado,'CUMPLIDA_PARCIAL');})},
+  {id:'C3-05',name:'estado incumplida',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(changePromesaState(db,r.promesa.id,'INCUMPLIDA').ok,true);})},
+  {id:'C3-06',name:'cancelar promesa',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(changePromesaState(db,r.promesa.id,'CANCELADA').ok,true);})},
+  {id:'C3-07',name:'monto pagado excesivo rechazado',expectedFailure:false,run:()=>withDatabase(db=>{assert.equal(createPromesa(db,{...basePromesa(),monto_pagado:101}).ok,false);})},
+  {id:'C3-08',name:'transición inválida rechazada',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);changePromesaState(db,r.promesa.id,'CANCELADA');const x=changePromesaState(db,r.promesa.id,'CUMPLIDA');assert.equal(x.ok,false);if(!x.ok)assert.equal(x.code,'PROMESA_INVALID_TRANSITION');})},
+  {id:'C3-09',name:'migración histórica idempotente',expectedFailure:false,run:()=>withDatabase(db=>{createGestion(db,baseGestion({resultado:'Promesa de Pago',fecha_promesa:'2026-12-01',monto_promesa:50}));assert.equal(migrateHistoricalPromises(db),1);assert.equal(migrateHistoricalPromises(db),0);assert.equal(listPromesas(db).length,1);})},
+  {id:'C3-10',name:'Promesa Cumplida histórica',expectedFailure:false,run:()=>withDatabase(db=>{createGestion(db,baseGestion({resultado:'Promesa Cumplida',fecha_promesa:'2026-12-01',monto_promesa:50}));migrateHistoricalPromises(db);assert.equal(listPromesas(db)[0]?.estado,'CUMPLIDA');assert.equal(listPromesas(db)[0]?.monto_pagado,50);})},
+  {id:'C3-11',name:'migración cartera_promesas_locales',expectedFailure:false,run:()=>withDatabase(db=>{const x=migrateLegacyPromises(db,'localStorage',[{...basePromesa(),legacy_id:'local-1'}]);assert.equal(x.ok,true);assert.equal(listPromesas(db).length,1);})},
+  {id:'C3-12',name:'reinicio conserva migración local',expectedFailure:false,run:()=>withDatabase((db,file)=>{migrateLegacyPromises(db,'localStorage',[{...basePromesa(),legacy_id:'local-r'}]);db.close();const reopened=new Database(file);try{assert.equal(listPromesas(reopened).length,1);}finally{reopened.close();}})},
+  {id:'C3-13',name:'nueva promesa no escribe localStorage',expectedFailure:false,run:()=>{const app=fs.readFileSync(path.resolve('src/App.tsx'),'utf8');assert.doesNotMatch(app,/localStorage\.setItem\(['"]cartera_promesas_locales/);}},
+  {id:'C3-14',name:'SQLite nativo no sobrescrito por legacy viejo',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);migrateLegacyPromises(db,'localStorage',[{...basePromesa(),legacy_id:'old',gestion_id:undefined,observacion:'viejo'}]);assert.equal(getPromesaById(db,r.promesa.id)?.observacion,'Compromiso');})},
+  {id:'C3-15',name:'dos promesas del mismo cliente independientes',expectedFailure:false,run:()=>withDatabase(db=>{createPromesa(db,basePromesa());createPromesa(db,{...basePromesa(),fecha_promesa:'2026-12-16'});assert.equal(listPromesas(db).length,2);})},
+  {id:'C3-16',name:'gestión permanece tras migrar',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion({resultado:'Promesa de Pago',fecha_promesa:'2026-12-01',monto_promesa:50}));migrateHistoricalPromises(db);assert.ok(getGestionById(db,g.id!));})},
+  {id:'C3-17',name:'cancelación no borra gestión',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion({resultado:'Promesa de Pago',fecha_promesa:'2026-12-01',monto_promesa:50}));migrateHistoricalPromises(db);changePromesaState(db,listPromesas(db)[0]!.id,'CANCELADA');assert.ok(getGestionById(db,g.id!));})},
+  {id:'C3-18',name:'ID promesa SQLite real',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());assert.equal(r.ok&&typeof r.promesa.id,'number');})},
+  {id:'C3-19',name:'update inexistente devuelve NOT_FOUND',expectedFailure:false,run:()=>withDatabase(db=>{const r=updatePromesa(db,999,{observacion:'x'});assert.equal(r.ok,false);if(!r.ok)assert.equal(r.code,'PROMESA_NOT_FOUND');})},
+  {id:'C3-20',name:'migración doble no duplica',expectedFailure:false,run:()=>withDatabase(db=>{const value={...basePromesa(),legacy_id:'twice'};migrateLegacyPromises(db,'s',[value]);migrateLegacyPromises(db,'s',[value]);assert.equal(listPromesas(db).length,1);})},
+  {id:'C3H-01',name:'colisión ID numérico legacy no vincula gestión',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion({cliente:'A'}));const native=createPromesa(db,{...basePromesa(),cliente:'A',gestion_id:g.id});if(!native.ok)throw new Error(native.message);const x=migrateLegacyPromises(db,'localStorage',[{...basePromesa(),legacy_id:String(g.id),gestion_id:g.id,cliente:'B'}]);assert.equal(x.ok,true);assert.equal(getPromesaById(db,native.promesa.id)?.cliente,'A');assert.equal(listPromesas(db).find(p=>p.cliente==='B')?.gestion_id,null);})},
+  {id:'C3H-02',name:'legacy viejo no sobrescribe SQLite vinculada',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion({resultado:'Promesa de Pago',fecha_promesa:'2026-12-01',monto_promesa:100}));migrateHistoricalPromises(db);const original=listPromesas(db)[0]!;const x=migrateLegacyPromises(db,'s',[{...basePromesa(),legacy_id:'old',gestion_id:g.id,observacion:'viejo'}]);assert.equal(x.ok,true);assert.equal(getPromesaById(db,original.id)?.observacion,baseGestion().observacion);})},
+  {id:'C3H-03',name:'restore sin mapping conserva promesa nativa',expectedFailure:false,run:()=>withDatabase((db,file)=>{const g=createGestion(db,baseGestion());const r=createPromesa(db,{...basePromesa(),gestion_id:g.id,observacion:'nuevo'});if(!r.ok)throw new Error(r.message);db.close();const restored=new Database(file);try{migrateLegacyPromises(restored,'s',[{...basePromesa(),legacy_id:'restore-old',gestion_id:g.id,observacion:'viejo'}]);assert.equal(getPromesaById(restored,r.promesa.id)?.observacion,'nuevo');}finally{restored.close();}})},
+  {id:'C3H-04',name:'mapping huérfano devuelve error explícito',expectedFailure:false,run:()=>withDatabase(db=>{const value={...basePromesa(),legacy_id:'orphan'};const first=migrateLegacyPromises(db,'s',[value]);if(!first.ok)throw new Error(first.message);db.pragma('foreign_keys = OFF');db.prepare('DELETE FROM promesas WHERE id=?').run(first.mappings[0]!.promesa_id);const x=migrateLegacyPromises(db,'s',[value]);assert.equal(x.ok,false);if(!x.ok)assert.equal(x.code,'PROMESA_LEGACY_MAPPING_ORPHAN');})},
+  {id:'C3H-05',name:'hash legacy idempotente',expectedFailure:false,run:()=>withDatabase(db=>{const value={...basePromesa(),legacy_id:'same'};const a=migrateLegacyPromises(db,'s',[value]);const b=migrateLegacyPromises(db,'s',[value]);assert.equal(a.ok&&b.ok,true);assert.equal(listPromesas(db).length,1);})},
+  {id:'C3H-06',name:'hash legacy conflictivo',expectedFailure:false,run:()=>withDatabase(db=>{migrateLegacyPromises(db,'s',[{...basePromesa(),legacy_id:'conflict'}]);const x=migrateLegacyPromises(db,'s',[{...basePromesa(),legacy_id:'conflict',observacion:'mutado'}]);assert.equal(x.ok,false);if(!x.ok)assert.equal(x.code,'PROMESA_LEGACY_ID_CONFLICT');})},
+  {id:'C3H-07',name:'edición y transición inválida es atómica',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);changePromesaState(db,r.promesa.id,'CANCELADA');const x=updatePromesaAtomic(db,r.promesa.id,{observacion:'no persistir',estado:'CUMPLIDA'});assert.equal(x.ok,false);assert.equal(getPromesaById(db,r.promesa.id)?.observacion,'Compromiso');})},
+  {id:'C3H-08',name:'edición y transición válida es atómica',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);const x=updatePromesaAtomic(db,r.promesa.id,{observacion:'pagada',estado:'CUMPLIDA'});assert.equal(x.ok,true);assert.equal(getPromesaById(db,r.promesa.id)?.estado,'CUMPLIDA');assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_ESTADO_CAMBIADO'").get(r.promesa.id) as any).n,1);})},
+  {id:'C3H-09',name:'edición genera evento con cambios',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);updatePromesaAtomic(db,r.promesa.id,{fecha_promesa:'2027-01-01',monto_prometido:200,observacion:'editada'});const e=db.prepare("SELECT metadata FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_EDITADA'").get(r.promesa.id) as any;assert.equal(JSON.parse(e.metadata).changes.monto_prometido.nuevo,200);})},
+  {id:'C3H-10',name:'fallo de evento revierte update',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);db.exec("CREATE TRIGGER fail_promise_event BEFORE INSERT ON promesa_eventos WHEN NEW.tipo_evento='PROMESA_EDITADA' BEGIN SELECT RAISE(ABORT,'event'); END");assert.throws(()=>updatePromesaAtomic(db,r.promesa.id,{observacion:'no persistir'}),/event/);assert.equal(getPromesaById(db,r.promesa.id)?.observacion,'Compromiso');})},
+  {id:'C3H-11',name:'NaN rechazado',expectedFailure:false,run:()=>withDatabase(db=>{assert.equal(createPromesa(db,{...basePromesa(),monto_pagado:Number.NaN}).ok,false);})},
+  {id:'C3H-12',name:'Infinity rechazado',expectedFailure:false,run:()=>withDatabase(db=>{assert.equal(createPromesa(db,{...basePromesa(),monto_prometido:Number.POSITIVE_INFINITY}).ok,false);})},
+  {id:'C3H-13',name:'monto pagado excedido rechazado',expectedFailure:false,run:()=>withDatabase(db=>{assert.equal(createPromesa(db,{...basePromesa(),monto_pagado:101}).ok,false);})},
+  {id:'C3H-14',name:'promesas idénticas legítimas independientes',expectedFailure:false,run:()=>withDatabase(db=>{createPromesa(db,basePromesa());createPromesa(db,basePromesa());assert.equal(listPromesas(db).length,2);})},
+  {id:'C3H-15',name:'legacy ambiguo no modifica existente',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);migrateLegacyPromises(db,'s',[{...basePromesa(),legacy_id:'ambiguous',gestion_id:777,observacion:'legacy'}]);assert.equal(getPromesaById(db,r.promesa.id)?.observacion,'Compromiso');assert.equal(listPromesas(db).length,2);})},
+  {id:'C3F-01',name:'CUMPLIDA rechaza monto_pagado Infinity',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA',monto_pagado:Number.POSITIVE_INFINITY}).ok,false);})},
+  {id:'C3F-02',name:'CUMPLIDA rechaza monto_pagado NaN',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA',monto_pagado:Number.NaN}).ok,false);})},
+  {id:'C3F-03',name:'CUMPLIDA rechaza monto_pagado -Infinity',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA',monto_pagado:Number.NEGATIVE_INFINITY}).ok,false);})},
+  {id:'C3F-04',name:'CUMPLIDA rechaza monto_pagado string',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA',monto_pagado:'100'} as any).ok,false);})},
+  {id:'C3F-05',name:'CUMPLIDA rechaza monto_pagado undefined explícito',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA',monto_pagado:undefined}).ok,false);})},
+  {id:'C3F-06',name:'CUMPLIDA sin monto_pagado deriva pago total',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);const x=updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA'});assert.equal(x.ok&&x.promesa.monto_pagado,100);})},
+  {id:'C3F-07',name:'CUMPLIDA rechaza pago distinto al prometido',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);assert.equal(updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA',monto_pagado:99}).ok,false);})},
+  {id:'C3F-08',name:'PENDIENTE a PENDIENTE sin cambios es no-op',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);db.prepare("UPDATE promesas SET actualizado_en='2020-01-01 00:00:00' WHERE id=?").run(r.promesa.id);const before=getPromesaById(db,r.promesa.id)!;const events=(db.prepare('SELECT count(*) n FROM promesa_eventos WHERE promesa_id=?').get(r.promesa.id) as any).n;const x=updatePromesaAtomic(db,r.promesa.id,{estado:'PENDIENTE'});assert.equal(x.ok,true);assert.deepEqual(getPromesaById(db,r.promesa.id),before);assert.equal((db.prepare('SELECT count(*) n FROM promesa_eventos WHERE promesa_id=?').get(r.promesa.id) as any).n,events);})},
+  {id:'C3F-09',name:'CUMPLIDA a CUMPLIDA sin cambios es no-op',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,{...basePromesa(),estado:'CUMPLIDA',monto_pagado:100,fecha_pago:'2026-12-15'});if(!r.ok)throw new Error(r.message);db.prepare("UPDATE promesas SET actualizado_en='2020-01-01 00:00:00' WHERE id=?").run(r.promesa.id);const before=getPromesaById(db,r.promesa.id)!;const events=(db.prepare('SELECT count(*) n FROM promesa_eventos WHERE promesa_id=?').get(r.promesa.id) as any).n;const x=updatePromesaAtomic(db,r.promesa.id,{estado:'CUMPLIDA'});assert.equal(x.ok,true);assert.deepEqual(getPromesaById(db,r.promesa.id),before);assert.equal((db.prepare('SELECT count(*) n FROM promesa_eventos WHERE promesa_id=?').get(r.promesa.id) as any).n,events);})},
+  {id:'C3F-10',name:'mismo estado con observación genera sólo edición',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);db.prepare("UPDATE promesas SET actualizado_en='2020-01-01 00:00:00' WHERE id=?").run(r.promesa.id);const x=updatePromesaAtomic(db,r.promesa.id,{estado:'PENDIENTE',observacion:'modificada'});assert.equal(x.ok,true);assert.notEqual(getPromesaById(db,r.promesa.id)?.actualizado_en,'2020-01-01 00:00:00');assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_EDITADA'").get(r.promesa.id) as any).n,1);assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_ESTADO_CAMBIADO'").get(r.promesa.id) as any).n,0);})},
+  {id:'C3F-11',name:'update idéntico repetido no duplica evento',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,basePromesa());if(!r.ok)throw new Error(r.message);updatePromesaAtomic(db,r.promesa.id,{observacion:'única'});const before=getPromesaById(db,r.promesa.id)!;const count=(db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_EDITADA'").get(r.promesa.id) as any).n;updatePromesaAtomic(db,r.promesa.id,{observacion:'única'});assert.deepEqual(getPromesaById(db,r.promesa.id),before);assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_EDITADA'").get(r.promesa.id) as any).n,count);})},
+  {id:'C3G-01',name:'crear CUMPLIDA sin monto_pagado deriva total',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,{cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,estado:'CUMPLIDA'});assert.equal(r.ok&&r.promesa.monto_pagado,100);})},
+  {id:'C3G-02',name:'crear CUMPLIDA con pago total explícito',expectedFailure:false,run:()=>withDatabase(db=>{const r=createPromesa(db,{cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,monto_pagado:100,estado:'CUMPLIDA'});assert.equal(r.ok,true);})},
+  {id:'C3G-03',name:'crear CUMPLIDA con pago distinto rechaza',expectedFailure:false,run:()=>withDatabase(db=>{assert.equal(createPromesa(db,{cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,monto_pagado:99,estado:'CUMPLIDA'}).ok,false);})},
+  {id:'C3G-04',name:'crear CUMPLIDA con undefined explícito rechaza',expectedFailure:false,run:()=>withDatabase(db=>{assert.equal(createPromesa(db,{cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,monto_pagado:undefined,estado:'CUMPLIDA'}).ok,false);})},
+  {id:'C3G-05',name:'crear CUMPLIDA rechaza pagos no finitos o no numéricos',expectedFailure:false,run:()=>withDatabase(db=>{for(const value of [Number.NaN,Number.POSITIVE_INFINITY,Number.NEGATIVE_INFINITY,'100',{},[]])assert.equal(createPromesa(db,{cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,monto_pagado:value,estado:'CUMPLIDA'} as any).ok,false);})},
+  {id:'C3G-06',name:'legacy CUMPLIDA sin pago deriva total y crea mapping',expectedFailure:false,run:()=>withDatabase(db=>{let persisted:unknown[]=[];const prepared=prepareLegacyPromises([{id:'fulfilled-old',cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,estado:'CUMPLIDA'}],()=> 'unused',value=>{persisted=value});assert.equal(Object.prototype.hasOwnProperty.call(prepared[0]!,'monto_pagado'),false);assert.equal(Object.prototype.hasOwnProperty.call(persisted[0] as object,'monto_pagado'),false);const x=migrateLegacyPromises(db,'s',prepared);assert.equal(x.ok,true);assert.equal(listPromesas(db)[0]?.monto_pagado,100);assert.equal((db.prepare('SELECT count(*) n FROM promesa_legacy_migrations').get() as any).n,1);})},
+  {id:'C3G-07',name:'legacy CUMPLIDA con pago inválido no deja filas',expectedFailure:false,run:()=>withDatabase(db=>{const prepared=prepareLegacyPromises([{id:'bad-old',cliente:'G',fecha_promesa:'2027-01-01',monto_prometido:100,monto_pagado:'bad',estado:'CUMPLIDA'}],()=> 'unused',()=>{});assert.equal(migrateLegacyPromises(db,'s',prepared).ok,false);assert.equal(listPromesas(db).length,0);assert.equal((db.prepare('SELECT count(*) n FROM promesa_legacy_migrations').get() as any).n,0);})},
+  {id:'C3G-08',name:'eliminar gestión conserva y desacopla promesa con evento',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion());const p=createPromesa(db,{...basePromesa(),gestion_id:g.id});if(!p.ok)throw new Error(p.message);assert.equal(deleteGestion(db,g.id).ok,true);assert.equal(getPromesaById(db,p.promesa.id)?.gestion_id,null);assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_GESTION_DESVINCULADA'").get(p.promesa.id) as any).n,1);})},
+  {id:'C3G-09',name:'evento de desacoplamiento conserva metadata',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion());const p=createPromesa(db,{...basePromesa(),gestion_id:g.id});if(!p.ok)throw new Error(p.message);deleteGestion(db,g.id);const e=db.prepare("SELECT metadata FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_GESTION_DESVINCULADA'").get(p.promesa.id) as any;const metadata=JSON.parse(e.metadata);assert.equal(metadata.changes.gestion_id.anterior,g.id);assert.equal(metadata.changes.gestion_id.nuevo,null);assert.equal(metadata.reason,'GESTION_DELETED');})},
+  {id:'C3G-10',name:'fallo de evento revierte delete completo y tombstone',expectedFailure:false,run:()=>withDatabase(db=>{const legacy={...baseGestion(),legacy_id:'delete-atomic'};const migrated=migrateLegacyGestiones(db,'s',[legacy]);if(!migrated.ok)throw new Error(migrated.message);const gestionId=migrated.mappings[0]!.gestion_id!;const p=createPromesa(db,{...basePromesa(),gestion_id:gestionId});if(!p.ok)throw new Error(p.message);db.exec("CREATE TRIGGER fail_unlink_event BEFORE INSERT ON promesa_eventos WHEN NEW.tipo_evento='PROMESA_GESTION_DESVINCULADA' BEGIN SELECT RAISE(ABORT,'unlink event'); END");assert.throws(()=>deleteGestion(db,gestionId),/unlink event/);assert.ok(getGestionById(db,gestionId));assert.equal(getPromesaById(db,p.promesa.id)?.gestion_id,gestionId);const mapping=db.prepare("SELECT gestion_id,deleted_at FROM gestion_legacy_migrations WHERE source='s' AND legacy_id='delete-atomic'").get() as any;assert.equal(mapping.gestion_id,gestionId);assert.equal(mapping.deleted_at,null);assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE tipo_evento='PROMESA_GESTION_DESVINCULADA'").get() as any).n,0);})},
+  {id:'C3G-11',name:'eliminar gestión sin promesa no crea evento ficticio',expectedFailure:false,run:()=>withDatabase(db=>{const g=createGestion(db,baseGestion());assert.equal(deleteGestion(db,g.id).ok,true);assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE tipo_evento='PROMESA_GESTION_DESVINCULADA'").get() as any).n,0);})},
+  {id:'C3G-12',name:'reintento tras eliminación no resucita ni duplica evento',expectedFailure:false,run:()=>withDatabase(db=>{const legacy={...baseGestion(),legacy_id:'delete-once'};const migrated=migrateLegacyGestiones(db,'s',[legacy]);if(!migrated.ok)throw new Error(migrated.message);const gestionId=migrated.mappings[0]!.gestion_id!;const p=createPromesa(db,{...basePromesa(),gestion_id:gestionId});if(!p.ok)throw new Error(p.message);assert.equal(deleteGestion(db,gestionId).ok,true);assert.equal(deleteGestion(db,gestionId).ok,false);const retry=migrateLegacyGestiones(db,'s',[legacy]);assert.equal(retry.ok,true);assert.equal(getGestionById(db,gestionId),undefined);assert.equal(getPromesaById(db,p.promesa.id)?.gestion_id,null);assert.equal((db.prepare("SELECT count(*) n FROM promesa_eventos WHERE promesa_id=? AND tipo_evento='PROMESA_GESTION_DESVINCULADA'").get(p.promesa.id) as any).n,1);})},
 ];
 
 type Result = {

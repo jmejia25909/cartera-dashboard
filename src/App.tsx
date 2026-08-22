@@ -43,6 +43,8 @@ import type {
 import type {
   GestionData,
   GestionLegacyInput,
+  Promesa,
+  PromesaState,
 } from "./types/api.types";
 import type { DashboardExecutiveStats } from "./types/dashboardExecutive";
 import {
@@ -66,6 +68,7 @@ import {
   getResumenVencidos,
 } from "./services";
 import { persistLegacyGestionIds } from "./services/gestionLegacyMigration";
+import { prepareLegacyPromises } from "./services/promesaLegacyMigration";
 import {
   checkHttpApiAvailable,
   createHttpApiClient,
@@ -77,6 +80,7 @@ import { APP_NAVIGATION_TABS } from "./app/config/navigation";
 const LEGACY_GESTIONES_KEY = "cartera_gestiones_locales";
 const LEGACY_GESTIONES_SOURCE = "localStorage:cartera_gestiones_locales";
 const LEGACY_GESTIONES_COMPLETE_KEY = "cartera_gestiones_migration_complete_v1";
+const LEGACY_PROMESAS_KEY = "cartera_promesas_locales";
 
 async function migrarGestionesLegacy(
   api: NonNullable<Window["carteraApi"]>,
@@ -128,6 +132,14 @@ async function migrarGestionesLegacy(
   localStorage.setItem(LEGACY_GESTIONES_COMPLETE_KEY, "1");
 }
 
+async function migrarPromesasLegacy(api: NonNullable<Window["carteraApi"]>): Promise<void> {
+  const stored=localStorage.getItem(LEGACY_PROMESAS_KEY);if(!stored)return;
+  const parsed:unknown=JSON.parse(stored);if(!Array.isArray(parsed)||parsed.length===0)return;
+  const records=prepareLegacyPromises(parsed,()=>crypto.randomUUID(),value=>localStorage.setItem(LEGACY_PROMESAS_KEY,JSON.stringify(value)));
+  const result=await api.promesasLegacyMigrar({source:'localStorage:cartera_promesas_locales',records});
+  if(result.ok===false)throw new Error(result.message);
+}
+
 export default function App() {
   // --- ESTADOS RESTAURADOS ---
   const [tab, setTab] = useState("dashboard");
@@ -159,7 +171,7 @@ export default function App() {
   const [tendencias, setTendencias] = useState<any[]>([]);
   const [abonos, setAbonos] = useState<any[]>([]);
   const [_cuentasAplicar, setCuentasAplicar] = useState<any[]>([]);
-  const [promesas, setPromesas] = useState<any[]>([]);
+  const [promesas, setPromesas] = useState<Promesa[]>([]);
   const [alertas, setAlertas] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [executiveStats, setExecutiveStats] =
@@ -500,13 +512,15 @@ export default function App() {
           addToast("Migración de gestiones legacy pendiente", "warning");
         }
       }
+      if(api?.promesasLegacyMigrar){try{await migrarPromesasLegacy(api);}catch(error){console.error('Migración legacy de promesas pendiente:',error);addToast('Migración de promesas legacy pendiente','warning');}}
 
-      const [empData, statsData, filtros, top, gestionesData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
+      const [empData, statsData, filtros, top, gestionesData, promesasData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
         api ? api.empresaObtener() : httpApi.empresaObtener(),
         api ? api.statsObtener() : httpApi.statsObtener(),
         api ? api.filtrosListar() : httpApi.filtrosListar(),
         api ? api.topClientes() : httpApi.topClientes(),
         api ? api.gestionesListar("") : httpApi.gestionesListar(""),
+        api ? api.promesasListar() : Promise.resolve([]),
         api ? api.alertasIncumplimiento() : httpApi.alertasIncumplimiento(),
         api ? api.tendenciasHistoricas() : httpApi.tendenciasHistoricas(),
         api ? api.cuentasAplicarListar() : httpApi.cuentasAplicarListar(),
@@ -540,11 +554,8 @@ export default function App() {
             ? gestionesData as GestionData[]
             : [];
           setAllGestiones(gestionesBackend);
-          const promesasPendientes = gestionesBackend.filter((g: GestionData) =>
-            g.resultado?.includes('Promesa') && !g.resultado?.includes('Cumplida') && g.fecha_promesa
-          );
-          setPromesas(promesasPendientes);
       }
+      if(promesasData)setPromesas(promesasData);
       if (alertasData) setAlertas(alertasData as any[]);
       if (tendData) setTendencias(tendData as any[]);
       if (cuentasData) setCuentasAplicar(cuentasData);
@@ -688,6 +699,7 @@ export default function App() {
       if (result?.ok) {
         addToast("Gestión guardada exitosamente", "success");
         setAllGestiones((current) => [result.gestion, ...current]);
+        if(gestionParaGuardar.resultado==='Promesa de Pago')setPromesas(await api.promesasListar());
         
         // Limpiar formulario
         setShowModalGestion(false);
@@ -728,18 +740,15 @@ export default function App() {
 
   async function cumplirPromesa(id: number) {
     const api = getElectronApi();
-    if (isWeb || !api?.gestionCumplir) return;
+    if (isWeb || !api?.promesaCambiarEstado) return;
     try {
-      const result = await api.gestionCumplir(id);
+      const result = await api.promesaCambiarEstado({id,estado:'CUMPLIDA'});
       if (!result.ok) {
         addToast("message" in result ? result.message : "Gestión no encontrada", "error");
         return;
       }
       addToast("Promesa cumplida", "success");
-      setAllGestiones((current) => current.map(g =>
-        g.id === id ? result.gestion : g
-      ));
-      setPromesas(prev => prev.filter(p => p.id !== id));
+      setPromesas(prev => prev.map(p=>p.id===id?result.promesa:p));
     } catch (e) {
       addToast("Error cumpliendo promesa", "error");
       console.error("Error cumpliendo promesa:", e);
@@ -747,28 +756,23 @@ export default function App() {
   }
 
   async function actualizarPromesa(promesaActualizada: any) {
-    if (isWeb) return;
+    const api=getElectronApi();if (isWeb||!api?.promesaActualizar) return;
     try {
-      // Actualizar promesa en estado local
-      const nuevasPromesas = promesas.map(p => 
-        p.id === promesaActualizada.id ? promesaActualizada : p
-      );
-      setPromesas(nuevasPromesas);
+      const result=await api.promesaActualizar({id:promesaActualizada.id,fecha_promesa:promesaActualizada.fecha_promesa,monto_prometido:Number(promesaActualizada.monto_prometido),monto_pagado:Number(promesaActualizada.monto_pagado),fecha_pago:promesaActualizada.fecha_pago||null,motivo_incumplimiento:promesaActualizada.motivo_incumplimiento||null,observacion:promesaActualizada.observacion||null,estado:promesaActualizada.estado as PromesaState});
+      if(result.ok===false)throw new Error(result.message);
+      const saved=result.promesa;
+      setPromesas(current=>current.map(p=>p.id===saved.id?saved:p));
       setShowModalEditarPromesa(false);
       setPromesaEditando(null);
       addToast("Promesa actualizada correctamente", "success");
       
-      // Persistir en localStorage
-      try {
-        localStorage.setItem('cartera_promesas_locales', JSON.stringify(nuevasPromesas));
-      } catch (e) {
-        console.error("Error guardando en localStorage:", e);
-      }
     } catch (e) {
       addToast("Error actualizando promesa", "error");
       console.error("Error actualizando promesa:", e);
     }
   }
+
+  async function cancelarPromesa(id:number){const api=getElectronApi();if(isWeb||!api?.promesaCambiarEstado)return;const result=await api.promesaCambiarEstado({id,estado:'CANCELADA'});if(result.ok===false){addToast(result.message,'error');return;}setPromesas(current=>current.map(p=>p.id===id?result.promesa:p));addToast('Promesa cancelada','success');}
 
   async function guardarEmpresa() {
     const api = getElectronApi();
@@ -1986,12 +1990,13 @@ export default function App() {
           hasWritePermissions={hasWritePermissions}
           isMobile={isMobile}
           onExportPdf={exportarReportePromesas}
+          onCrearPromesa={()=>{setGestionForm({tipo:'Llamada',resultado:'Promesa de Pago',observacion:'',motivo:'',fecha_promesa:'',monto_promesa:''});setShowModalGestion(true);}}
           onCumplirPromesa={cumplirPromesa}
           onEditarPromesa={(promesa) => {
             setPromesaEditando(promesa);
             setShowModalEditarPromesa(true);
           }}
-          onEliminarPromesa={eliminarGestion}
+          onEliminarPromesa={cancelarPromesa}
         />
       );
     }
@@ -2298,6 +2303,13 @@ export default function App() {
             <div className="modal-header">Nueva Gestión</div>
             <div className="modal-body">
               <label className="field">
+                <span>Cliente</span>
+                <select value={selectedCliente} onChange={e=>setSelectedCliente(e.target.value)}>
+                  <option value="">-- Seleccionar cliente --</option>
+                  {clientes.map((cliente:any)=><option key={cliente.cliente??cliente} value={cliente.cliente??cliente}>{cliente.razon_social??cliente.cliente??cliente}</option>)}
+                </select>
+              </label>
+              <label className="field">
                 <span>Tipo</span>
                 <select value={gestionForm.tipo} onChange={e => setGestionForm({...gestionForm, tipo: e.target.value})}>
                   <option>Llamada</option>
@@ -2380,8 +2392,8 @@ export default function App() {
                 <span>Monto Prometido</span>
                 <input 
                   type="number" 
-                  value={promesaEditando.monto_promesa || ''} 
-                  onChange={e => setPromesaEditando({...promesaEditando, monto_promesa: Number(e.target.value)})}
+                  value={promesaEditando.monto_prometido || ''}
+                  onChange={e => setPromesaEditando({...promesaEditando, monto_prometido: Number(e.target.value)})}
                   placeholder="0"
                 />
               </label>
@@ -2408,15 +2420,16 @@ export default function App() {
               <label className="field">
                 <span>Estado</span>
                 <select 
-                  value={promesaEditando.estado_promesa || 'Pendiente'} 
-                  onChange={e => setPromesaEditando({...promesaEditando, estado_promesa: e.target.value})}
+                  value={promesaEditando.estado || 'PENDIENTE'}
+                  onChange={e => setPromesaEditando({...promesaEditando, estado: e.target.value})}
                   style={{width: '100%', fontSize: '0.8rem', padding: '5px 6px'}}
                 >
-                  <option value="Pendiente">⏳ Pendiente</option>
-                  <option value="Parcialmente Cumplida">⚠️ Parcialmente Cumplida</option>
-                  <option value="Cumplida">✅ Cumplida</option>
-                  <option value="Incumplida">❌ Incumplida</option>
-                  <option value="Reprogramada">🔄 Reprogramada</option>
+                  <option value="PENDIENTE">⏳ Pendiente</option>
+                  <option value="CUMPLIDA_PARCIAL">⚠️ Parcialmente Cumplida</option>
+                  <option value="CUMPLIDA">✅ Cumplida</option>
+                  <option value="INCUMPLIDA">❌ Incumplida</option>
+                  <option value="CANCELADA">🚫 Cancelada</option>
+                  <option value="REPROGRAMADA">🔄 Reprogramada</option>
                 </select>
               </label>
               

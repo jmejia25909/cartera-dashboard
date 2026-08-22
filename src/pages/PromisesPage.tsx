@@ -5,11 +5,10 @@ export interface PromiseItem {
   cliente?: string;
   razon_social?: string;
   fecha_promesa?: string;
-  monto_promesa?: number;
+  monto_prometido?: number;
   monto_pagado?: number;
-  estado_promesa?: string;
+  estado?: string;
   observacion?: string;
-  [key: string]: unknown;
 }
 
 export interface PromisesPageProps {
@@ -26,6 +25,7 @@ export interface PromisesPageProps {
   hasWritePermissions: boolean;
   isMobile: boolean;
   onExportPdf: () => void | Promise<void>;
+  onCrearPromesa: () => void;
   onCumplirPromesa: (id: number) => void | Promise<void>;
   onEditarPromesa: (promesa: PromiseItem) => void;
   onEliminarPromesa: (id: number) => void | Promise<void>;
@@ -36,7 +36,8 @@ const resolvePromiseStatus = (
   diasDiferencia: number,
   saldoPendiente: number
 ): { label: string; color: string } => {
-  const rawStatus = String(promesa.estado_promesa ?? '');
+  const labels:Record<string,string>={PENDIENTE:'Pendiente',CUMPLIDA:'Cumplida',CUMPLIDA_PARCIAL:'Parcialmente Cumplida',INCUMPLIDA:'Incumplida',CANCELADA:'Cancelada',REPROGRAMADA:'Reprogramada'};
+  const rawStatus = labels[String(promesa.estado ?? '')] ?? String(promesa.estado ?? '');
   const normalizedStatus = rawStatus
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/\s+/g, ' ')
@@ -90,6 +91,7 @@ export function PromisesPage({
   hasWritePermissions,
   isMobile,
   onExportPdf,
+  onCrearPromesa,
   onCumplirPromesa,
   onEditarPromesa,
   onEliminarPromesa,
@@ -156,6 +158,7 @@ export function PromisesPage({
             </label>
           </div>
           <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+            <button className="btn primary" onClick={onCrearPromesa} disabled={!hasWritePermissions}>＋ Nueva promesa</button>
             <button
               className="btn primary"
               onClick={() => void onExportPdf()}
@@ -187,7 +190,7 @@ export function PromisesPage({
               {promesasFiltradas.length > 0 ? (
                 promesasFiltradas.map((promesa) => {
                   const montoPagado = promesa.monto_pagado ?? 0;
-                  const montoPrometido = promesa.monto_promesa ?? 0;
+                  const montoPrometido = promesa.monto_prometido ?? 0;
                   const saldoPendiente = montoPrometido - montoPagado;
                   const diasDiferencia = promesa.fecha_promesa
                     ? calcularDiasDiferencia(promesa.fecha_promesa)

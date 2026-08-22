@@ -2,8 +2,7 @@ import { useCallback, useMemo } from 'react';
 
 export interface PromesaFilterable {
   fecha_promesa?: string;
-  monto_promesa?: number;
-  [key: string]: unknown;
+  monto_prometido?: number;
 }
 
 export interface PromiseFilterResult<T extends PromesaFilterable> {
@@ -48,7 +47,7 @@ export const usePromiseFilters = <T extends PromesaFilterable>(
           cumpleFecha = diffDias >= 0 && diffDias <= 7;
         } else if (filtroFecha === 'Vencidas') cumpleFecha = diffDias < 0;
 
-        const monto = promesa.monto_promesa ?? 0;
+        const monto = promesa.monto_prometido ?? 0;
         let cumpleMonto = true;
 
         if (filtroMonto === 'Menor 1000') cumpleMonto = monto < 1000;
@@ -64,7 +63,7 @@ export const usePromiseFilters = <T extends PromesaFilterable>(
   const montoTotal = useMemo(
     () =>
       promesas.reduce(
-        (total, promesa) => total + (promesa.monto_promesa ?? 0),
+        (total, promesa) => total + (promesa.monto_prometido ?? 0),
         0
       ),
     [promesas]

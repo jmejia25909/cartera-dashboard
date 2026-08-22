@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
+import { unlinkPromesaFromGestion } from "./promesaRepository";
 import type { GestionCreateInput, GestionData, GestionLegacyInput, GestionLegacyMigrationResult, GestionMutationResult, GestionUpdateInput } from "../../src/types/api.types";
 
 const COLUMNS = "id,cliente,fecha,tipo,resultado,observacion,fecha_promesa,monto_promesa,usuario,creado_en,actualizado_en,motivo";
@@ -44,7 +45,7 @@ export function updateGestion(db: Database.Database, id: unknown, input: Gestion
 }
 export function deleteGestion(db: Database.Database, id: unknown): GestionMutationResult {
   if (!validId(id)) return {ok:false,code:"GESTION_INVALID_ID",message:"La gestión requiere un ID SQLite válido."};
-  const run=db.transaction(()=>{const existing=getGestionById(db,id);if(!existing)return null;db.prepare(`UPDATE gestion_legacy_migrations SET gestion_id=NULL,deleted_at=datetime('now','localtime') WHERE gestion_id=?`).run(id);return db.prepare("DELETE FROM gestiones WHERE id=?").run(id).changes===1?existing:null;});
+  const run=db.transaction(()=>{const existing=getGestionById(db,id);if(!existing)return null;db.prepare(`UPDATE gestion_legacy_migrations SET gestion_id=NULL,deleted_at=datetime('now','localtime') WHERE gestion_id=?`).run(id);unlinkPromesaFromGestion(db,id as number);return db.prepare("DELETE FROM gestiones WHERE id=?").run(id).changes===1?existing:null;});
   const deleted=run(); return deleted?{ok:true,gestion:deleted}:{ok:false,code:"GESTION_NOT_FOUND",message:"La gestión no existe."};
 }
 export function fulfillGestion(db: Database.Database,id:unknown):GestionMutationResult{

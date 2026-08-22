@@ -103,6 +103,21 @@ export type GestionLegacyMigrationResult = {
   message: string;
 };
 
+export type PromesaState = 'PENDIENTE' | 'CUMPLIDA' | 'CUMPLIDA_PARCIAL' | 'INCUMPLIDA' | 'CANCELADA' | 'REPROGRAMADA';
+export interface Promesa {
+  id: number; cliente: string; gestion_id?: number | null; documento_id?: number | null;
+  fecha_promesa: string; monto_prometido: number; monto_pagado: number; estado: PromesaState;
+  fecha_pago?: string | null; motivo_incumplimiento?: string | null; observacion?: string | null;
+  origen: 'NATIVE' | 'MIGRATED_GESTION' | 'MIGRATED_LEGACY';
+  creado_en: string; actualizado_en?: string | null; razon_social?: string;
+}
+export type PromesaCreateInput = Pick<Promesa, 'cliente' | 'fecha_promesa' | 'monto_prometido'> & Partial<Pick<Promesa, 'gestion_id' | 'documento_id' | 'monto_pagado' | 'estado' | 'fecha_pago' | 'motivo_incumplimiento' | 'observacion'>>;
+export type PromesaUpdateInput = Partial<Pick<Promesa, 'fecha_promesa' | 'monto_prometido' | 'monto_pagado' | 'fecha_pago' | 'motivo_incumplimiento' | 'observacion'>>;
+export type PromesaAtomicUpdateInput = PromesaUpdateInput & { estado?: PromesaState };
+export type PromesaMutationResult = { ok: true; promesa: Promesa } | { ok: false; code: 'PROMESA_NOT_FOUND' | 'PROMESA_INVALID' | 'PROMESA_INVALID_TRANSITION' | 'PROMESA_LEGACY_ID_CONFLICT' | 'PROMESA_LEGACY_MAPPING_ORPHAN'; message: string; legacy_id?: string };
+export interface PromesaLegacyInput extends PromesaCreateInput { legacy_id: string; promesa_id?: number; actualizado_en?: string | null; }
+export type PromesaLegacyMigrationResult = { ok: true; mappings: Array<{ legacy_id: string; promesa_id: number; inserted: boolean }> } | Extract<PromesaMutationResult, { ok: false }>;
+
 export interface GestionesReporteArgs {
   cliente?: string;
   tipo?: string;

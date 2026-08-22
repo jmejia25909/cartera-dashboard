@@ -12,6 +12,14 @@ import type {
   GestionMutationResult,
   GestionLegacyInput,
   GestionLegacyMigrationResult,
+  Promesa,
+  PromesaCreateInput,
+  PromesaUpdateInput,
+  PromesaAtomicUpdateInput,
+  PromesaState,
+  PromesaMutationResult,
+  PromesaLegacyInput,
+  PromesaLegacyMigrationResult,
   GestionesReporteArgs,
   CampanaData,
   DisputaData,
@@ -206,6 +214,13 @@ declare global {
         source: string;
         records: GestionLegacyInput[];
       }) => Promise<GestionLegacyMigrationResult>;
+      promesaGuardar: (data: PromesaCreateInput) => Promise<PromesaMutationResult>;
+      promesasListar: () => Promise<Promesa[]>;
+      promesaObtener: (id: number) => Promise<Promesa | null>;
+      promesaEditar: (data: PromesaUpdateInput & { id: number }) => Promise<PromesaMutationResult>;
+      promesaActualizar: (data: PromesaAtomicUpdateInput & { id: number }) => Promise<PromesaMutationResult>;
+      promesaCambiarEstado: (data: PromesaUpdateInput & { id: number; estado: PromesaState }) => Promise<PromesaMutationResult>;
+      promesasLegacyMigrar: (data: { source: string; records: PromesaLegacyInput[] }) => Promise<PromesaLegacyMigrationResult>;
       gestionesReporte: (args: GestionesReporteArgs) => Promise<GestionData[]>;
       campanasListar: () => Promise<CampanaData[]>;
       campanasGuardar: (data: CampanaData) => Promise<{ ok: boolean; message?: string }>;
