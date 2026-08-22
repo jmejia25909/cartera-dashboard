@@ -157,6 +157,8 @@ function collectionsDetail(
       acc.total += netRecovery;
 
       if (type === "COBRO") acc.collections += netRecovery;
+      // Métrica nominal informativa. `total` usa exclusivamente recuperación
+      // neta y por tanto nunca incorpora cruces.
       if (type === "CRUCE") acc.crossings += value;
 
       return acc;

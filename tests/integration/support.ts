@@ -9,6 +9,7 @@ import { importCollectionMovementsExcel } from "../../electron/importCollectionM
 import { importarCarteraPorCobrarExcel } from "../../electron/importContifico";
 import { importCreditNotesExcel } from "../../electron/importCreditNotes";
 import { getNetRecoveryTotal } from "../../electron/reconciliation/recoveryProjection";
+import { ensureEvidenceAttributionBaseline } from "../../electron/reconciliation/evidenceAttribution";
 
 export type PortfolioDocument = {
   document: string;
@@ -258,6 +259,7 @@ export function createScenarioContext(label: string): ScenarioContext {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), `zenith-${safeLabel}-`));
   const db = new Database(path.join(directory, "integration.sqlite"));
   db.exec(SCHEMA);
+  ensureEvidenceAttributionBaseline(db);
 
   return {
     db,

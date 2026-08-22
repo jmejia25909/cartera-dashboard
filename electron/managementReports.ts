@@ -35,6 +35,7 @@ export type ManagementReportsSummary = {
     movements: number;
     total: number;
     collections: number;
+    /** Valor nominal informativo; no forma parte de la recuperación total. */
     crossings: number;
     reconciled: number;
     pendingReconciliation: number;

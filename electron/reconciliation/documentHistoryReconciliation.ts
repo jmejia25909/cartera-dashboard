@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { applyCurrentProjection, insertDocumentEvent } from "./eventRepository";
 import { reconcileDocument } from "./reconciliationEngine";
 import type { ReconciliationResult } from "./reconciliationTypes";
+import { attributeEvidenceToDelta } from "./evidenceAttribution";
 import {
   getNetRecoveryTotal,
   reverseDocumentRecoveryForCancellation,
@@ -108,6 +109,7 @@ function latestEvent(
     SELECT estado_nuevo, provisional
     FROM documento_eventos
     WHERE documento_normalizado = ?
+      AND estado_nuevo IS NOT NULL
     ORDER BY id DESC
     LIMIT 1
   `).get(documentKey) as LatestEvent | undefined;
@@ -375,6 +377,16 @@ export function reconcileDocumentHistory(
   }
   const collections = collectionEvidence(db, key);
   const creditNotes = creditNoteEvidence(db, key);
+  const reduction = Math.max(
+    0,
+    Number(balance.saldo_anterior ?? 0) - Number(balance.saldo_actual ?? 0),
+  );
+  const attribution = attributeEvidenceToDelta(db, {
+    documentKey: key,
+    balanceId: balance.id,
+    importId: balance.importacion_id,
+    reduction,
+  });
   const projection = currentProjection(db, key);
   const previousEvent = latestEvent(db, key);
 
@@ -383,8 +395,8 @@ export function reconcileDocumentHistory(
     saldoAnterior: balance.saldo_anterior,
     saldoActual: balance.saldo_actual,
     presenteEnCartera: balance.presente_cartera === 1,
-    cobrosConfirmados: collections.amount,
-    notasCredito: creditNotes.amount,
+    cobrosConfirmados: attribution.collections,
+    notasCredito: attribution.creditNotes,
     anulado: cancelled,
   });
 
@@ -401,7 +413,11 @@ export function reconcileDocumentHistory(
   const confirmationChanged =
     previousProvisional !== (result.confirmacion === "PROVISIONAL");
 
-  if (!stateChanged && !confirmationChanged) {
+  if (
+    !stateChanged &&
+    !confirmationChanged &&
+    attribution.eventsWritten === 0
+  ) {
     return {
       found: true,
       result,
@@ -449,6 +465,9 @@ export function reconcileDocumentHistory(
       delta_no_conciliado: result.deltaNoConciliado,
       evidencia_cobros_ultimo_id: collections.lastId,
       evidencia_nc_ultimo_id: creditNotes.lastId,
+      evidencia_cobros_atribuida: attribution.collections,
+      evidencia_nc_atribuida: attribution.creditNotes,
+      evidencia_atribuciones_nuevas: attribution.eventsWritten,
       anulacion_confirmada: cancelled,
     },
   });
