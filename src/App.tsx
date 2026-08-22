@@ -21,6 +21,7 @@ import {
   DashboardPage,
   PromisesPage,
   ReportsPage,
+  SeguimientosPage,
   ManagementReportsPage,
   TendenciasPage,
 } from "./pages";
@@ -2068,6 +2069,10 @@ export default function App() {
           onEliminarPromesa={cancelarPromesa}
         />
       );
+    }
+
+    if (tab === "seguimientos") {
+      return <SeguimientosPage onRegisterGestion={(cliente) => { setSelectedCliente(cliente); setGestionForm({ tipo: 'Llamada', resultado: 'Contactado', observacion: '', motivo: '', fecha_promesa: '', monto_promesa: '' }); setShowModalGestion(true); }} />;
     }
 
     if (tab === "analisis") {

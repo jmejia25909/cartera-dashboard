@@ -29,3 +29,4 @@ export { CreditPoliciesPage } from './CreditPoliciesPage';
 export { CancelledDocumentsPage } from './CancelledDocumentsPage';
 
 export { ManagementReportsPage } from "./ManagementReportsPage";
+export { SeguimientosPage } from './SeguimientosPage';
