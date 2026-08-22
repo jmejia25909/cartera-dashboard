@@ -1,5 +1,7 @@
 ﻿import type Database from "better-sqlite3";
 
+import { RECOVERY_PROJECTION_CTES } from "./reconciliation/recoveryProjection";
+
 export type ManagementReportFilters = {
   year: number;
   month?: number | null;
@@ -345,14 +347,15 @@ export function getManagementReportsSummary(
   const period = createPeriod(filters);
 
   const collections = db.prepare(`
+    WITH ${RECOVERY_PROJECTION_CTES}
     SELECT
       COUNT(*) AS movements,
-      COALESCE(SUM(valor), 0) AS total,
+      COALESCE(SUM(recuperacion_neta), 0) AS total,
 
       COALESCE(SUM(
         CASE
           WHEN clase_movimiento = 'COBRO'
-          THEN valor ELSE 0
+          THEN recuperacion_neta ELSE 0
         END
       ), 0) AS collections,
 
@@ -366,7 +369,7 @@ export function getManagementReportsSummary(
       COALESCE(SUM(
         CASE
           WHEN estado_conciliacion = 'CONCILIADO'
-          THEN valor ELSE 0
+          THEN recuperacion_neta ELSE 0
         END
       ), 0) AS reconciled,
 
@@ -377,7 +380,7 @@ export function getManagementReportsSummary(
         END
       ), 0) AS pending_reconciliation
 
-    FROM cobros_movimientos_importados
+    FROM recuperacion_conciliada
 
     WHERE fecha_movimiento >= ?
       AND fecha_movimiento < ?

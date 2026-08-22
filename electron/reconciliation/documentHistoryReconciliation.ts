@@ -2,6 +2,10 @@ import type Database from "better-sqlite3";
 import { applyCurrentProjection, insertDocumentEvent } from "./eventRepository";
 import { reconcileDocument } from "./reconciliationEngine";
 import type { ReconciliationResult } from "./reconciliationTypes";
+import {
+  getNetRecoveryTotal,
+  reverseDocumentRecoveryForCancellation,
+} from "./recoveryProjection";
 
 type HistoricalBalance = {
   id: number;
@@ -293,15 +297,17 @@ function collectionEvidence(
 ): EvidenceTotals {
   const row = db.prepare(`
     SELECT
-      COALESCE(SUM(valor), 0) AS amount,
       COALESCE(MAX(id), 0) AS last_id
     FROM cobros_movimientos_importados
     WHERE documento_relacionado_normalizado = ?
       AND clase_movimiento IN ('COBRO', 'CRUCE')
       AND estado_conciliacion = 'CONCILIADO'
-  `).get(documentKey) as { amount: number; last_id: number };
+  `).get(documentKey) as { last_id: number };
 
-  return { amount: money(row.amount), lastId: Number(row.last_id ?? 0) };
+  return {
+    amount: getNetRecoveryTotal(db, documentKey),
+    lastId: Number(row.last_id ?? 0),
+  };
 }
 
 function creditNoteEvidence(
@@ -363,9 +369,12 @@ export function reconcileDocumentHistory(
   const linkedCollections = linkCollections(db, key);
   const linkedFiscalRetentions = linkFiscalRetentions(db, key);
   const linkedCreditNotes = linkCreditNotes(db, key);
+  const cancelled = hasCancellation(db, key);
+  if (cancelled) {
+    reverseDocumentRecoveryForCancellation(db, key);
+  }
   const collections = collectionEvidence(db, key);
   const creditNotes = creditNoteEvidence(db, key);
-  const cancelled = hasCancellation(db, key);
   const projection = currentProjection(db, key);
   const previousEvent = latestEvent(db, key);
 

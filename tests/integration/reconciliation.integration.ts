@@ -314,8 +314,9 @@ const scenarios: Scenario[] = [
     run: (ctx) => {
       importPortfolio(ctx, "portfolio-a", [{ document: DOCUMENT, balance: 1000 }]);
       importCollection(ctx, "collection-before-void", DOCUMENT, 1000);
+      assert.equal(recovery(ctx.db, DOCUMENT), 1000);
       importPortfolio(ctx, "portfolio-b", []);
-      importCancellation(ctx, "void-after-payment", DOCUMENT);
+      const cancellation = importCancellation(ctx, "void-after-payment", DOCUMENT);
       const event = latestEvent(ctx.db, DOCUMENT);
       assert.equal(event?.estado_nuevo, "ANULADO");
       assert.equal(Number(event?.provisional), 0);
@@ -323,6 +324,21 @@ const scenarios: Scenario[] = [
       assert.equal(creditAdjustment(ctx.db, DOCUMENT), 0);
       assert.equal(eventCount(ctx, "ANULACION_CONFIRMADA"), 1);
       assert.equal(eventCount(ctx, "ESTADO_RECLASIFICADO"), 1);
+      assert.equal(eventCount(ctx, "COBRO_CONFIRMADO"), 1);
+      assert.equal(eventCount(ctx, "RECUPERACION_REVERSADA"), 1);
+      assert.equal(Number((ctx.db.prepare(`
+        SELECT COUNT(*) AS value
+        FROM cobros_movimientos_importados
+        WHERE documento_relacionado_normalizado = ?
+      `).get(normalized(DOCUMENT)) as { value: number }).value), 1);
+      reimportCancellationFile(
+        ctx,
+        "void-after-payment-duplicate",
+        cancellation.filePath,
+      );
+      assert.equal(eventCount(ctx, "RECUPERACION_REVERSADA"), 1);
+      assert.equal(eventCount(ctx, "COBRO_CONFIRMADO"), 1);
+      assert.equal(recovery(ctx.db, DOCUMENT), 0);
     },
   },
 ];
