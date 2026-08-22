@@ -20,6 +20,7 @@
     "lint:fix": "pnpm lint --fix",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test:integration": "vite build --config tests/config/vite.integration-test.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/.build/integration/reconciliation.integration.cjs",
+    "test:crm": "vite build --config tests/config/vite.crm-test.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron tests/.build/crm/crm-persistence.integration.cjs",
     "clean": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/clean.ps1",
     "validate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/validate.ps1",
     "backup": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup.ps1",
