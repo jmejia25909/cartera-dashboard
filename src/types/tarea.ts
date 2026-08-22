@@ -35,6 +35,7 @@ export interface Tarea {
   cancelado_en: string | null;
   version: number;
   idempotency_key: string | null;
+  creation_payload_hash: string | null;
   estado_operativo?: TareaEstadoOperativo;
 }
 

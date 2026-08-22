@@ -37,7 +37,7 @@ const SCHEMA = `
     prioridad TEXT NOT NULL DEFAULT 'MEDIA' CHECK(prioridad IN('ALTA','MEDIA','BAJA')),
     estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK(estado IN('PENDIENTE','EN_PROGRESO','COMPLETADA','CANCELADA')),
     creado_en TEXT NOT NULL DEFAULT(datetime('now','localtime')),actualizado_en TEXT NOT NULL DEFAULT(datetime('now','localtime')),
-    completado_en TEXT,cancelado_en TEXT,version INTEGER NOT NULL DEFAULT 1,idempotency_key TEXT UNIQUE,
+    completado_en TEXT,cancelado_en TEXT,version INTEGER NOT NULL DEFAULT 1,idempotency_key TEXT UNIQUE,creation_payload_hash TEXT,
     FOREIGN KEY(gestion_origen_id) REFERENCES gestiones(id) ON DELETE SET NULL,
     FOREIGN KEY(promesa_id) REFERENCES promesas(id) ON DELETE SET NULL,
     CHECK(TRIM(cliente)<>''),CHECK(TRIM(responsable)<>''),CHECK(TRIM(titulo)<>''),
@@ -173,6 +173,22 @@ const scenarios: Scenario[] = [
   { id: 'D2B-28', name: 'no existe INSERT automático desde gestionGuardar', run: () => withDb(db => { for (let i = 0; i < 3; i++) createGestion(db, { cliente: `C${i}`, resultado: 'Contactado' }); assert.equal(db.prepare('SELECT COUNT(*) FROM gestiones').pluck().get(), 3); assert.equal(db.prepare('SELECT COUNT(*) FROM tareas').pluck().get(), 0); }) },
   { id: 'D2B-29', name: 'listado no carga dataset completo', run: () => withDb(db => { const api = createTareaIpcHandlers(db); for (let i = 0; i < 250; i++) api.tareaCrear(base({ titulo: `P-${i}` })); const r = api.tareasListar({ page: 2, pageSize: 25 }); assert.ok(!('ok' in r)); if (!('ok' in r)) { assert.equal(r.items.length, 25); assert.equal(r.total, 250); } }) },
   { id: 'D2B-30', name: 'errores de dominio conservan código', run: () => withDb(db => { const api = createTareaIpcHandlers(db); const t = created(db); api.tareaEditar({ id: t.id, expectedVersion: 1, titulo: 'v2' }); const conflict = api.tareaCompletar({ id: t.id, expectedVersion: 1 }); expectError(conflict, 'TAREA_VERSION_CONFLICT'); const missing = api.tareaCompletar({ id: 999, expectedVersion: 1 }); expectError(missing, 'TAREA_NOT_FOUND'); }) },
+  { id: 'D2C-01', name: 'replay tras completar devuelve estado actual', run: () => withDb(db => { const input = base({ idempotency_key: 'd2c-complete' }); const first = createTarea(db, input); if (!first.ok) throw new Error(first.message); const done = completeTarea(db, first.tarea.id, first.tarea.version); if (!done.ok) throw new Error(done.message); const replay = createTarea(db, input); assert.ok(replay.ok); if (replay.ok) { assert.equal(replay.tarea.id, first.tarea.id); assert.equal(replay.tarea.estado, 'COMPLETADA'); assert.equal(replay.changed, false); } }) },
+  { id: 'D2C-02', name: 'replay tras cancelar devuelve estado actual', run: () => withDb(db => { const input = base({ idempotency_key: 'd2c-cancel' }); const first = createTarea(db, input); if (!first.ok) throw new Error(first.message); const cancelled = cancelTarea(db, first.tarea.id, first.tarea.version); if (!cancelled.ok) throw new Error(cancelled.message); const replay = createTarea(db, input); assert.ok(replay.ok); if (replay.ok) { assert.equal(replay.tarea.id, first.tarea.id); assert.equal(replay.tarea.estado, 'CANCELADA'); assert.equal(replay.changed, false); } }) },
+  { id: 'D2C-03', name: 'replay sobre gestión eliminada precede validación FK', run: () => withDb(db => { const gestion = createGestion(db, { cliente: 'C' }); const input = base({ gestion_origen_id: gestion.id, idempotency_key: 'd2c-gestion' }); const first = createTarea(db, input); if (!first.ok) throw new Error(first.message); deleteGestion(db, gestion.id); const replay = createTarea(db, input); assert.ok(replay.ok); if (replay.ok) { assert.equal(replay.tarea.id, first.tarea.id); assert.equal(replay.tarea.gestion_origen_id, null); } }) },
+  { id: 'D2C-04', name: 'replay sobre promesa eliminada precede validación FK', run: () => withDb(db => { const promesaId = Number(db.prepare("INSERT INTO promesas(cliente,estado) VALUES('C','PENDIENTE')").run().lastInsertRowid); const input = base({ promesa_id: promesaId, idempotency_key: 'd2c-promesa' }); const first = createTarea(db, input); if (!first.ok) throw new Error(first.message); db.prepare('DELETE FROM promesas WHERE id=?').run(promesaId); const replay = createTarea(db, input); assert.ok(replay.ok); if (replay.ok) { assert.equal(replay.tarea.id, first.tarea.id); assert.equal(replay.tarea.promesa_id, null); } }) },
+  { id: 'D2C-05', name: 'key con payload distinto o histórico ambiguo entra en conflicto', run: () => withDb(db => { created(db, { idempotency_key: 'd2c-conflict' }); expectError(createTarea(db, base({ idempotency_key: 'd2c-conflict', titulo: 'Distinto' })), 'TAREA_IDEMPOTENCY_CONFLICT'); db.prepare('UPDATE tareas SET creation_payload_hash=NULL WHERE idempotency_key=?').run('d2c-conflict'); expectError(createTarea(db, base({ idempotency_key: 'd2c-conflict' })), 'TAREA_IDEMPOTENCY_CONFLICT'); }) },
+  { id: 'D2C-06', name: 'sort inválido retorna error estructurado', run: () => withDb(db => expectError(createTareaIpcHandlers(db).tareasListar({ sort: 'DROP' }), 'TAREA_INVALID')) },
+  { id: 'D2C-07', name: 'tipo de filtro inválido retorna error estructurado', run: () => withDb(db => expectError(createTareaIpcHandlers(db).tareasListar({ tipo: 'SMS' }), 'TAREA_INVALID')) },
+  { id: 'D2C-08', name: 'prioridad de filtro inválida retorna error estructurado', run: () => withDb(db => expectError(createTareaIpcHandlers(db).tareasListar({ prioridad: 'URGENTE' }), 'TAREA_INVALID')) },
+  { id: 'D2C-09', name: 'estado de filtro inválido retorna error estructurado', run: () => withDb(db => expectError(createTareaIpcHandlers(db).tareasListar({ estado: 'BORRADA' }), 'TAREA_INVALID')) },
+  { id: 'D2C-10', name: 'fecha de filtro inválida retorna error estructurado', run: () => withDb(db => expectError(createTareaIpcHandlers(db).tareasListar({ fechaDesde: '2099-01-01T00:00:00' }), 'TAREA_INVALID')) },
+  { id: 'D2C-11', name: 'paginación inválida retorna error estructurado', run: () => withDb(db => { const api = createTareaIpcHandlers(db); expectError(api.tareasListar({ page: 0 }), 'TAREA_INVALID'); expectError(api.tareasListar({ pageSize: 101 }), 'TAREA_INVALID'); }) },
+  { id: 'D2C-12', name: 'consulta de eventos inválida retorna error estructurado', run: () => withDb(db => expectError(createTareaIpcHandlers(db).tareaEventosListar({ tareaId: 1, pageSize: 101 }), 'TAREA_INVALID')) },
+  { id: 'D2C-13', name: 'repositorio rechaza separador T', run: () => withDb(db => expectError(createTarea(db, base({ fecha_programada: '2099-05-06T14:30:00' })), 'TAREA_INVALID')) },
+  { id: 'D2C-14', name: 'repositorio acepta fecha canónica con espacio', run: () => withDb(db => { const result = createTarea(db, base({ fecha_programada: '2099-05-06 14:30:00' })); assert.equal(result.ok, true); }) },
+  { id: 'D2C-15', name: 'adaptador normaliza datetime-local sin alterar hora', run: () => { assert.equal(normalizeDatetimeLocalForTarea('2099-05-06T14:30'), '2099-05-06 14:30:00'); } },
+  { id: 'D2C-16', name: 'contrato temporal rechaza incompletos y zonas', run: () => withDb(db => { for (const fecha of ['2099-05-06 14:30', '2099-05-06 14:30:00Z', '2099-05-06 14:30:00-05:00']) expectError(createTarea(db, base({ fecha_programada: fecha })), 'TAREA_INVALID'); }) },
 ];
 
 const results: Array<{ id: string; scenario: string; status: 'PASS' | 'FAIL'; detail: string }> = [];
@@ -185,7 +201,7 @@ for (const scenario of scenarios) {
   }
 }
 const totals = { PASS: results.filter(item => item.status === 'PASS').length, FAIL: results.filter(item => item.status === 'FAIL').length };
-console.log('\nZENITH CARTERA - D2.A NÚCLEO CANÓNICO DE TAREAS\n');
+console.log('\nZENITH CARTERA - D2.A + D2.B + D2.C TAREAS CRM\n');
 console.table(results);
 console.log(`TASK_DOMAIN_RESULT_JSON=${JSON.stringify({ totals, results })}`);
-if (totals.FAIL > 0 || totals.PASS !== 70) process.exitCode = 1;
+if (totals.FAIL > 0 || totals.PASS !== 86) process.exitCode = 1;

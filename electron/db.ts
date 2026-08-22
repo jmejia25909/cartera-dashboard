@@ -285,6 +285,7 @@ function ensureSchema(db: Database.Database) {
       cancelado_en TEXT NULL,
       version INTEGER NOT NULL DEFAULT 1,
       idempotency_key TEXT NULL UNIQUE,
+      creation_payload_hash TEXT NULL,
       FOREIGN KEY (gestion_origen_id) REFERENCES gestiones(id) ON DELETE SET NULL,
       FOREIGN KEY (promesa_id) REFERENCES promesas(id) ON DELETE SET NULL,
       CHECK (TRIM(cliente) <> ''),
@@ -375,6 +376,11 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cuentas_cliente ON cuentas_aplicar(cliente);
     CREATE INDEX IF NOT EXISTS idx_cuentas_estado ON cuentas_aplicar(estado);
   `);
+
+  // Upgrade D2.C: no se infiere hash para requests históricos porque la fila puede haber mutado.
+  if (!tableHasColumn(db, "tareas", "creation_payload_hash")) {
+    db.exec("ALTER TABLE tareas ADD COLUMN creation_payload_hash TEXT NULL");
+  }
 
   ensureGestionLegacyMigrationSchema(db);
 

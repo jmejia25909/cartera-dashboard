@@ -7,8 +7,15 @@ import {
   getTareaById,
   listTareaEventos,
   listTareas,
+  normalizeTareaDate,
   updateTarea,
 } from '../repositories/tareaRepository';
+import {
+  TAREA_ESTADOS,
+  TAREA_ESTADOS_OPERATIVOS,
+  TAREA_PRIORIDADES,
+  TAREA_TIPOS,
+} from '../../src/types/tarea';
 import type {
   TareaCancelInput,
   TareaCompleteInput,
@@ -28,17 +35,24 @@ function invalid(message: string): TareaErrorResult {
   return { ok: false, code: 'TAREA_INVALID', message };
 }
 
-function validPage(value: unknown, fallback: number): value is number | undefined {
-  return value === undefined || (positiveInteger(value) && Number(value) <= (fallback === 25 ? Number.MAX_SAFE_INTEGER : 100));
-}
+const validPage = (value: unknown): value is number | undefined => value === undefined || positiveInteger(value);
+const validPageSize = (value: unknown): value is number | undefined => value === undefined || (positiveInteger(value) && Number(value) <= 100);
+const optionalString = (value: unknown): value is string | undefined => value === undefined || typeof value === 'string';
 
 const CREATE_PROTECTED = ['id', 'version', 'completado_en', 'cancelado_en', 'creado_en', 'actualizado_en'];
 const EDIT_PROTECTED = ['cliente', 'gestion_origen_id', 'promesa_id', 'estado', 'version', 'completado_en', 'cancelado_en', 'creado_en', 'actualizado_en', 'idempotency_key'];
 
-export function normalizeDatetimeLocal(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::(\d{2}))?$/.exec(value.trim());
-  return match ? `${match[1]} ${match[2]}:${match[3] ?? '00'}` : null;
+function validListQuery(query: Record<string, unknown>): string | null {
+  if (!validPage(query.page) || !validPageSize(query.pageSize)) return 'page debe ser >= 1 y pageSize debe estar entre 1 y 100.';
+  for (const key of ['cliente', 'responsable', 'search'] as const) if (!optionalString(query[key])) return `${key} inválido.`;
+  if (query.tipo !== undefined && !TAREA_TIPOS.includes(query.tipo as never)) return 'tipo inválido.';
+  if (query.prioridad !== undefined && !TAREA_PRIORIDADES.includes(query.prioridad as never)) return 'prioridad inválida.';
+  if (query.estado !== undefined && ![...TAREA_ESTADOS, ...TAREA_ESTADOS_OPERATIVOS].includes(query.estado as never)) return 'estado inválido.';
+  if (query.sort !== undefined && !['FECHA_ASC', 'FECHA_DESC', 'PRIORIDAD'].includes(String(query.sort))) return 'sort inválido.';
+  for (const key of ['fechaDesde', 'fechaHasta', 'now'] as const) {
+    if (query[key] !== undefined && !normalizeTareaDate(query[key])) return `${key} inválida.`;
+  }
+  return null;
 }
 
 export function createTareaIpcHandlers(db: Database.Database) {
@@ -71,7 +85,8 @@ export function createTareaIpcHandlers(db: Database.Database) {
     tareasListar(payload: unknown) {
       if (payload !== undefined && !record(payload)) return invalid('Contrato de listado inválido.');
       const query = (payload ?? {}) as Record<string, unknown>;
-      if (!validPage(query.page, 25) || !validPage(query.pageSize, 100)) return invalid('page debe ser >= 1 y pageSize debe estar entre 1 y 100.');
+      const reason = validListQuery(query);
+      if (reason) return invalid(reason);
       return listTareas(db, query as TareaListQuery);
     },
 
@@ -112,7 +127,7 @@ export function createTareaIpcHandlers(db: Database.Database) {
     },
 
     tareaEventosListar(payload: unknown) {
-      if (!record(payload) || !positiveInteger(payload.tareaId) || !validPage(payload.page, 25) || !validPage(payload.pageSize, 100)) {
+      if (!record(payload) || !positiveInteger(payload.tareaId) || !validPage(payload.page) || !validPageSize(payload.pageSize)) {
         return invalid('tareaId, page y pageSize inválidos.');
       }
       const request = payload as unknown as TareaEventListQuery;

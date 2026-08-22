@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import {
   TAREA_ESTADOS,
   TAREA_PRIORIDADES,
@@ -16,9 +17,9 @@ import {
 
 const TAREA_COLUMNS = `id,cliente,responsable,gestion_origen_id,promesa_id,tipo,titulo,
   descripcion,fecha_programada,prioridad,estado,creado_en,actualizado_en,
-  completado_en,cancelado_en,version,idempotency_key`;
+  completado_en,cancelado_en,version,idempotency_key,creation_payload_hash`;
 
-const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/;
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/;
 const OPEN_STATES: readonly TareaEstado[] = ['PENDIENTE', 'EN_PROGRESO'];
 
 function localTimestamp(value = new Date()): string {
@@ -138,40 +139,46 @@ function normalizeCreate(input: TareaRepositoryCreateInput): NormalizedCreate | 
   };
 }
 
-function sameFunctionalPayload(existing: Tarea, normalized: NormalizedCreate): boolean {
-  return existing.cliente === normalized.cliente
-    && existing.responsable === normalized.responsable
-    && existing.gestion_origen_id === normalized.gestion_origen_id
-    && existing.promesa_id === normalized.promesa_id
-    && existing.tipo === normalized.tipo
-    && existing.titulo === normalized.titulo
-    && existing.descripcion === normalized.descripcion
-    && existing.fecha_programada === normalized.fecha_programada
-    && existing.prioridad === normalized.prioridad
-    && existing.estado === normalized.estado;
+export function canonicalizeTareaCreation(normalized: NormalizedCreate): string {
+  return JSON.stringify({
+    cliente: normalized.cliente,
+    responsable: normalized.responsable,
+    gestion_origen_id: normalized.gestion_origen_id,
+    promesa_id: normalized.promesa_id,
+    tipo: normalized.tipo,
+    titulo: normalized.titulo,
+    descripcion: normalized.descripcion,
+    fecha_programada: normalized.fecha_programada,
+    prioridad: normalized.prioridad,
+  });
+}
+
+export function hashTareaCreation(normalized: NormalizedCreate): string {
+  return createHash('sha256').update(canonicalizeTareaCreation(normalized)).digest('hex');
 }
 
 export function createTarea(db: Database.Database, input: TareaRepositoryCreateInput): TareaMutationResult {
   const normalized = normalizeCreate(input);
   if (typeof normalized === 'string') return failure('TAREA_INVALID', normalized);
+  const creationPayloadHash = hashTareaCreation(normalized);
   return db.transaction((): TareaMutationResult => {
-    if (!referenceExists(db, 'gestiones', normalized.gestion_origen_id)) return failure('TAREA_INVALID', 'La Gestión de origen no existe.');
-    if (!referenceExists(db, 'promesas', normalized.promesa_id)) return failure('TAREA_INVALID', 'La Promesa relacionada no existe.');
     if (normalized.idempotency_key) {
       const existing = db.prepare(`SELECT ${TAREA_COLUMNS} FROM tareas WHERE idempotency_key=?`).get(normalized.idempotency_key) as Tarea | undefined;
       if (existing) {
-        return sameFunctionalPayload(existing, normalized)
+        return existing.creation_payload_hash === creationPayloadHash
           ? { ok: true, tarea: existing, changed: false }
           : failure('TAREA_IDEMPOTENCY_CONFLICT', 'La idempotency_key ya representa otra Tarea.');
       }
     }
+    if (!referenceExists(db, 'gestiones', normalized.gestion_origen_id)) return failure('TAREA_INVALID', 'La Gestión de origen no existe.');
+    if (!referenceExists(db, 'promesas', normalized.promesa_id)) return failure('TAREA_INVALID', 'La Promesa relacionada no existe.');
     const result = db.prepare(`INSERT INTO tareas(
       cliente,responsable,gestion_origen_id,promesa_id,tipo,titulo,descripcion,
-      fecha_programada,prioridad,estado,idempotency_key
+      fecha_programada,prioridad,estado,idempotency_key,creation_payload_hash
     ) VALUES(
       @cliente,@responsable,@gestion_origen_id,@promesa_id,@tipo,@titulo,@descripcion,
-      @fecha_programada,@prioridad,@estado,@idempotency_key
-    )`).run(normalized);
+      @fecha_programada,@prioridad,@estado,@idempotency_key,@creation_payload_hash
+    )`).run({ ...normalized, creation_payload_hash: creationPayloadHash });
     const tarea = getTareaById(db, Number(result.lastInsertRowid))!;
     insertEvent(db, tarea.id, 'TAREA_CREADA', null, tarea.estado, actorOf(input.actor), {
       cliente: tarea.cliente,
