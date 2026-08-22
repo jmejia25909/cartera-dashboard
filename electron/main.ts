@@ -28,6 +28,13 @@ import {
   backfillHistoricalTransactionBatches,
   registerHistoricalTransactionBatch,
 } from "./reconciliation/historicalTransactionBatchRegistry";
+import {
+  createGestion,
+  deleteGestion as deleteGestionById,
+  fulfillGestion,
+  migrateLegacyGestiones,
+  updateGestion as updateGestionById,
+} from "./repositories/gestionRepository";
 import * as XLSX from "xlsx";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
@@ -467,40 +474,6 @@ function listGestionesCombinadas(cliente: string): any[] {
   } catch (e: any) {
     console.error("Error en listGestionesCombinadas:", e.message);
     return [];
-  }
-}
-
-function markGestionFulfilled(id: number) {
-  try {
-    // Cambiamos el resultado para que ya no salga en la lista de pendientes
-    db.prepare("UPDATE gestiones SET resultado = 'Promesa Cumplida' WHERE id = ?").run(id);
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
-  }
-}
-
-function updateGestion(id: number, data: any) {
-  try {
-    const { tipo, resultado, observacion, fecha_promesa, monto_promesa } = data;
-    db.prepare(`
-      UPDATE gestiones 
-      SET tipo = @tipo, resultado = @resultado, observacion = @observacion, 
-          fecha_promesa = @fecha_promesa, monto_promesa = @monto_promesa 
-      WHERE id = @id
-    `).run({ id, tipo, resultado, observacion, fecha_promesa, monto_promesa });
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
-  }
-}
-
-function deleteGestion(id: number) {
-  try {
-    db.prepare("DELETE FROM gestiones WHERE id = ?").run(id);
-    return { ok: true };
-  } catch (e: any) {
-    return { ok: false, message: e.message };
   }
 }
 
@@ -2341,15 +2314,7 @@ ipcMain.handle("clienteGuardarInfo", (_evt, data) => {
 });
 
 ipcMain.handle("gestionGuardar", (_evt, data) => {
-  db.prepare(`
-    INSERT INTO gestiones (cliente, tipo, resultado, observacion, fecha_promesa, monto_promesa, usuario, motivo, fecha, creado_en) 
-    VALUES (@cliente, @tipo, @resultado, @observacion, @fecha_promesa, @monto_promesa, @usuario, @motivo, datetime('now', 'localtime'), datetime('now', 'localtime'))
-  `).run({
-    ...data,
-    usuario: data.usuario || 'sistema',
-    motivo: data.motivo || null
-  });
-  return { ok: true };
+  return { ok: true, gestion: createGestion(db, data) };
 });
 
 ipcMain.handle("gestionesListar", (_evt, cliente) => {
@@ -2357,16 +2322,23 @@ ipcMain.handle("gestionesListar", (_evt, cliente) => {
 });
 
 ipcMain.handle("gestionEditar", (_evt, { id, ...data }) => {
-  // Añadir actualizado_en y usuario si viene
-  return updateGestion(id, { ...data, actualizado_en: new Date().toISOString(), usuario: data.usuario || 'sistema' });
+  return updateGestionById(db, id, data);
 });
 
 ipcMain.handle("gestionEliminar", (_evt, id) => {
-  return deleteGestion(id);
+  return deleteGestionById(db, id);
 });
 
 ipcMain.handle("gestionCumplir", (_evt, id) => {
-  return markGestionFulfilled(id);
+  return fulfillGestion(db, id);
+});
+
+ipcMain.handle("gestionesLegacyMigrar", (_evt, payload) => {
+  return migrateLegacyGestiones(
+    db,
+    payload?.source || "localStorage:cartera_gestiones_locales",
+    Array.isArray(payload?.records) ? payload.records : [],
+  );
 });
 
 ipcMain.handle("gestionesReporte", (_evt, args) => {

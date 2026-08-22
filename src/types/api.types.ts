@@ -64,7 +64,44 @@ export interface GestionData {
   fecha_promesa?: string;
   monto_promesa?: number;
   usuario?: string;
+  creado_en?: string;
+  actualizado_en?: string | null;
+  motivo?: string | null;
 }
+
+export type GestionCreateInput = Omit<
+  GestionData,
+  'id' | 'creado_en' | 'actualizado_en'
+>;
+
+export type GestionUpdateInput = Pick<
+  GestionData,
+  'tipo' | 'resultado' | 'observacion' | 'fecha_promesa' | 'monto_promesa' | 'usuario' | 'motivo'
+>;
+
+export type GestionMutationResult =
+  | { ok: true; gestion: GestionData }
+  | { ok: false; code: 'GESTION_NOT_FOUND' | 'GESTION_INVALID_ID'; message: string };
+
+export interface GestionLegacyInput extends GestionCreateInput {
+  legacy_id: string;
+  id?: number;
+}
+
+export type GestionLegacyMigrationResult = {
+  ok: true;
+  mappings: Array<{
+    legacy_id: string;
+    gestion_id: number | null;
+    inserted: boolean;
+    deleted: boolean;
+  }>;
+} | {
+  ok: false;
+  code: 'LEGACY_ID_CONFLICT' | 'LEGACY_INVALID_RECORD';
+  legacy_id: string;
+  message: string;
+};
 
 export interface GestionesReporteArgs {
   cliente?: string;

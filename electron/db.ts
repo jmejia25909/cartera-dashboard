@@ -19,6 +19,36 @@ function tableHasColumn(db: Database.Database, table: string, col: string): bool
   return rows.some((r) => String(r.name).toLowerCase() === col.toLowerCase());
 }
 
+function ensureGestionLegacyMigrationSchema(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(gestion_legacy_migrations)").all() as Array<{ name: string; notnull: number }>;
+  const gestionId = columns.find((column) => column.name === "gestion_id");
+  const requiresRebuild = Boolean(gestionId?.notnull) || !columns.some((column) => column.name === "deleted_at");
+  if (!requiresRebuild) return;
+
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE gestion_legacy_migrations_v2 (
+        source TEXT NOT NULL,
+        legacy_id TEXT NOT NULL,
+        gestion_id INTEGER NULL,
+        migrated_at TEXT NOT NULL,
+        payload_hash TEXT NOT NULL,
+        deleted_at TEXT NULL,
+        PRIMARY KEY (source, legacy_id),
+        FOREIGN KEY (gestion_id) REFERENCES gestiones(id)
+      );
+      INSERT INTO gestion_legacy_migrations_v2
+        (source, legacy_id, gestion_id, migrated_at, payload_hash, deleted_at)
+      SELECT source, legacy_id, gestion_id, migrated_at,
+             COALESCE(payload_hash, ''), NULL
+      FROM gestion_legacy_migrations;
+      DROP TABLE gestion_legacy_migrations;
+      ALTER TABLE gestion_legacy_migrations_v2 RENAME TO gestion_legacy_migrations;
+      CREATE INDEX idx_gestion_legacy_migrations_gestion ON gestion_legacy_migrations(gestion_id);
+    `);
+  })();
+}
+
 function ensureSchema(db: Database.Database) {
       // Tabla de campañas de cobranza
       db.exec(`
@@ -170,6 +200,20 @@ function ensureSchema(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_gestiones_cliente ON gestiones(cliente);
 
+    CREATE TABLE IF NOT EXISTS gestion_legacy_migrations (
+      source TEXT NOT NULL,
+      legacy_id TEXT NOT NULL,
+      gestion_id INTEGER NULL,
+      migrated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+      payload_hash TEXT NOT NULL,
+      deleted_at TEXT NULL,
+      PRIMARY KEY (source, legacy_id),
+      FOREIGN KEY (gestion_id) REFERENCES gestiones(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_gestion_legacy_migrations_gestion
+      ON gestion_legacy_migrations(gestion_id);
+
     /* Tabla de Disputas */
     CREATE TABLE IF NOT EXISTS disputas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,6 +249,8 @@ function ensureSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_cuentas_cliente ON cuentas_aplicar(cliente);
     CREATE INDEX IF NOT EXISTS idx_cuentas_estado ON cuentas_aplicar(estado);
   `);
+
+  ensureGestionLegacyMigrationSchema(db);
 
   // Migración suave: agregar columnas de auditoría si faltan
   const gestionCols = [

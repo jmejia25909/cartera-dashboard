@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useMemo, useCallback } from "react";
 import "./App.css";
+import { useRef } from "react";
 import "./pages/gestion/gestion.css";
 import { GestionFiltersPanel, GestionClientRow, GestionClientsRows, GestionClientsHeaderRow, GestionClientsTableBody, GestionClientsTableHeader, GestionClientsTable, GestionClientsTableShell, GestionClientsPanel, GestionKpiCard, GestionKpisPanel, GestionToolbarPanel } from "./pages/gestion/components";
 import { buildGestionClientSummaries } from "./pages/gestion/services";
@@ -35,7 +36,14 @@ import {
   generateTendenciasReport,
 } from "./pdf";
 
-import type { Alerta, Documento } from "./types";
+import type {
+  Alerta,
+  Documento,
+} from "./types";
+import type {
+  GestionData,
+  GestionLegacyInput,
+} from "./types/api.types";
 import type { DashboardExecutiveStats } from "./types/dashboardExecutive";
 import {
   fmtMoney,
@@ -57,6 +65,7 @@ import {
   getDocumentosVencidos,
   getResumenVencidos,
 } from "./services";
+import { persistLegacyGestionIds } from "./services/gestionLegacyMigration";
 import {
   checkHttpApiAvailable,
   createHttpApiClient,
@@ -64,6 +73,60 @@ import {
 } from "./app/api";
 import { createDemoData } from "./app/demoData";
 import { APP_NAVIGATION_TABS } from "./app/config/navigation";
+
+const LEGACY_GESTIONES_KEY = "cartera_gestiones_locales";
+const LEGACY_GESTIONES_SOURCE = "localStorage:cartera_gestiones_locales";
+const LEGACY_GESTIONES_COMPLETE_KEY = "cartera_gestiones_migration_complete_v1";
+
+async function migrarGestionesLegacy(
+  api: NonNullable<Window["carteraApi"]>,
+): Promise<void> {
+  const stored = localStorage.getItem(LEGACY_GESTIONES_KEY);
+  if (!stored) return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stored);
+  } catch (error) {
+    console.error("No se pudo interpretar la persistencia CRM legacy:", error);
+    return;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+  const normalized = persistLegacyGestionIds(
+    parsed,
+    () => crypto.randomUUID(),
+    (records) => localStorage.setItem(LEGACY_GESTIONES_KEY, JSON.stringify(records)),
+  );
+
+  const records: GestionLegacyInput[] = normalized.map((record) => ({
+    legacy_id: String(record.legacy_id),
+    ...(typeof record.id === "number" ? { id: record.id } : {}),
+    cliente: String(record.cliente ?? "").trim(),
+    fecha: typeof record.fecha === "string" ? record.fecha : undefined,
+    tipo: typeof record.tipo === "string" ? record.tipo : undefined,
+    resultado: typeof record.resultado === "string" ? record.resultado : undefined,
+    observacion: typeof record.observacion === "string" ? record.observacion : undefined,
+    fecha_promesa: typeof record.fecha_promesa === "string" ? record.fecha_promesa : undefined,
+    monto_promesa: Number(record.monto_promesa) || 0,
+    usuario: typeof record.usuario === "string" ? record.usuario : undefined,
+    motivo: typeof record.motivo === "string" ? record.motivo : undefined,
+  }));
+
+  const result = await api.gestionesLegacyMigrar({
+    source: LEGACY_GESTIONES_SOURCE,
+    records,
+  });
+
+  if (result.ok === false) {
+    throw new Error(`${result.code} (${result.legacy_id}): ${result.message}`);
+  }
+  if (result.mappings.length !== records.length) {
+    throw new Error("La migración legacy CRM quedó incompleta.");
+  }
+
+  localStorage.setItem(LEGACY_GESTIONES_COMPLETE_KEY, "1");
+}
 
 export default function App() {
   // --- ESTADOS RESTAURADOS ---
@@ -130,6 +193,8 @@ export default function App() {
   const [promesaEditando, setPromesaEditando] = useState<any>(null);
   const [toasts, setToasts] = useState<any[]>([]);
   const [gestionForm, setGestionForm] = useState({ tipo: "Llamada", resultado: "Contactado", observacion: "", motivo: "", fecha_promesa: "", monto_promesa: "" });
+  const [gestionSaving, setGestionSaving] = useState(false);
+  const gestionSavingRef = useRef(false);
   
   // Configuración
   const [empresa, setEmpresa] = useState<any>({});
@@ -260,23 +325,16 @@ export default function App() {
       setHasWritePermissions(false);
     }
   }; 
-  const registrarGestion = async (g: any) => {
-    const nuevasGestiones = [g, ...allGestiones];
-    setAllGestiones(nuevasGestiones);
-    // Persistir en localStorage
-    try {
-      localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-    } catch (e) {
-      console.error("Error guardando en localStorage:", e);
-    }
+  const registrarGestion = async (g: GestionData) => {
     const api = getElectronApi();
     if (isWeb || !api?.gestionGuardar) return;
     try {
       const targetCliente = (g?.cliente || selectedCliente || '').trim();
       const payload = { cliente: targetCliente, ...g };
-      await api.gestionGuardar(payload);
-      // No recargar - confiar solo en estado local
+      const result = await api.gestionGuardar(payload);
+      setAllGestiones((current) => [result.gestion, ...current]);
     } catch (e) {
+      addToast("Error registrando gestión", "error");
       console.error("Error registrando gestión automática:", e);
     }
   };
@@ -434,6 +492,15 @@ export default function App() {
     // const apiToUse = api || httpApi;
 
     try {
+      if (api?.gestionesLegacyMigrar) {
+        try {
+          await migrarGestionesLegacy(api);
+        } catch (error) {
+          console.error("La migración CRM legacy no pudo completarse:", error);
+          addToast("Migración de gestiones legacy pendiente", "warning");
+        }
+      }
+
       const [empData, statsData, filtros, top, gestionesData, alertasData, tendData, cuentasData, abonosData] = await Promise.all([
         api ? api.empresaObtener() : httpApi.empresaObtener(),
         api ? api.statsObtener() : httpApi.statsObtener(),
@@ -469,64 +536,11 @@ export default function App() {
         if (filtros.vendedores) setVendedores(filtros.vendedores);
       }
       if (gestionesData) {
-          let gestionesLocales: any[] = [];
-          try {
-            const stored = localStorage.getItem('cartera_gestiones_locales');
-            if (stored) gestionesLocales = JSON.parse(stored);
-          } catch (e) {
-            console.error("Error cargando localStorage:", e);
-          }
-          
-          const gestionesBackend = Array.isArray(gestionesData) ? gestionesData : [];
-          
-          const deduplicateGestiones = (backend: any[], local: any[]) => {
-            const deduped = [...backend];
-            const localNoSincronizadas: any[] = [];
-            
-            for (const localGestion of local) {
-              const found = backend.some((bg) => {
-                const sameClient = bg.cliente === localGestion.cliente;
-                const sameType = bg.tipo === localGestion.tipo;
-                const sameObs = bg.observacion === localGestion.observacion;
-                
-                let sameDateish = false;
-                try {
-                  if (localGestion.fecha && bg.fecha) {
-                    const localTime = new Date(localGestion.fecha).getTime();
-                    const bgTime = new Date(bg.fecha).getTime();
-                    if (!isNaN(localTime) && !isNaN(bgTime)) {
-                      sameDateish = Math.abs(localTime - bgTime) < 10000;
-                    }
-                  }
-                } catch (e) {
-                  sameDateish = false;
-                }
-                
-                return sameClient && sameType && sameObs && sameDateish;
-              });
-              
-              if (!found) {
-                deduped.push(localGestion);
-                localNoSincronizadas.push(localGestion);
-              }
-            }
-            
-            try {
-              localStorage.setItem('cartera_gestiones_locales', JSON.stringify(localNoSincronizadas));
-            } catch (e) {
-              console.error("Error actualizando localStorage:", e);
-            }
-            
-            return deduped.sort((a: any, b: any) => {
-              const dateA = new Date(a.fecha).getTime();
-              const dateB = new Date(b.fecha).getTime();
-              return dateB - dateA;
-            });
-          };
-          
-          const gestionesMerged = deduplicateGestiones(gestionesBackend, gestionesLocales);
-          setAllGestiones(gestionesMerged);
-          const promesasPendientes = gestionesMerged.filter((g: any) => 
+          const gestionesBackend: GestionData[] = Array.isArray(gestionesData)
+            ? gestionesData as GestionData[]
+            : [];
+          setAllGestiones(gestionesBackend);
+          const promesasPendientes = gestionesBackend.filter((g: GestionData) =>
             g.resultado?.includes('Promesa') && !g.resultado?.includes('Cumplida') && g.fecha_promesa
           );
           setPromesas(promesasPendientes);
@@ -655,7 +669,9 @@ export default function App() {
 
   async function guardarGestion() {
     const api = getElectronApi();
-    if (isWeb || !selectedCliente || !api?.gestionGuardar) return;
+    if (gestionSavingRef.current || isWeb || !selectedCliente || !api?.gestionGuardar) return;
+    gestionSavingRef.current = true;
+    setGestionSaving(true);
     try {
       // Convertir monto_promesa a número si es una promesa de pago
       const gestionParaGuardar = {
@@ -671,23 +687,7 @@ export default function App() {
       
       if (result?.ok) {
         addToast("Gestión guardada exitosamente", "success");
-        
-        // Agregar gestión al estado local con ID único
-        const nuevaGestion = {
-          id: `manual_${Date.now()}`,
-          cliente: selectedCliente,
-          fecha: new Date().toISOString(),
-          ...gestionParaGuardar
-        };
-        const nuevasGestiones = [nuevaGestion, ...allGestiones];
-        setAllGestiones(nuevasGestiones);
-        
-        // Persistir en localStorage
-        try {
-          localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-        } catch (e) {
-          console.error("Error guardando en localStorage:", e);
-        }
+        setAllGestiones((current) => [result.gestion, ...current]);
         
         // Limpiar formulario
         setShowModalGestion(false);
@@ -699,12 +699,13 @@ export default function App() {
           fecha_promesa: "",
           monto_promesa: ""
         });
-      } else {
-        addToast(result?.message || "Error guardando gestión", "error");
       }
     } catch (e) {
       addToast("Error guardando gestión", "error");
       console.error("Error guardando gestión:", e);
+    } finally {
+      gestionSavingRef.current = false;
+      setGestionSaving(false);
     }
   }
 
@@ -712,19 +713,13 @@ export default function App() {
     const api = getElectronApi();
     if (isWeb || !api?.gestionEliminar) return;
     try {
-      await api.gestionEliminar(id);
-      addToast("Gestión eliminada", "success");
-      
-      // Actualizar solo estado local
-      const nuevasGestiones = allGestiones.filter(g => g.id !== id);
-      setAllGestiones(nuevasGestiones);
-      
-      // Persistir en localStorage
-      try {
-        localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-      } catch (e) {
-        console.error("Error guardando en localStorage:", e);
+      const result = await api.gestionEliminar(id);
+      if (!result.ok) {
+        addToast("message" in result ? result.message : "Gestión no encontrada", "error");
+        return;
       }
+      addToast("Gestión eliminada", "success");
+      setAllGestiones((current) => current.filter(g => g.id !== id));
     } catch (e) {
       addToast("Error eliminando gestión", "error");
       console.error("Error eliminando gestión:", e);
@@ -735,22 +730,16 @@ export default function App() {
     const api = getElectronApi();
     if (isWeb || !api?.gestionCumplir) return;
     try {
-      await api.gestionCumplir(id);
-      addToast("Promesa cumplida", "success");
-      
-      // Actualizar solo estado local
-      const nuevasGestiones = allGestiones.map(g => 
-        g.id === id ? { ...g, resultado: 'Promesa Cumplida' } : g
-      );
-      setAllGestiones(nuevasGestiones);
-      setPromesas(prev => prev.filter(p => p.id !== id));
-      
-      // Persistir en localStorage
-      try {
-        localStorage.setItem('cartera_gestiones_locales', JSON.stringify(nuevasGestiones));
-      } catch (e) {
-        console.error("Error guardando en localStorage:", e);
+      const result = await api.gestionCumplir(id);
+      if (!result.ok) {
+        addToast("message" in result ? result.message : "Gestión no encontrada", "error");
+        return;
       }
+      addToast("Promesa cumplida", "success");
+      setAllGestiones((current) => current.map(g =>
+        g.id === id ? result.gestion : g
+      ));
+      setPromesas(prev => prev.filter(p => p.id !== id));
     } catch (e) {
       addToast("Error cumpliendo promesa", "error");
       console.error("Error cumpliendo promesa:", e);
@@ -1155,7 +1144,6 @@ export default function App() {
           addToast("Estado de cuenta generado", "success");
 
           registrarGestion({
-            id: `pdf_${Date.now()}`,
             cliente: clienteNombre,
             tipo: "PDF",
             resultado: "Generado",
@@ -1190,7 +1178,6 @@ export default function App() {
 
         // Registrar gestión automática de Email
         registrarGestion({
-          id: `email_${Date.now()}`,
           cliente: clienteNombre,
           tipo: "Email",
           resultado: "Enviado",
@@ -1593,7 +1580,6 @@ export default function App() {
                     const mensaje = encodeURIComponent(lineas.join('\n'));
                     window.open(`https://wa.me/?text=${mensaje}`, '_blank');
                     registrarGestion({
-                      id: `whatsapp_${Date.now()}`,
                       cliente: selectedCliente,
                       tipo: "WhatsApp",
                       resultado: "Enviado",
@@ -2362,7 +2348,7 @@ export default function App() {
             </div>
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalGestion(false)}>Cancelar</button>
-              <button className="btn primary" onClick={guardarGestion}>Guardar</button>
+              <button className="btn primary" onClick={guardarGestion} disabled={gestionSaving}>{gestionSaving ? "Guardando…" : "Guardar"}</button>
             </div>
           </div>
         </div>

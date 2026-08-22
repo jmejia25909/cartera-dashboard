@@ -7,6 +7,11 @@ import type {
   EmpresaData, 
   ClienteInfo, 
   GestionData, 
+  GestionCreateInput,
+  GestionUpdateInput,
+  GestionMutationResult,
+  GestionLegacyInput,
+  GestionLegacyMigrationResult,
   GestionesReporteArgs,
   CampanaData,
   DisputaData,
@@ -192,10 +197,15 @@ declare global {
       empresaGuardar: (data: EmpresaData) => Promise<{ ok: boolean; message?: string }>;
       clienteObtenerInfo: (codigo: string) => Promise<ClienteInfo | null>;
       clienteGuardarInfo: (data: ClienteInfo) => Promise<{ ok: boolean; message?: string }>;
-      gestionGuardar: (data: GestionData) => Promise<{ ok: boolean; message?: string }>;
+      gestionGuardar: (data: GestionCreateInput) => Promise<{ ok: true; gestion: GestionData }>;
       gestionesListar: (cliente: string) => Promise<GestionData[]>;
-      gestionCumplir: (id: number) => Promise<{ ok: boolean; message?: string }>;
-      gestionEliminar: (id: number) => Promise<{ ok: boolean; message?: string }>;
+      gestionEditar: (data: GestionUpdateInput & { id: number }) => Promise<GestionMutationResult>;
+      gestionCumplir: (id: number) => Promise<GestionMutationResult>;
+      gestionEliminar: (id: number) => Promise<GestionMutationResult>;
+      gestionesLegacyMigrar: (data: {
+        source: string;
+        records: GestionLegacyInput[];
+      }) => Promise<GestionLegacyMigrationResult>;
       gestionesReporte: (args: GestionesReporteArgs) => Promise<GestionData[]>;
       campanasListar: () => Promise<CampanaData[]>;
       campanasGuardar: (data: CampanaData) => Promise<{ ok: boolean; message?: string }>;
