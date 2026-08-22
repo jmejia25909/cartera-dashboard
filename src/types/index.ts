@@ -5,3 +5,5 @@ export type {
   SeveridadLevel,
   SeveridadNormalizada,
 } from './domain';
+
+export * from './tarea';

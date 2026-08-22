@@ -1,6 +1,15 @@
 ﻿import { contextBridge, ipcRenderer } from "electron";
 
 import { prepareLegacyPromises } from "../src/services/promesaLegacyMigration";
+import type {
+  TareaCancelInput,
+  TareaCompleteInput,
+  TareaCreateInput,
+  TareaEditRequest,
+  TareaEventListQuery,
+  TareaListQuery,
+  TareaStateChangeInput,
+} from "../src/types/tarea";
 
 const LEGACY_PROMISES_KEY = "cartera_promesas_locales";
 try {
@@ -126,6 +135,14 @@ const apiMethods = {
   gestionCumplir: (id: number) => ipcRenderer.invoke("gestionCumplir", id),
   gestionEliminar: (id: number) => ipcRenderer.invoke("gestionEliminar", id),
   gestionesLegacyMigrar: (data: unknown) => ipcRenderer.invoke("gestionesLegacyMigrar", data),
+  tareaCrear: (data: TareaCreateInput) => ipcRenderer.invoke("tareaCrear", data),
+  tareaObtener: (id: number) => ipcRenderer.invoke("tareaObtener", id),
+  tareasListar: (query: TareaListQuery) => ipcRenderer.invoke("tareasListar", query),
+  tareaEditar: (data: TareaEditRequest) => ipcRenderer.invoke("tareaEditar", data),
+  tareaCambiarEstado: (data: TareaStateChangeInput) => ipcRenderer.invoke("tareaCambiarEstado", data),
+  tareaCompletar: (data: TareaCompleteInput) => ipcRenderer.invoke("tareaCompletar", data),
+  tareaCancelar: (data: TareaCancelInput) => ipcRenderer.invoke("tareaCancelar", data),
+  tareaEventosListar: (query: TareaEventListQuery) => ipcRenderer.invoke("tareaEventosListar", query),
   promesaGuardar: (data: unknown) => ipcRenderer.invoke("promesaGuardar", data),
   promesasListar: () => ipcRenderer.invoke("promesasListar"),
   promesaObtener: (id: number) => ipcRenderer.invoke("promesaObtener", id),

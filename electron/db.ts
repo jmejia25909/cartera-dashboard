@@ -266,6 +266,58 @@ function ensureSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_promesa_eventos_promesa ON promesa_eventos(promesa_id, id);
 
+    /* Tareas / seguimientos CRM: trabajo pendiente, separado de Gestiones y Promesas. */
+    CREATE TABLE IF NOT EXISTS tareas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente TEXT NOT NULL,
+      responsable TEXT NOT NULL DEFAULT 'sistema',
+      gestion_origen_id INTEGER NULL,
+      promesa_id INTEGER NULL,
+      tipo TEXT NOT NULL CHECK (tipo IN ('LLAMAR','ENVIAR_CORREO','VISITAR','REVISAR_PROMESA','REVISAR_DOCUMENTOS','SEGUIMIENTO_GENERAL')),
+      titulo TEXT NOT NULL,
+      descripcion TEXT NULL,
+      fecha_programada TEXT NOT NULL,
+      prioridad TEXT NOT NULL DEFAULT 'MEDIA' CHECK (prioridad IN ('ALTA','MEDIA','BAJA')),
+      estado TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE','EN_PROGRESO','COMPLETADA','CANCELADA')),
+      creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      actualizado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      completado_en TEXT NULL,
+      cancelado_en TEXT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      idempotency_key TEXT NULL UNIQUE,
+      FOREIGN KEY (gestion_origen_id) REFERENCES gestiones(id) ON DELETE SET NULL,
+      FOREIGN KEY (promesa_id) REFERENCES promesas(id) ON DELETE SET NULL,
+      CHECK (TRIM(cliente) <> ''),
+      CHECK (TRIM(responsable) <> ''),
+      CHECK (TRIM(titulo) <> ''),
+      CHECK (
+        (estado = 'COMPLETADA' AND completado_en IS NOT NULL AND cancelado_en IS NULL)
+        OR (estado = 'CANCELADA' AND cancelado_en IS NOT NULL AND completado_en IS NULL)
+        OR (estado IN ('PENDIENTE','EN_PROGRESO') AND completado_en IS NULL AND cancelado_en IS NULL)
+      )
+    );
+
+    CREATE TABLE IF NOT EXISTS tarea_eventos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tarea_id INTEGER NOT NULL,
+      tipo_evento TEXT NOT NULL CHECK (tipo_evento IN ('TAREA_CREADA','TAREA_EDITADA','TAREA_REPROGRAMADA','TAREA_ESTADO_CAMBIADO','TAREA_COMPLETADA','TAREA_CANCELADA')),
+      estado_anterior TEXT NULL,
+      estado_nuevo TEXT NULL,
+      actor TEXT NOT NULL DEFAULT 'sistema',
+      fecha TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+      metadata TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY (tarea_id) REFERENCES tareas(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tareas_fecha_abiertas ON tareas(fecha_programada, id) WHERE estado IN ('PENDIENTE','EN_PROGRESO');
+    CREATE INDEX IF NOT EXISTS idx_tareas_cliente_fecha ON tareas(cliente, fecha_programada DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS idx_tareas_estado_fecha ON tareas(estado, fecha_programada, id);
+    CREATE INDEX IF NOT EXISTS idx_tareas_responsable_fecha ON tareas(responsable, estado, fecha_programada, id);
+    CREATE INDEX IF NOT EXISTS idx_tareas_prioridad_fecha ON tareas(prioridad, fecha_programada, id);
+    CREATE INDEX IF NOT EXISTS idx_tareas_promesa ON tareas(promesa_id, estado, fecha_programada) WHERE promesa_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_tareas_gestion_origen ON tareas(gestion_origen_id) WHERE gestion_origen_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_tarea_eventos_tarea ON tarea_eventos(tarea_id, id DESC);
+
     CREATE TABLE IF NOT EXISTS promesa_documentos (
       promesa_id INTEGER NOT NULL,
       documento_normalizado TEXT NOT NULL,

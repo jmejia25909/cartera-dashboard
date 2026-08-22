@@ -1,7 +1,7 @@
 ﻿// src/global.d.ts
 export {};
 
-import type { 
+import type {
   Filtros, 
   Documento, 
   EmpresaData, 
@@ -41,6 +41,19 @@ import type {
   ManagementReportDetailRequest,
   ManagementReportDetailResult,
 } from '../../types/managementReportDetails';
+import type {
+  PaginatedResult,
+  Tarea,
+  TareaCancelInput,
+  TareaCompleteInput,
+  TareaCreateInput,
+  TareaEditRequest,
+  TareaErrorResult,
+  TareaEvent,
+  TareaEventListQuery,
+  TareaListQuery,
+  TareaStateChangeInput,
+} from '../../types/tarea';
 
 declare global {
   interface Window {
@@ -212,6 +225,14 @@ declare global {
         source: string;
         records: GestionLegacyInput[];
       }) => Promise<GestionLegacyMigrationResult>;
+      tareaCrear: (data: TareaCreateInput) => Promise<import('../../types/tarea').TareaMutationResult>;
+      tareaObtener: (id: number) => Promise<Tarea | null>;
+      tareasListar: (query: TareaListQuery) => Promise<PaginatedResult<Tarea> | TareaErrorResult>;
+      tareaEditar: (data: TareaEditRequest) => Promise<import('../../types/tarea').TareaMutationResult>;
+      tareaCambiarEstado: (data: TareaStateChangeInput) => Promise<import('../../types/tarea').TareaMutationResult>;
+      tareaCompletar: (data: TareaCompleteInput) => Promise<import('../../types/tarea').TareaMutationResult>;
+      tareaCancelar: (data: TareaCancelInput) => Promise<import('../../types/tarea').TareaMutationResult>;
+      tareaEventosListar: (query: TareaEventListQuery) => Promise<PaginatedResult<TareaEvent> | TareaErrorResult>;
       promesaGuardar: (data: PromesaCreateInput) => Promise<PromesaMutationResult>;
       promesasListar: () => Promise<Promesa[]>;
       promesaObtener: (id: number) => Promise<Promesa | null>;

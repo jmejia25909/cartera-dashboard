@@ -68,6 +68,8 @@ import {
   getResumenVencidos,
 } from "./services";
 import { persistLegacyGestionIds } from "./services/gestionLegacyMigration";
+import { normalizeDatetimeLocalForTarea } from "./services/tareaForm";
+import type { TareaPrioridad, TareaTipo } from "./types/tarea";
 import {
   checkHttpApiAvailable,
   createHttpApiClient,
@@ -198,6 +200,20 @@ export default function App() {
   const [promesaDocumentosSeleccionados,setPromesaDocumentosSeleccionados]=useState<string[]>([]);
   const [gestionSaving, setGestionSaving] = useState(false);
   const gestionSavingRef = useRef(false);
+  const [gestionParaSeguimiento, setGestionParaSeguimiento] = useState<GestionData | null>(null);
+  const [showSeguimientoPrompt, setShowSeguimientoPrompt] = useState(false);
+  const [showModalSeguimiento, setShowModalSeguimiento] = useState(false);
+  const [seguimientoSaving, setSeguimientoSaving] = useState(false);
+  const seguimientoSavingRef = useRef(false);
+  const seguimientoAttemptKeyRef = useRef<string | null>(null);
+  const [seguimientoForm, setSeguimientoForm] = useState<{
+    tipo: TareaTipo;
+    titulo: string;
+    descripcion: string;
+    fechaProgramada: string;
+    prioridad: TareaPrioridad;
+    responsable: string;
+  }>({ tipo: "LLAMAR", titulo: "", descripcion: "", fechaProgramada: "", prioridad: "MEDIA", responsable: "sistema" });
   
   // Configuración
   const [empresa, setEmpresa] = useState<any>({});
@@ -702,6 +718,10 @@ export default function App() {
           monto_promesa: ""
         });
         setPromesaDocumentosSeleccionados([]);
+        if (typeof result.gestion.id === "number") {
+          setGestionParaSeguimiento(result.gestion);
+          setShowSeguimientoPrompt(true);
+        }
       }
     } catch (e) {
       addToast("Error guardando gestión", "error");
@@ -709,6 +729,67 @@ export default function App() {
     } finally {
       gestionSavingRef.current = false;
       setGestionSaving(false);
+    }
+  }
+
+  function abrirFormularioSeguimiento() {
+    if (!gestionParaSeguimiento || typeof gestionParaSeguimiento.id !== "number") return;
+    seguimientoAttemptKeyRef.current = crypto.randomUUID();
+    setSeguimientoForm({
+      tipo: "LLAMAR",
+      titulo: `Seguimiento de ${gestionParaSeguimiento.tipo || "gestión"}`,
+      descripcion: "",
+      fechaProgramada: "",
+      prioridad: "MEDIA",
+      responsable: "sistema",
+    });
+    setShowSeguimientoPrompt(false);
+    setShowModalSeguimiento(true);
+  }
+
+  function cerrarFlujoSeguimiento(force = false) {
+    if (seguimientoSavingRef.current && !force) return;
+    setShowSeguimientoPrompt(false);
+    setShowModalSeguimiento(false);
+    setGestionParaSeguimiento(null);
+    seguimientoAttemptKeyRef.current = null;
+  }
+
+  async function guardarSeguimiento() {
+    const api = getElectronApi();
+    if (seguimientoSavingRef.current || !api?.tareaCrear || !gestionParaSeguimiento || typeof gestionParaSeguimiento.id !== "number") return;
+    const fechaProgramada = normalizeDatetimeLocalForTarea(seguimientoForm.fechaProgramada);
+    if (!fechaProgramada) {
+      addToast("Fecha y hora de seguimiento inválidas", "error");
+      return;
+    }
+    if (!seguimientoAttemptKeyRef.current) seguimientoAttemptKeyRef.current = crypto.randomUUID();
+    seguimientoSavingRef.current = true;
+    setSeguimientoSaving(true);
+    try {
+      const result = await api.tareaCrear({
+        cliente: gestionParaSeguimiento.cliente,
+        gestion_origen_id: gestionParaSeguimiento.id,
+        tipo: seguimientoForm.tipo,
+        titulo: seguimientoForm.titulo,
+        descripcion: seguimientoForm.descripcion,
+        fecha_programada: fechaProgramada,
+        prioridad: seguimientoForm.prioridad,
+        responsable: seguimientoForm.responsable,
+        idempotency_key: seguimientoAttemptKeyRef.current,
+      });
+      if (result.ok === false) {
+        addToast(`${result.code}: ${result.message}`, "error");
+        return;
+      }
+      addToast("Seguimiento creado exitosamente", "success");
+      cerrarFlujoSeguimiento(true);
+    } catch (error) {
+      addToast("No se pudo crear el seguimiento; puede reintentar", "error");
+      console.error("Error creando seguimiento:", error);
+    } finally {
+      seguimientoSavingRef.current = false;
+      setSeguimientoSaving(false);
     }
   }
 
@@ -2356,6 +2437,79 @@ export default function App() {
             <div className="modal-footer">
               <button className="btn secondary" onClick={() => setShowModalGestion(false)}>Cancelar</button>
               <button className="btn primary" onClick={guardarGestion} disabled={gestionSaving}>{gestionSaving ? "Guardando…" : "Guardar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Decisión explícita posterior: la Gestión ya quedó persistida. */}
+      {showSeguimientoPrompt && gestionParaSeguimiento && (
+        <div className="modal-overlay" onClick={() => cerrarFlujoSeguimiento()}>
+          <div className="modal" onClick={event => event.stopPropagation()}>
+            <div className="modal-header">Gestión registrada</div>
+            <div className="modal-body">
+              <p>La Gestión #{gestionParaSeguimiento.id} quedó guardada. ¿Desea programar una actividad futura para este cliente?</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn secondary" onClick={() => cerrarFlujoSeguimiento()}>Ahora no</button>
+              <button className="btn primary" onClick={abrirFormularioSeguimiento}>Crear seguimiento</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModalSeguimiento && gestionParaSeguimiento && (
+        <div className="modal-overlay" onClick={() => cerrarFlujoSeguimiento()}>
+          <div className="modal" onClick={event => event.stopPropagation()}>
+            <div className="modal-header">Nuevo seguimiento</div>
+            <div className="modal-body">
+              <label className="field">
+                <span>Cliente</span>
+                <input value={gestionParaSeguimiento.cliente} disabled />
+              </label>
+              <label className="field">
+                <span>Gestión de origen</span>
+                <input value={`#${gestionParaSeguimiento.id}`} disabled />
+              </label>
+              <label className="field">
+                <span>Tipo</span>
+                <select value={seguimientoForm.tipo} onChange={event => setSeguimientoForm(current => ({ ...current, tipo: event.target.value as TareaTipo }))}>
+                  <option value="LLAMAR">Llamar</option>
+                  <option value="ENVIAR_CORREO">Enviar correo</option>
+                  <option value="VISITAR">Visitar</option>
+                  <option value="REVISAR_PROMESA">Revisar promesa</option>
+                  <option value="REVISAR_DOCUMENTOS">Revisar documentos</option>
+                  <option value="SEGUIMIENTO_GENERAL">Seguimiento general</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Título</span>
+                <input value={seguimientoForm.titulo} onChange={event => setSeguimientoForm(current => ({ ...current, titulo: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>Descripción</span>
+                <textarea rows={3} value={seguimientoForm.descripcion} onChange={event => setSeguimientoForm(current => ({ ...current, descripcion: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>Fecha programada</span>
+                <input type="datetime-local" step="1" value={seguimientoForm.fechaProgramada} onChange={event => setSeguimientoForm(current => ({ ...current, fechaProgramada: event.target.value }))} />
+              </label>
+              <label className="field">
+                <span>Prioridad</span>
+                <select value={seguimientoForm.prioridad} onChange={event => setSeguimientoForm(current => ({ ...current, prioridad: event.target.value as TareaPrioridad }))}>
+                  <option value="ALTA">Alta</option>
+                  <option value="MEDIA">Media</option>
+                  <option value="BAJA">Baja</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Responsable</span>
+                <input value={seguimientoForm.responsable} onChange={event => setSeguimientoForm(current => ({ ...current, responsable: event.target.value }))} />
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button className="btn secondary" disabled={seguimientoSaving} onClick={() => cerrarFlujoSeguimiento()}>Cancelar</button>
+              <button className="btn primary" disabled={seguimientoSaving} onClick={() => void guardarSeguimiento()}>{seguimientoSaving ? "Guardando…" : "Crear seguimiento"}</button>
             </div>
           </div>
         </div>
